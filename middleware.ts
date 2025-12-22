@@ -16,8 +16,9 @@ export function middleware(req: NextRequest) {
     const decoded = atob(base64)
     const [user, pwd] = decoded.split(":")
 
-    // Vérification stricte
-    if (user === "admin" && pwd === process.env.ADMIN_PASSWORD) {
+    // --- MODIFICATION TEMPORAIRE POUR TEST ---
+    // On vérifie le mot de passe en dur pour contourner le problème de variable Vercel
+    if (user === "admin" && pwd === "Fideliz2025Secure!") {
       return NextResponse.next()
     }
   }
