@@ -21,14 +21,13 @@ interface GameInterfaceProps {
   brandColor?: string
   logoUrl?: string
   backgroundUrl?: string
-  textColor?: string // Nouvelle option
+  textColor?: string
   restaurantName: string
 }
 
 export function GameInterface({ 
   restaurantId, 
   prizes, 
-  // 👇 LES FALLBACKS (Valeurs par défaut si vide)
   brandColor = "#000000",
   textColor = "#ffffff", 
   logoUrl,
@@ -76,29 +75,26 @@ export function GameInterface({
   }
 
   return (
-    // 1. CONTAINER PRINCIPAL
     <div className="fixed inset-0 w-full h-full flex items-center justify-center p-4 overflow-hidden">
       
-      {/* 2. BACKGROUND (Règles validées : cover, center, no-repeat) */}
+      {/* BACKGROUND */}
       {backgroundUrl ? (
         <div 
           className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: `url(${backgroundUrl})` }}
         >
-          {/* Overlay sombre 40% pour lisibilité */}
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
         </div>
       ) : (
         <div className="absolute inset-0 z-0 bg-slate-900" />
       )}
 
-      {/* 3. CONTENU DU JEU */}
+      {/* CONTENU */}
       <div className="relative z-10 w-full max-w-md mx-auto">
         
-        {/* HEADER : On applique la couleur de texte ici */}
+        {/* HEADER */}
         <div className="text-center mb-8" style={{ color: textColor }}>
           {logoUrl ? (
-            // LOGO (Règle validée : h-24 object-contain)
             <img 
               src={logoUrl} 
               alt={restaurantName} 
@@ -121,17 +117,19 @@ export function GameInterface({
               <Card className="p-6 bg-white/95 backdrop-blur-md border-white/20 shadow-2xl">
                 <form onSubmit={handleFormSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Prénom</label>
+                    {/* 👇 MODIF ICI : text-slate-900 (Noir) au lieu de 700 */}
+                    <label className="block text-sm font-medium text-slate-900 mb-1">Prénom</label>
                     <Input 
                       required 
                       placeholder="Votre prénom" 
                       value={formData.firstName}
                       onChange={(e) => setFormData({...formData, firstName: e.target.value})}
-                      className="bg-white text-slate-900"
+                      className="bg-white text-slate-900 font-medium"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                    {/* 👇 MODIF ICI : text-slate-900 (Noir) */}
+                    <label className="block text-sm font-medium text-slate-900 mb-1">Email</label>
                     <Input 
                       required 
                       type="email" 
@@ -140,20 +138,20 @@ export function GameInterface({
                       placeholder="votre@email.com"
                       value={formData.email}
                       onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      className="bg-white text-slate-900"
+                      className="bg-white text-slate-900 font-medium"
                     />
                   </div>
                   
                   <Button 
                     type="submit" 
                     className="w-full text-lg h-12 font-bold shadow-lg hover:brightness-110 transition-all active:scale-95 text-white"
-                    // On utilise brandColor ici (fallback noir si vide)
                     style={{ backgroundColor: brandColor }}
                   >
                     JE JOUE 🎲
                   </Button>
 
-                  <p className="text-xs text-center text-slate-400 mt-4">
+                  {/* 👇 MODIF ICI : text-slate-500 (Gris moyen) pour être plus lisible */}
+                  <p className="text-xs text-center text-slate-500 mt-4">
                     *En jouant, vous acceptez de recevoir nos offres.
                   </p>
                 </form>
