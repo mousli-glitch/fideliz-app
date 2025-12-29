@@ -17,6 +17,7 @@ interface Prize {
 
 interface GameInterfaceProps {
   restaurantId: string
+  gameSlug: string  // 👈 NOUVEAU : On a besoin du nom du jeu (ex: "demo")
   prizes: Prize[]
   brandColor?: string
   logoUrl?: string
@@ -27,6 +28,7 @@ interface GameInterfaceProps {
 
 export function GameInterface({ 
   restaurantId, 
+  gameSlug, // 👈 On le récupère ici
   prizes, 
   brandColor = "#000000",
   textColor = "#ffffff", 
@@ -39,9 +41,10 @@ export function GameInterface({
   const [formData, setFormData] = useState({ firstName: '', email: '' })
   
   const handleSpinComplete = async (prize: Prize) => {
+    // 👇 CORRECTION CRUCIALE ICI
     const result = await saveWinner({
-      gameId: restaurantId,
-      restaurantId: restaurantId,
+      gameId: gameSlug,           // On envoie "demo" (le slug)
+      restaurantId: restaurantId, // On envoie l'ID du resto
       email: formData.email,
       firstName: formData.firstName,
       prizeId: prize.id,
@@ -117,7 +120,6 @@ export function GameInterface({
               <Card className="p-6 bg-white/95 backdrop-blur-md border-white/20 shadow-2xl">
                 <form onSubmit={handleFormSubmit} className="space-y-4">
                   <div>
-                    {/* 👇 MODIF ICI : text-slate-900 (Noir) au lieu de 700 */}
                     <label className="block text-sm font-medium text-slate-900 mb-1">Prénom</label>
                     <Input 
                       required 
@@ -128,7 +130,6 @@ export function GameInterface({
                     />
                   </div>
                   <div>
-                    {/* 👇 MODIF ICI : text-slate-900 (Noir) */}
                     <label className="block text-sm font-medium text-slate-900 mb-1">Email</label>
                     <Input 
                       required 
@@ -150,7 +151,6 @@ export function GameInterface({
                     JE JOUE 🎲
                   </Button>
 
-                  {/* 👇 MODIF ICI : text-slate-500 (Gris moyen) pour être plus lisible */}
                   <p className="text-xs text-center text-slate-500 mt-4">
                     *En jouant, vous acceptez de recevoir nos offres.
                   </p>

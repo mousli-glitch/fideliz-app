@@ -14,7 +14,6 @@ interface PlayPageProps {
 export default async function PlayPage({ params }: PlayPageProps) {
   const { slug } = await params
 
-  // 👇 AJOUT DE 'text_color' DANS LA REQUÊTE
   const { data: restaurant, error } = await supabase
     .from('restaurants')
     .select('id, name, slug, brand_color, logo_url, background_url, text_color') 
@@ -38,12 +37,13 @@ export default async function PlayPage({ params }: PlayPageProps) {
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <GameInterface 
         restaurantId={restaurant.id}
+        gameSlug={slug} // 👈 VOILÀ LA CORRECTION : On envoie "demo" ici
         restaurantName={restaurant.name}
         prizes={prizes}
         brandColor={restaurant.brand_color}
         logoUrl={restaurant.logo_url}
         backgroundUrl={restaurant.background_url}
-        textColor={restaurant.text_color} // 👈 On envoie la couleur du texte au composant
+        textColor={restaurant.text_color}
       />
     </main>
   )
