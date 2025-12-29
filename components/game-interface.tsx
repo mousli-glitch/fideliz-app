@@ -20,14 +20,19 @@ interface GameInterfaceProps {
   prizes: Prize[]
   brandColor?: string
   logoUrl?: string
+  backgroundUrl?: string
+  textColor?: string // Nouvelle option
   restaurantName: string
 }
 
 export function GameInterface({ 
   restaurantId, 
   prizes, 
+  // 👇 LES FALLBACKS (Valeurs par défaut si vide)
   brandColor = "#000000",
+  textColor = "#ffffff", 
   logoUrl,
+  backgroundUrl,
   restaurantName
 }: GameInterfaceProps) {
   const [gameState, setGameState] = useState<'form' | 'spinning' | 'won'>('form')
@@ -35,13 +40,12 @@ export function GameInterface({
   const [formData, setFormData] = useState({ firstName: '', email: '' })
   
   const handleSpinComplete = async (prize: Prize) => {
-    // ✅ CORRECTION FINALE : On ajoute prizeId car le serveur l'exige
     const result = await saveWinner({
       gameId: restaurantId,
       restaurantId: restaurantId,
       email: formData.email,
       firstName: formData.firstName,
-      prizeId: prize.id,     // <--- C'ÉTAIT LUI LE MANQUANT !
+      prizeId: prize.id,
       prizeTitle: prize.label
     })
 
@@ -52,6 +56,11 @@ export function GameInterface({
 
     setWinner(prize)
     setGameState('won')
+
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate([100, 50, 100])
+    }
+
     confetti({
       particleCount: 100,
       spread: 70,
@@ -67,108 +76,128 @@ export function GameInterface({
   }
 
   return (
-    <div className="w-full max-w-md mx-auto min-h-[500px] relative">
+    // 1. CONTAINER PRINCIPAL
+    <div className="fixed inset-0 w-full h-full flex items-center justify-center p-4 overflow-hidden">
       
-      {/* HEADER : LOGO ou NOM DU RESTO */}
-      <div className="text-center mb-8">
-        {logoUrl ? (
-          <img 
-            src={logoUrl} 
-            alt={restaurantName} 
-            className="h-20 mx-auto object-contain mb-4"
-          />
-        ) : (
-          <h1 className="text-3xl font-bold text-slate-900">{restaurantName}</h1>
-        )}
-        <p className="text-slate-500">Tentez votre chance !</p>
-      </div>
+      {/* 2. BACKGROUND (Règles validées : cover, center, no-repeat) */}
+      {backgroundUrl ? (
+        <div 
+          className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: `url(${backgroundUrl})` }}
+        >
+          {/* Overlay sombre 40% pour lisibilité */}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+        </div>
+      ) : (
+        <div className="absolute inset-0 z-0 bg-slate-900" />
+      )}
 
-      <AnimatePresence mode="wait">
-        {gameState === 'form' && (
-          <motion.div
-            key="form"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-          >
-            <Card className="p-6 bg-white/80 backdrop-blur border-slate-200 shadow-xl">
-              <form onSubmit={handleFormSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Prénom</label>
-                  <Input 
-                    required 
-                    placeholder="Votre prénom" 
-                    value={formData.firstName}
-                    onChange={(e) => setFormData({...formData, firstName: e.target.value})}
-                    className="bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                  <Input 
-                    required 
-                    type="email" 
-                    placeholder="votre@email.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    className="bg-white"
-                  />
-                </div>
-                
-                <Button 
-                  type="submit" 
-                  className="w-full text-lg h-12 font-bold shadow-lg hover:brightness-110 transition-all active:scale-95 text-white"
-                  style={{ backgroundColor: brandColor }}
-                >
-                  JE JOUE 🎲
-                </Button>
-
-                <p className="text-xs text-center text-slate-400 mt-4">
-                  *En jouant, vous acceptez de recevoir nos offres.
-                </p>
-              </form>
-            </Card>
-          </motion.div>
-        )}
-
-        {gameState === 'spinning' && (
-          <motion.div
-            key="wheel"
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="py-8"
-          >
-            <GameWheel 
-              prizes={prizes} 
-              onFinished={handleSpinComplete} 
-              brandColor={brandColor}
+      {/* 3. CONTENU DU JEU */}
+      <div className="relative z-10 w-full max-w-md mx-auto">
+        
+        {/* HEADER : On applique la couleur de texte ici */}
+        <div className="text-center mb-8" style={{ color: textColor }}>
+          {logoUrl ? (
+            // LOGO (Règle validée : h-24 object-contain)
+            <img 
+              src={logoUrl} 
+              alt={restaurantName} 
+              className="h-24 w-auto mx-auto object-contain mb-4 drop-shadow-lg"
             />
-          </motion.div>
-        )}
+          ) : (
+            <h1 className="text-4xl font-bold drop-shadow-md">{restaurantName}</h1>
+          )}
+          <p className="font-medium text-lg drop-shadow opacity-90">Tentez votre chance !</p>
+        </div>
 
-        {gameState === 'won' && winner && (
-          <motion.div
-            key="won"
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="text-center bg-white p-8 rounded-2xl shadow-2xl border-4 border-yellow-400"
-          >
-            <div className="text-6xl mb-4">🎁</div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Félicitations {formData.firstName} !</h2>
-            <p className="text-slate-500 mb-6">Vous avez gagné :</p>
-            
-            <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 to-orange-500 mb-8 p-4 bg-yellow-50 rounded-xl border border-yellow-100">
-              {winner.label}
-            </div>
+        <AnimatePresence mode="wait">
+          {gameState === 'form' && (
+            <motion.div
+              key="form"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <Card className="p-6 bg-white/95 backdrop-blur-md border-white/20 shadow-2xl">
+                <form onSubmit={handleFormSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Prénom</label>
+                    <Input 
+                      required 
+                      placeholder="Votre prénom" 
+                      value={formData.firstName}
+                      onChange={(e) => setFormData({...formData, firstName: e.target.value})}
+                      className="bg-white text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                    <Input 
+                      required 
+                      type="email" 
+                      inputMode="email"
+                      autoComplete="email"
+                      placeholder="votre@email.com"
+                      value={formData.email}
+                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                      className="bg-white text-slate-900"
+                    />
+                  </div>
+                  
+                  <Button 
+                    type="submit" 
+                    className="w-full text-lg h-12 font-bold shadow-lg hover:brightness-110 transition-all active:scale-95 text-white"
+                    // On utilise brandColor ici (fallback noir si vide)
+                    style={{ backgroundColor: brandColor }}
+                  >
+                    JE JOUE 🎲
+                  </Button>
 
-            <p className="text-sm text-slate-400">
-              Présentez cet écran au serveur pour profiter de votre gain.
-              <br/>
-              <span className="text-xs opacity-75">(Un email de confirmation a été envoyé à {formData.email})</span>
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                  <p className="text-xs text-center text-slate-400 mt-4">
+                    *En jouant, vous acceptez de recevoir nos offres.
+                  </p>
+                </form>
+              </Card>
+            </motion.div>
+          )}
+
+          {gameState === 'spinning' && (
+            <motion.div
+              key="wheel"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="py-8 flex justify-center"
+            >
+              <GameWheel 
+                prizes={prizes} 
+                onFinished={handleSpinComplete} 
+                brandColor={brandColor}
+              />
+            </motion.div>
+          )}
+
+          {gameState === 'won' && winner && (
+            <motion.div
+              key="won"
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="text-center bg-white/95 backdrop-blur p-8 rounded-2xl shadow-2xl border-4 border-yellow-400"
+            >
+              <div className="text-6xl mb-4">🎁</div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Félicitations {formData.firstName} !</h2>
+              <p className="text-slate-500 mb-6">Vous avez gagné :</p>
+              
+              <div className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 to-orange-500 mb-8 p-4 bg-yellow-50 rounded-xl border border-yellow-100">
+                {winner.label}
+              </div>
+
+              <p className="text-sm text-slate-400">
+                Présentez cet écran au serveur pour profiter de votre gain.
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }
