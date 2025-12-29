@@ -1,13 +1,12 @@
 import AdminDashboard from "@/components/AdminDashboard"
-import { createClient } from "@supabase/supabase-js" // Besoin de Supabase pour récupérer la couleur et le nom
+import { createClient } from "@supabase/supabase-js"
 import { notFound } from "next/navigation"
-import { QrGenerator } from "@/components/qr-generator" // 👈 Import du nouveau composant
+import { QrGenerator } from "@/components/qr-generator"
 
 interface AdminPageProps {
   params: Promise<{ slug: string }>
 }
 
-// Client simple pour lire les infos du resto (nom, couleur)
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -26,7 +25,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
   if (!restaurant) return notFound()
 
   return (
-    <main className="min-h-screen bg-slate-50 p-4 pb-20"> {/* pb-20 pour laisser de la place en bas */}
+    <main className="min-h-screen bg-slate-50 p-4 pb-20">
       <div className="max-w-md mx-auto mb-6 pt-6 border-b border-slate-200 pb-4">
         <div className="flex items-center justify-between">
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
@@ -38,10 +37,10 @@ export default async function AdminPage({ params }: AdminPageProps) {
         </div>
       </div>
       
-      {/* Le Dashboard existant */}
+      {/* 👇 C'EST ICI QUE L'ERREUR ÉTAIT : on ajoute bien slug={slug} */}
       <AdminDashboard slug={slug} />
 
-      {/* 2. Le Nouveau Générateur de QR Code */}
+      {/* Le Générateur de QR Code */}
       <div className="max-w-md mx-auto mt-12">
         <QrGenerator 
           slug={slug} 
