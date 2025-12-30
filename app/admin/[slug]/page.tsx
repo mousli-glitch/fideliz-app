@@ -37,7 +37,7 @@ export default async function AdminPage({ params }: AdminPageProps) {
         </div>
       </div>
       
-      {/* 👇 C'EST ICI QUE L'ERREUR ÉTAIT : on ajoute bien slug={slug} */}
+      {/* 👇 C'EST ICI QUE TU AVAIS L'ERREUR : on envoie bien le slug */}
       <AdminDashboard slug={slug} />
 
       {/* Le Générateur de QR Code */}
