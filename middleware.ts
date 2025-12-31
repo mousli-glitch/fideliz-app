@@ -1,20 +1,64 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
-export function middleware(req: NextRequest) {
-  // On protège tout ce qui commence par /admin ou /api/admin
-  if (req.nextUrl.pathname.startsWith('/admin') || req.nextUrl.pathname.startsWith('/api/admin')) {
-    
-    // Récupérer le user/pass de l'URL (ex: basic auth) ou juste vérifier un cookie plus tard.
-    // Pour l'instant, version simple : Si on n'est pas authentifié, on peut bloquer.
-    // NOTE : Pour cette V3 "MVP", on laisse ouvert MAIS on prépare le terrain.
-    // Dans une V4, on ajoutera ici la vérification du mot de passe.
-    
-    return NextResponse.next()
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            request.cookies.set(name, value)
+          )
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Protection de la route /admin
+  if (request.nextUrl.pathname.startsWith('/admin')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
   }
+
+  // Redirection si déjà connecté
+  if (request.nextUrl.pathname === '/login' && user) {
+    return NextResponse.redirect(new URL('/admin/settings', request.url))
+  }
+
+  return response
 }
 
-// C'est ici qu'on définit les zones protégées
 export const config = {
-  matcher: ['/admin/:path*', '/api/admin/:path*'],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * Feel free to modify this pattern to include more paths.
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }
