@@ -1,66 +1,87 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { WinnerRow } from "./admin-winner-row"
+import { createClient } from "@supabase/supabase-js"
+import { Card } from "@/components/ui/card"
+import { AdminWinnerRow } from "@/components/admin-winner-row"
 
-export default function AdminDashboard({ slug }: { slug: string }) {
-  const [winners, setWinners] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+// 👇 AJOUT DE 'phone' DANS LA DÉFINITION
+interface Winner {
+  id: string
+  created_at: string
+  status: "available" | "redeemed"
+  prize_title: string
+  first_name: string
+  phone: string      // Nouveau champ
+  email?: string
+}
+
+interface AdminDashboardProps {
+  slug: string
+}
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+export default function AdminDashboard({ slug }: AdminDashboardProps) {
+  const [winners, setWinners] = useState<Winner[]>([])
 
   const fetchWinners = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/admin/winners?slug=${slug}`)
-      const data = await res.json()
-      if (data.winners) {
-        setWinners(data.winners)
-      }
-    } catch (e) {
-      console.error("Erreur fetch", e)
-    } finally {
-      setLoading(false)
-    }
+    // On récupère tout (*) donc le téléphone viendra avec
+    const { data } = await supabase
+      .from("winners")
+      .select("*")
+      .eq("game_id", slug)
+      .eq("status", "available")
+      .order("created_at", { ascending: false })
+
+    if (data) setWinners(data)
   }
 
   useEffect(() => {
     fetchWinners()
-    const interval = setInterval(fetchWinners, 10000) // Auto-refresh 10s
-    return () => clearInterval(interval)
+    // Abonnement temps réel
+    const channel = supabase
+      .channel("realtime winners")
+      .on("postgres_changes", { event: "*", schema: "public", table: "winners" }, () => {
+        fetchWinners()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [slug])
 
   return (
-    <div className="max-w-md mx-auto mt-6">
-      <div className="flex justify-between items-center mb-6 px-2">
-        <h2 className="text-xl font-bold text-slate-800">À servir ({winners.length})</h2>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-lg font-bold text-slate-800">
+          À servir ({winners.length})
+        </h2>
         <button 
-          onClick={fetchWinners}
-          className="text-sm text-blue-600 font-medium hover:underline"
+          onClick={fetchWinners} 
+          className="text-xs text-blue-600 hover:underline"
         >
           Actualiser ↻
         </button>
       </div>
 
-      {loading && winners.length === 0 ? (
-        <div className="p-8 text-center">
-          <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-          <p className="text-slate-500">Chargement...</p>
-        </div>
-      ) : winners.length === 0 ? (
-        <div className="text-center p-8 bg-slate-100 rounded-xl border border-slate-200 text-slate-500">
-          <div className="text-4xl mb-2">💤</div>
-          Aucun gagnant en attente.
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {winners.map((winner) => (
-            <WinnerRow 
-              key={winner.id} 
-              winner={winner} 
-              onRedeemed={fetchWinners} 
-            />
-          ))}
-        </div>
-      )}
+      <div className="space-y-3">
+        {winners.length === 0 && (
+          <p className="text-center text-slate-400 py-8 italic">Aucun gagnant en attente</p>
+        )}
+        
+        {winners.map((winner) => (
+          <AdminWinnerRow 
+            key={winner.id} 
+            winner={winner} 
+            onRedeem={fetchWinners} // On rafraîchit après validation
+          />
+        ))}
+      </div>
     </div>
   )
 }

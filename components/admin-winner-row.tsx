@@ -1,68 +1,91 @@
 "use client"
 
 import { useState } from "react"
+import { createClient } from "@supabase/supabase-js"
 import { Button } from "@/components/ui/button"
-import { redeemWinner } from "@/app/actions/redeem-winner"
+import { Card } from "@/components/ui/card"
 
-interface WinnerRowProps {
-  winner: any
-  onRedeemed: () => void
+interface Winner {
+  id: string
+  created_at: string
+  status: "available" | "redeemed"
+  prize_title: string
+  first_name: string
+  phone: string
 }
 
-export function WinnerRow({ winner, onRedeemed }: WinnerRowProps) {
-  const [isLoading, setIsLoading] = useState(false)
+interface RowProps {
+  winner: Winner
+  onRedeem: () => void
+}
 
-  const handleClick = async () => {
-    if (!confirm("Confirmer la remise du gain ?")) return
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
-    setIsLoading(true)
+export function AdminWinnerRow({ winner, onRedeem }: RowProps) {
+  const [loading, setLoading] = useState(false)
+
+  const handleValidate = async () => {
+    // Petit confort : pas de confirm() bloquant, juste un clic direct et fluide
+    setLoading(true)
     
-    try {
-      const result = await redeemWinner(winner.id)
+    const { error } = await supabase
+        .from('winners')
+        .update({ status: 'redeemed', redeemed_at: new Date().toISOString() })
+        .eq('id', winner.id)
 
-      if (result.success) {
-        onRedeemed() // Rafraîchir la liste
-      } else {
-        alert("Erreur lors de la validation")
-      }
-    } catch (err) {
-      console.error(err)
-      alert("Erreur de connexion")
-    } finally {
-      // ✅ ROBUSTESSE : On débloque le bouton quoi qu'il arrive
-      setIsLoading(false)
+    if (!error) {
+        onRedeem() 
+    } else {
+        alert("Erreur validation : " + error.message)
     }
+    setLoading(false)
   }
 
-  const time = new Date(winner.created_at).toLocaleTimeString('fr-FR', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-  
-  // Formatage propre de la date (ex: 29/12)
-  const date = new Date(winner.created_at).toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit'
+  // Format date court : "31/12 à 10:30"
+  const dateStr = new Date(winner.created_at).toLocaleDateString('fr-FR', {
+    day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit'
   })
 
   return (
-    <div className="flex items-center justify-between p-4 bg-white border rounded-lg shadow-sm mb-3">
-      <div>
-        <div className="font-bold text-lg text-slate-900">
+    <Card className="p-3 flex items-center justify-between shadow-sm border-slate-100">
+      {/* Partie Gauche : Infos */}
+      <div className="flex flex-col">
+        {/* Le Cadeau en gros */}
+        <span className="font-bold text-slate-900 text-base">
           {winner.prize_title}
+        </span>
+        
+        {/* Le Client et son Tel */}
+        <div className="flex items-center text-sm text-slate-600 mt-1">
+          <span className="font-medium capitalize">{winner.first_name}</span>
+          <span className="mx-2 text-slate-300">•</span>
+          <span className="font-mono text-slate-500 text-xs bg-slate-100 px-1 rounded">
+            {winner.phone}
+          </span>
         </div>
-        <div className="text-sm text-slate-500">
-          {winner.first_name} • {date} à {time}
-        </div>
+
+        {/* La Date en tout petit */}
+        <span className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">
+          {dateStr}
+        </span>
       </div>
 
+      {/* Partie Droite : Bouton */}
       <Button 
-        onClick={handleClick} 
-        disabled={isLoading}
-        className={`${isLoading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"} text-white font-bold shadow-md transition-all active:scale-95`}
+        onClick={handleValidate} 
+        disabled={loading}
+        size="sm" // Bouton plus petit pour garder l'élégance
+        className={`font-bold ml-4 transition-all ${
+          loading 
+            ? 'opacity-50 cursor-not-allowed' 
+            : 'bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg'
+        }`}
       >
-        {isLoading ? "..." : "VALIDER"}
+        {loading ? "..." : "VALIDER"}
       </Button>
-    </div>
+    </Card>
   )
 }

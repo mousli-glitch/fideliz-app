@@ -1,6 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
-import { notFound } from 'next/navigation'
-import { GameInterface } from '@/components/game-interface'
+import { createClient } from "@supabase/supabase-js"
+import { notFound } from "next/navigation"
+import GameFlow from "@/components/game-flow"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,36 +14,27 @@ interface PlayPageProps {
 export default async function PlayPage({ params }: PlayPageProps) {
   const { slug } = await params
 
-  const { data: restaurant, error } = await supabase
+  // 1. Récupérer le Resto
+  // 👇 MODIFICATION ICI : On ajoute 'slug' dans la liste des champs à récupérer
+  const { data: restaurant } = await supabase
     .from('restaurants')
-    .select('id, name, slug, brand_color, logo_url, background_url, text_color') 
+    .select('slug, name, brand_color, active_action, action_url, rules_text') 
     .eq('slug', slug)
     .single()
 
-  if (error || !restaurant) {
-    return notFound()
-  }
+  if (!restaurant) return notFound()
 
-  const prizes = [
-    { id: '1', label: 'Un Café Offert', color: '#fbbf24' },
-    { id: '2', label: '-10% Addition', color: '#f87171' },
-    { id: '3', label: 'Un Digestif', color: '#a78bfa' },
-    { id: '4', label: 'Perdu...', color: '#94a3b8' },
-    { id: '5', label: 'Un Dessert', color: '#34d399' },
-    { id: '6', label: 'Une Surprise', color: '#60a5fa' },
-  ]
+  // 2. Récupérer les Cadeaux (Prizes)
+  const { data: prizes } = await supabase
+    .from('prizes')
+    .select('*')
 
+  // 3. On passe TOUT au GameFlow
   return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <GameInterface 
-        restaurantId={restaurant.id}
-        gameSlug={slug} // 👈 VOILÀ LA CORRECTION : On envoie "demo" ici
-        restaurantName={restaurant.name}
-        prizes={prizes}
-        brandColor={restaurant.brand_color}
-        logoUrl={restaurant.logo_url}
-        backgroundUrl={restaurant.background_url}
-        textColor={restaurant.text_color}
+    <main>
+      <GameFlow 
+        restaurant={restaurant} 
+        prizes={prizes || []} 
       />
     </main>
   )
