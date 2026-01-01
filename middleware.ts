@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 export function middleware(req: NextRequest) {
+  // On protège uniquement l'admin
   if (!req.nextUrl.pathname.startsWith("/admin") && !req.nextUrl.pathname.startsWith("/api/admin")) {
     return NextResponse.next()
   }
@@ -13,6 +14,7 @@ export function middleware(req: NextRequest) {
     const decoded = atob(base64)
     const [user, pwd] = decoded.split(":")
 
+    // LE SECRET EST ICI : L'utilisateur est "admin"
     if (user === "admin" && pwd === process.env.ADMIN_PASSWORD) {
       return NextResponse.next()
     }
