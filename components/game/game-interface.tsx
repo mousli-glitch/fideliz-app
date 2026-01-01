@@ -88,6 +88,11 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
             className="text-center space-y-6 bg-white/10 backdrop-blur-md p-8 rounded-2xl border border-white/20 shadow-xl"
           >
             <div className="space-y-2">
+              {/* 👇 LE MARQUEUR VISUEL POUR VÉRIFIER LA MISE À JOUR 👇 */}
+              <div className="bg-white text-red-600 font-bold px-4 py-2 rounded-full inline-block mb-4 border-4 border-red-600">
+                TEST : FORMULAIRE V2 ACTIVÉ ✅
+              </div>
+              
               <h2 className="text-2xl font-bold text-white">Une étape avant de jouer !</h2>
               <p className="text-white/80">Soutenez-nous pour débloquer la roue.</p>
             </div>
