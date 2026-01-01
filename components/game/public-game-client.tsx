@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react"
 import { createClient } from "@/utils/supabase/client"
-import { Instagram, Star, ArrowRight, Loader2, Trophy, AlertTriangle } from "lucide-react"
+import { Instagram, Star, ArrowRight, Loader2, Trophy, AlertTriangle, User, Mail, Phone } from "lucide-react"
 
 type Props = {
   game: { id: string; active_action: string; action_url: string }
@@ -12,19 +12,36 @@ type Props = {
 
 export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const supabase = createClient()
-  const [step, setStep] = useState<'ACTION' | 'WHEEL' | 'RESULT'>('ACTION')
+  // 👇 AJOUT DE L'ÉTAPE 'FORM'
+  const [step, setStep] = useState<'ACTION' | 'FORM' | 'WHEEL' | 'RESULT'>('ACTION')
   const [spinning, setSpinning] = useState(false)
   const [winner, setWinner] = useState<any>(null)
   const [winError, setWinError] = useState<string | null>(null)
   const wheelRef = useRef<HTMLDivElement>(null)
 
-  // 1. GESTION DE L'ACTION
+  // 👇 DONNÉES DU FORMULAIRE
+  const [formData, setFormData] = useState({
+    firstName: '',
+    email: '',
+    phone: ''
+  })
+
+  // 1. GESTION DE L'ACTION -> VERS FORMULAIRE
   const handleActionClick = () => {
     if (game.action_url) window.open(game.action_url, '_blank')
-    setTimeout(() => setStep('WHEEL'), 1000)
+    // On passe au formulaire au lieu de la roue
+    setTimeout(() => setStep('FORM'), 1000)
   }
 
-  // 2. LOGIQUE DE LA ROUE
+  // 2. GESTION DU FORMULAIRE -> VERS ROUE
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (formData.firstName && formData.email) {
+      setStep('WHEEL')
+    }
+  }
+
+  // 3. LOGIQUE DE LA ROUE
   const handleSpin = async () => {
     if (spinning) return
     setSpinning(true)
@@ -55,13 +72,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     // C. ENREGISTREMENT EN DB
     setTimeout(async () => {
       try {
-        // 👇 CORRECTION ICI : (supabase as any) avant le .rpc
         const { error } = await (supabase as any).rpc("register_win", {
           p_game_id: game.id,
           p_prize_id: selectedPrize.id,
-          p_email: null,
-          p_phone: "ANON", 
-          p_first_name: "Client Mobile"
+          p_email: formData.email, // 👇 VRAIES DONNÉES
+          p_phone: formData.phone || "Non renseigné", 
+          p_first_name: formData.firstName // 👇 VRAIES DONNÉES
         })
 
         if (error) throw error
@@ -81,6 +97,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     return (
       <div className="text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="bg-white/20 backdrop-blur-sm p-6 rounded-2xl border border-white/30 shadow-xl">
+          <div className="bg-white text-red-600 font-bold px-4 py-2 rounded-full inline-block mb-4 border-2 border-red-600">
+             TEST : FORMULAIRE ACTIVÉ ✅
+          </div>
           <h2 className="text-2xl font-bold mb-2">Une étape avant de jouer !</h2>
           <p className="opacity-90 mb-6">Soutenez-nous pour débloquer la roue.</p>
           
@@ -95,6 +114,69 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
           
           <p className="text-xs mt-4 opacity-60">Le lien s'ouvrira dans un nouvel onglet.</p>
         </div>
+      </div>
+    )
+  }
+
+  // --- RENDU : FORMULAIRE (NOUVEAU) ---
+  if (step === 'FORM') {
+    return (
+      <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-xl animate-in fade-in zoom-in duration-300 text-slate-900">
+        <h3 className="text-xl font-bold text-center mb-6">Vos coordonnées</h3>
+        <form onSubmit={handleFormSubmit} className="space-y-4">
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Prénom *</label>
+            <div className="relative">
+              <User className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
+              <input 
+                required
+                type="text"
+                className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black outline-none"
+                placeholder="Ex: Thomas"
+                value={formData.firstName}
+                onChange={(e) => setFormData({...formData, firstName: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
+              <input 
+                required
+                type="email"
+                className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black outline-none"
+                placeholder="Ex: thomas@email.com"
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone (Optionnel)</label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
+              <input 
+                type="tel"
+                className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black outline-none"
+                placeholder="06 12 34 56 78"
+                value={formData.phone}
+                onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            style={{ backgroundColor: restaurant.brand_color || '#000' }}
+            className="w-full text-white font-bold py-4 rounded-xl shadow-md hover:opacity-90 transition-opacity mt-4"
+          >
+            C'est parti ! 🎲
+          </button>
+        </form>
       </div>
     )
   }
