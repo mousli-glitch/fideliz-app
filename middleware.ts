@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 export function middleware(req: NextRequest) {
-  // On protège uniquement l'admin
+  // On ne protège que l'admin
   if (!req.nextUrl.pathname.startsWith("/admin") && !req.nextUrl.pathname.startsWith("/api/admin")) {
     return NextResponse.next()
   }
@@ -14,12 +14,13 @@ export function middleware(req: NextRequest) {
     const decoded = atob(base64)
     const [user, pwd] = decoded.split(":")
 
-    // LE SECRET EST ICI : L'utilisateur est "admin"
+    // Vérifie le mot de passe stocké dans Vercel
     if (user === "admin" && pwd === process.env.ADMIN_PASSWORD) {
       return NextResponse.next()
     }
   }
 
+  // Si pas connecté, on affiche la pop-up système (PAS de redirection vers /login)
   return new NextResponse("Authentification requise", {
     status: 401,
     headers: {
