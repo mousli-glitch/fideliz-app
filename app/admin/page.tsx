@@ -1,136 +1,118 @@
-"use client"
+import { createClient } from '@supabase/supabase-js'
+import QrCard from './QrCard' 
+import ClientValidateButton from './ClientValidateButton'
 
-import { useEffect, useState } from "react"
-import { createClient } from "@/utils/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Plus, Loader2, Edit, Trash2, Calendar, Users, Trophy } from "lucide-react"
-import Link from "next/link"
-import { format } from "date-fns"
-import { fr } from "date-fns/locale"
-import { useRouter } from "next/navigation"
+// Initialisation Admin
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
-type Game = {
-  id: string
-  status: string
-  active_action: string
-  action_url: string
-  created_at: string
-  end_date?: string
-  winners?: { count: number }[]
-}
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
 
-export default function AdminDashboard() {
-  const supabase = createClient()
-  const router = useRouter()
-  const [games, setGames] = useState<Game[]>([])
-  const [loading, setLoading] = useState(true)
+export const dynamic = 'force-dynamic'
 
-  const fetchGames = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+export default async function AdminPage() {
+  
+  // 1. On récupère d'abord le restaurant (pour avoir le bon slug)
+  // Dans cette V1, on prend le premier restaurant trouvé dans la base
+  const { data: restaurant } = await supabaseAdmin
+    .from('restaurants')
+    .select('slug, name')
+    .limit(1)
+    .single()
 
-    const { data: resto } = await (supabase.from("restaurants") as any)
-      .select("id").eq("user_id", user.id).single()
+  // Si on ne trouve pas de restaurant, on met 'demo' par défaut pour pas que ça plante
+  const currentSlug = restaurant?.slug || 'demo'
+  const currentName = restaurant?.name || 'Mon Restaurant'
 
-    if (resto) {
-      const { data: gamesData } = await (supabase.from("games") as any)
-        .select("*, winners(count)").eq("restaurant_id", resto.id).order("created_at", { ascending: false })
-      if (gamesData) setGames(gamesData)
-    }
-    setLoading(false)
+  // 2. On récupère les gagnants
+  const { data: winners, error } = await supabaseAdmin
+    .from('winners')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (error) {
+    console.error("Erreur:", error)
   }
 
-  useEffect(() => { fetchGames() }, [])
-
-  const handleDelete = async (gameId: string) => {
-    if (!confirm("Supprimer définitivement cette campagne ?")) return;
-    await (supabase.from("prizes") as any).delete().eq("game_id", gameId)
-    await (supabase.from("winners") as any).delete().eq("game_id", gameId)
-    await (supabase.from("games") as any).delete().eq("id", gameId)
-    setGames(games.filter(g => g.id !== gameId))
-  }
-
-  if (loading) return <div className="flex h-96 items-center justify-center"><Loader2 className="animate-spin text-slate-400" /></div>
+  // 3. On construit l'URL dynamique avec le VRAI slug (ex: testmicroo)
+  const qrUrl = `${APP_URL}/qr/${currentSlug}`
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between border-b pb-6">
-        <div>
-          <h2 className="text-3xl font-black tracking-tighter text-slate-900">Mes Campagnes</h2>
-          <p className="text-slate-500 font-medium">Pilotez votre marketing client.</p>
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-5xl mx-auto">
+        
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">FIDELIZ Admin</h1>
+          <p className="text-gray-500">Gérant : {currentName}</p>
+        </header>
+
+        {/* Le QR Code pointera maintenant vers .../qr/testmicroo */}
+        <QrCard url={qrUrl} />
+
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-800">Derniers Gagnants</h2>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-gray-600">
+              <thead className="bg-gray-100 uppercase text-xs font-semibold text-gray-700">
+                <tr>
+                  <th className="px-6 py-3">Date</th>
+                  <th className="px-6 py-3">Client</th>
+                  <th className="px-6 py-3">Gain</th>
+                  <th className="px-6 py-3">Statut</th>
+                  <th className="px-6 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {(!winners || winners.length === 0) ? (
+                   <tr>
+                     <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
+                       Aucun gagnant pour le moment.
+                     </td>
+                   </tr>
+                ) : (
+                  winners.map((winner: any) => (
+                    <tr key={winner.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        {new Date(winner.created_at).toLocaleDateString('fr-FR', {
+                          day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit'
+                        })}
+                      </td>
+                      <td className="px-6 py-4 font-medium text-gray-900">
+                        {winner.email}
+                      </td>
+                      <td className="px-6 py-4 text-green-700 font-bold">
+                        {winner.prize}
+                      </td>
+                      <td className="px-6 py-4">
+                        {winner.status === 'available' ? (
+                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-semibold">
+                            Disponible
+                          </span>
+                        ) : (
+                          <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs font-semibold">
+                            Consommé
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                         {winner.status === 'available' && (
+                            <ClientValidateButton id={winner.id} />
+                         )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <Link href="/admin/games/new">
-          <Button className="bg-slate-900 hover:bg-black text-white px-6 font-bold shadow-lg shadow-slate-200/50">
-            <Plus size={18} className="mr-2" /> Créer un Jeu
-          </Button>
-        </Link>
       </div>
-
-      {games.length === 0 ? (
-        <div className="text-center py-20 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-          <Trophy className="w-12 h-12 mx-auto text-slate-300 mb-4" />
-          <p className="text-slate-500 mb-6 font-medium">Aucune campagne active.</p>
-          <Link href="/admin/games/new"><Button variant="outline">Lancer ma première campagne</Button></Link>
-        </div>
-      ) : (
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {games.map((game) => (
-            <Card key={game.id} className="group flex flex-col justify-between border border-slate-200 hover:border-slate-300 hover:shadow-xl transition-all duration-300 overflow-hidden bg-white">
-              
-              <div className="p-5">
-                {/* Header Carte : Statut + Delete */}
-                <div className="flex justify-between items-start mb-3">
-                  <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${
-                    game.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
-                    game.status === 'draft' ? 'bg-slate-50 text-slate-600 border-slate-200' : 'bg-red-50 text-red-600 border-red-100'
-                  }`}>
-                    {game.status === 'active' ? '● En Ligne' : game.status === 'draft' ? 'Brouillon' : 'Terminé'}
-                  </span>
-                  <button onClick={() => handleDelete(game.id)} className="text-slate-300 hover:text-red-500 transition-colors">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-                
-                {/* Titre & Lien (Compact) */}
-                <div className="mb-4">
-                  <h3 className="font-black text-lg text-slate-900 leading-tight mb-1">
-                    {game.active_action === 'GOOGLE_REVIEW' ? 'Avis Google ⭐' : 'Instagram Follow 📸'}
-                  </h3>
-                  <a href={game.action_url} target="_blank" className="text-xs text-slate-400 font-mono truncate block hover:text-blue-600 transition-colors">
-                    {game.action_url}
-                  </a>
-                </div>
-
-                {/* Métriques (Grid compacte) */}
-                <div className="grid grid-cols-2 gap-2 text-xs py-3 border-t border-slate-100">
-                  <div className="space-y-0.5">
-                    <span className="text-slate-400 font-semibold block uppercase text-[9px]">Créé le</span>
-                    <div className="font-medium text-slate-700 flex items-center gap-1">
-                      <Calendar size={12} /> {format(new Date(game.created_at), 'dd MMM', { locale: fr })}
-                    </div>
-                  </div>
-                  <div className="space-y-0.5 text-right">
-                    <span className="text-slate-400 font-semibold block uppercase text-[9px]">Participants</span>
-                    <div className="font-bold text-slate-900 flex items-center justify-end gap-1">
-                      {/* @ts-ignore */}
-                      {game.winners?.[0]?.count || 0} <Users size={12} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Footer */}
-              <Link href={`/admin/games/${game.id}`} className="block border-t border-slate-100 bg-slate-50/50 hover:bg-slate-100 transition-colors p-3 text-center">
-                <span className="text-sm font-bold text-slate-700 group-hover:text-slate-900 flex items-center justify-center gap-2">
-                  <Edit size={14} /> Configurer
-                </span>
-              </Link>
-
-            </Card>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

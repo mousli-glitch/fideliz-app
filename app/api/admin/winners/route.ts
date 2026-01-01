@@ -1,32 +1,23 @@
-import { createClient } from "@supabase/supabase-js"
-import { NextResponse } from "next/server"
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-// Client Admin sécurisé
-const supabase = createClient(
+const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const slug = searchParams.get("slug")
-
-  if (!slug) {
-    return NextResponse.json({ error: "Slug manquant" }, { status: 400 })
+export async function PATCH(request: Request) {
+  try {
+    const { id } = await request.json()
+    const { error } = await supabaseAdmin
+      .from('winners')
+      .update({ status: 'redeemed', redeemed_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('status', 'available') // Sécurité
+    
+    if (error) throw error
+    return NextResponse.json({ success: true })
+  } catch (e) {
+    return NextResponse.json({ error: "Erreur" }, { status: 500 })
   }
-
-  // On récupère TOUS les gagnants 'available' (pas de filtre de date du jour)
-  // Triés du plus récent au plus ancien
-  const { data: winners, error } = await supabase
-    .from("winners")
-    .select("*")
-    .eq("game_id", slug)
-    .eq("status", "available")
-    .order("created_at", { ascending: false })
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ winners })
 }
