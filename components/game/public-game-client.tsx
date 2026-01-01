@@ -4,8 +4,9 @@ import { useState, useRef, useEffect } from "react"
 import { createClient } from "@/utils/supabase/client"
 import { Instagram, Loader2, Ticket, Check, Clock, MapPin, ShoppingBag, Calendar } from "lucide-react"
 import confetti from "canvas-confetti"
-import { motion, AnimatePresence } from "framer-motion"
-import QRCode from "react-qr-code" // 👇 IMPORT DU QR CODE
+// 👇 CORRECTION 1 : On importe 'Variants'
+import { motion, AnimatePresence, Variants } from "framer-motion"
+import QRCode from "react-qr-code"
 
 type Props = {
   game: { id: string; active_action: string; action_url: string }
@@ -29,7 +30,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     optIn: false
   })
 
-  // Date de validité fictive (+30 jours)
   const validityDate = new Date();
   validityDate.setDate(validityDate.getDate() + 30);
   const formattedDate = validityDate.toLocaleDateString('fr-FR');
@@ -45,7 +45,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
   useEffect(() => {
     if (step === 'VERIFYING') {
-      // 👇 CORRECTION TIMER : 6 secondes
       const timer = setTimeout(() => {
         setStep('WHEEL')
       }, 6000) 
@@ -103,22 +102,28 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }
   }
 
-  // --- ANIMATIONS ---
-  const slideLeft = {
+  // --- ANIMATIONS (CORRIGÉES) ---
+  
+  // 👇 CORRECTION 2 : On type explicitement ': Variants' et on retire le 'ease' problématique (le défaut est très bien)
+  const slideLeft: Variants = {
       hidden: { x: '100%', opacity: 0 },
-      visible: { x: 0, opacity: 1 },
-      exit: { x: '-100%', opacity: 0 }
+      visible: { x: 0, opacity: 1, transition: { duration: 0.3 } },
+      exit: { x: '-100%', opacity: 0, transition: { duration: 0.3 } }
   };
+
+  const fadeIn: Variants = {
+    hidden: { opacity: 0, scale: 0.95 },
+    visible: { opacity: 1, scale: 1, transition: { duration: 0.4 } }
+  }
 
   // ================= RENDER =================
 
-  // 🔵 HEADER COMMUN (Images 1 & 2) : Pour éviter le doublon
   const CommonHeader = () => (
     <>
     <div className="w-16 h-16 bg-white rounded-full mx-auto mb-6 shadow-lg flex items-center justify-center border-2 border-yellow-500 z-10 relative">
         <span className="font-bold text-xl text-black">{restaurant.name.substring(0,2).toUpperCase()}</span>
     </div>
-    <h1 className="text-3xl font-black text-white uppercase italic tracking-wider mb-8 drop-shadow-md relative z-10">
+    <h1 className="text-3xl font-black text-white uppercase italic tracking-wider mb-8 drop-shadow-md relative z-10 leading-none">
       JOUEZ<br/><span className="text-yellow-400">POUR GAGNER</span>
     </h1>
     </>
@@ -126,12 +131,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
 
   return (
-    <div className="w-full max-w-sm mx-auto text-center relative">
+    <div className="w-full max-w-md mx-auto text-center relative flex flex-col items-center justify-center">
       <AnimatePresence mode="wait">
 
         {/* 🟢 ÉTAPE 1 : LANDING */}
         {step === 'LANDING' && (
-          <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideLeft} transition={{ duration: 0.3 }} className="absolute w-full left-0 top-0">
+          <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideLeft} className="w-full">
             <CommonHeader />
             <div className="bg-white rounded-3xl p-6 shadow-2xl mx-4 relative z-20">
                 <div className="mb-4 flex justify-center">
@@ -158,7 +163,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
         {/* 🟢 ÉTAPE 2 : INSTRUCTIONS */}
         {step === 'INSTRUCTIONS' && (
-          <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideLeft} transition={{ duration: 0.3 }} className="absolute w-full left-0 top-0">
+          <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideLeft} className="w-full">
              <CommonHeader />
              <div className="bg-white rounded-3xl p-6 shadow-2xl mx-4 relative z-20">
                 <div className="mb-4 flex justify-center text-slate-400">
@@ -182,8 +187,8 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
         {/* 🟢 ÉTAPE 3 : VÉRIFICATION */}
         {step === 'VERIFYING' && (
-           <motion.div key="verifying" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="bg-[#EF5350] rounded-2xl p-8 shadow-2xl mx-4 text-white border-2 border-red-400 relative overflow-hidden mt-20">
+           <motion.div key="verifying" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="w-full">
+              <div className="bg-[#EF5350] rounded-2xl p-8 shadow-2xl mx-4 text-white border-2 border-red-400 relative overflow-hidden">
                  <h2 className="text-2xl font-bold mb-6">Pas encore fait ?</h2>
                  <button onClick={() => window.open(game.action_url, '_blank')} className="bg-black text-white font-bold py-3 px-6 rounded-full mb-8 inline-flex items-center gap-2 hover:bg-gray-900 transition-colors">
                     {game.active_action === 'GOOGLE_REVIEW' ? 'Notez sur Google' : "S'abonner"}
@@ -198,8 +203,8 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
         {/* 🟢 ÉTAPE 4 : ROUE */}
         {step === 'WHEEL' && (
-          <motion.div key="wheel" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center gap-8 mt-10">
-            <h2 className="text-white font-black text-2xl uppercase tracking-widest drop-shadow-lg">{restaurant.name}</h2>
+          <motion.div key="wheel" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="flex flex-col items-center gap-8 w-full">
+            <h2 className="text-white font-black text-2xl uppercase tracking-widest drop-shadow-lg leading-none">{restaurant.name}</h2>
             <div className="relative w-72 h-72 md:w-80 md:h-80">
               <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-20">
                  <div className="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-t-[40px] border-t-white drop-shadow-xl"></div>
@@ -221,7 +226,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         )}
       </AnimatePresence>
         
-        {/* 🟢 ÉTAPE 5 : FORMULAIRE POPUP (Fixe pour couvrir l'écran) */}
+        {/* ÉTAPE 5 : FORMULAIRE POPUP */}
         {step === 'FORM' && winner && (
         <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md z-[100]">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm bg-[#EF5350] rounded-3xl p-6 shadow-2xl relative border-4 border-white/20">
@@ -247,9 +252,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         </div>
         )}
 
-        {/* 🟢 ÉTAPE 6 : TICKET FINAL COMPLET */}
+        {/* ÉTAPE 6 : TICKET FINAL */}
         {step === 'TICKET' && winner && (
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm mx-auto text-center mt-10 relative z-[60]">
+        <motion.div initial="hidden" animate="visible" variants={fadeIn} className="w-full max-w-sm mx-auto text-center relative z-[60]">
             <div className="bg-black text-white p-3 text-xs font-bold rounded-t-xl mx-4 flex items-center justify-center gap-2">
                 <Clock size={14}/> Ce lot n'est pas encore disponible — patientez
             </div>
@@ -275,7 +280,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                 </div>
                 <p className="text-xs text-slate-500 mb-4">Présentez ce QR Code au personnel.</p>
 
-                {/* CONDITIONS AJOUTÉES */}
                 <div className="flex justify-between text-[10px] text-slate-600 border-t border-slate-300 pt-3 mb-6">
                     <div className="flex items-center gap-1"><Calendar size={12}/> Valable jusqu'au : <strong>{formattedDate}</strong></div>
                     <div className="flex items-center gap-1"><ShoppingBag size={12}/> Min. achat : <strong>Aucun</strong></div>
