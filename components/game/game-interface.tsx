@@ -1,10 +1,8 @@
-// MISE A JOUR FORMULAIRE FORCEE
-
 'use client'
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import GameWheel from './game-wheel' 
+import GameWheel from '../game-wheel' 
 import confetti from 'canvas-confetti'
 import { createClient } from '@/utils/supabase/client'
 
