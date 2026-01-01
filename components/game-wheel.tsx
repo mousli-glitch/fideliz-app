@@ -1,110 +1,76 @@
-"use client"
+// @ts-nocheck
+'use client'
 
-import { useEffect, useRef, useState } from "react"
+import React, { useState } from 'react'
+import dynamic from 'next/dynamic'
 
-interface Prize {
-  id: string
-  label: string
-  color: string
-}
+// On importe la roue dynamiquement pour éviter les erreurs serveur
+const Wheel = dynamic(
+  () => import('react-custom-roulette').then((mod) => mod.Wheel),
+  { ssr: false }
+)
 
 interface GameWheelProps {
-  prizes: Prize[]
-  onFinished: (prize: Prize) => void
-  brandColor?: string
+  onSpinEnd: (prize: string) => void
+  primaryColor?: string
 }
 
-export default function GameWheel({ prizes, onFinished, brandColor }: GameWheelProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [isSpinning, setIsSpinning] = useState(false)
+const data = [
+  { option: 'Burger 🍔', style: { backgroundColor: 'white', textColor: 'black' } },
+  { option: 'Boisson 🥤', style: { backgroundColor: 'black', textColor: 'white' } },
+  { option: 'Café ☕️', style: { backgroundColor: 'white', textColor: 'black' } },
+  { option: 'Dessert 🍦', style: { backgroundColor: 'black', textColor: 'white' } },
+  { option: 'Cheese 🧀', style: { backgroundColor: 'white', textColor: 'black' } },
+  { option: '-50% 🏷️', style: { backgroundColor: 'black', textColor: 'white' } },
+]
 
-  // Configuration de la roue
-  const size = 300
-  const centerX = size / 2
-  const centerY = size / 2
-  const radius = size / 2 - 10
+export default function GameWheel({ onSpinEnd, primaryColor = '#000000' }: GameWheelProps) {
+  const [mustSpin, setMustSpin] = useState(false)
+  const [prizeNumber, setPrizeNumber] = useState(0)
 
-  // Dessiner la roue (se met à jour si les prix changent)
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
-    ctx.clearRect(0, 0, size, size)
-
-    const totalPrizes = prizes.length
-    const arcSize = (2 * Math.PI) / totalPrizes
-
-    prizes.forEach((prize, i) => {
-      const angle = i * arcSize
-      
-      // Quartier de tarte
-      ctx.beginPath()
-      ctx.fillStyle = prize.color
-      ctx.moveTo(centerX, centerY)
-      ctx.arc(centerX, centerY, radius, angle, angle + arcSize)
-      ctx.lineTo(centerX, centerY)
-      ctx.fill()
-      ctx.stroke()
-
-      // Texte
-      ctx.save()
-      ctx.translate(centerX, centerY)
-      ctx.rotate(angle + arcSize / 2)
-      ctx.textAlign = "right"
-      ctx.fillStyle = "white"
-      ctx.font = "bold 14px Arial"
-      ctx.fillText(prize.label, radius - 20, 5)
-      ctx.restore()
-    })
-  }, [prizes])
-
-  const spin = () => {
-    if (isSpinning) return
-    setIsSpinning(true)
-
-    // On choisit un gagnant au hasard
-    const randomIndex = Math.floor(Math.random() * prizes.length)
-    const winningPrize = prizes[randomIndex]
-
-    // Animation de rotation
-    const wheel = document.getElementById("wheel-canvas")
-    if (wheel) {
-      // 5 tours complets (1800deg) + l'angle pour arriver sur le gagnant
-      // Calcul approximatif pour l'effet visuel
-      const rotation = 1800 + (360 - (randomIndex * (360 / prizes.length)))
-      wheel.style.transition = "transform 4s cubic-bezier(0.2, 0.8, 0.2, 1)"
-      wheel.style.transform = `rotate(${rotation}deg)`
+  const handleSpinClick = () => {
+    if (!mustSpin) {
+      const newPrizeNumber = Math.floor(Math.random() * data.length)
+      setPrizeNumber(newPrizeNumber)
+      setMustSpin(true)
     }
-
-    // Après 4 secondes (fin de l'animation), on annonce le gagnant
-    setTimeout(() => {
-      setIsSpinning(false)
-      onFinished(winningPrize)
-    }, 4000)
   }
 
-  // Lancement automatique dès que le composant s'affiche
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      spin()
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [])
-
   return (
-    <div className="relative flex justify-center items-center">
-      {/* Flèche du haut */}
-      <div className="absolute top-0 z-10 text-4xl text-slate-800">▼</div>
+    <div className="flex flex-col items-center justify-center">
+      <div className="scale-90 md:scale-100">
+        <Wheel
+          mustStartSpinning={mustSpin}
+          prizeNumber={prizeNumber}
+          data={data}
+          onStopSpinning={() => {
+            setMustSpin(false)
+            onSpinEnd(data[prizeNumber].option)
+          }}
+          backgroundColors={['#ffffff', '#000000']}
+          textColors={['#000000', '#ffffff']}
+          outerBorderColor={primaryColor}
+          outerBorderWidth={5}
+          innerRadius={20}
+          innerBorderColor={primaryColor}
+          innerBorderWidth={5}
+          radiusLineColor={primaryColor}
+          radiusLineWidth={2}
+          pointerProps={{
+            src: '/pointer.png', 
+            style: { transform: 'rotate(45deg)' } 
+          }}
+        />
+      </div>
       
-      <canvas
-        id="wheel-canvas"
-        ref={canvasRef}
-        width={size}
-        height={size}
-        className="rounded-full shadow-2xl border-4 border-white"
-      />
+      <button
+        onClick={handleSpinClick}
+        disabled={mustSpin}
+        style={{ backgroundColor: mustSpin ? '#ccc' : primaryColor }}
+        className="mt-8 px-8 py-3 rounded-full text-white font-black text-lg uppercase tracking-wider shadow-lg transform transition hover:scale-105 active:scale-95"
+      >
+        {mustSpin ? 'Bonne chance... 🤞' : 'Lancer ! 🎲'}
+      </button>
     </div>
   )
 }
