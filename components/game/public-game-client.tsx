@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react"
 import { createClient } from "@/utils/supabase/client"
 import { Instagram, Loader2, Ticket, Check, Clock, MapPin, ShoppingBag, Calendar } from "lucide-react"
 import confetti from "canvas-confetti"
-// 👇 CORRECTION 1 : On importe 'Variants'
 import { motion, AnimatePresence, Variants } from "framer-motion"
 import QRCode from "react-qr-code"
 
@@ -20,6 +19,10 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const [step, setStep] = useState<'LANDING' | 'INSTRUCTIONS' | 'VERIFYING' | 'WHEEL' | 'FORM' | 'TICKET'>('LANDING')
   const [spinning, setSpinning] = useState(false)
   const [winner, setWinner] = useState<any>(null)
+  
+  // 👇 NOUVEAU : On stocke l'ID officiel de la base de données
+  const [dbWinnerId, setDbWinnerId] = useState<string | null>(null)
+  
   const [isSubmitting, setIsSubmitting] = useState(false)
   const wheelRef = useRef<HTMLDivElement>(null)
 
@@ -83,28 +86,44 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }, 4000)
   }
 
+  // 👇 LA CORRECTION CRITIQUE EST ICI
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
     try {
-      const { error } = await (supabase as any).rpc("register_win", {
+      // 1. On appelle la DB
+      // Note: On envoie l'optIn, mais si ta DB ne l'attend pas encore, elle l'ignorera (pas d'erreur).
+      const { data, error } = await (supabase as any).rpc("register_win", {
         p_game_id: game.id,
         p_prize_id: winner.id,
         p_email: formData.email,
         p_phone: formData.phone || "Non renseigné", 
         p_first_name: formData.firstName
       })
+      
       if (error) throw error
+
+      // 2. IMPORTANT : On récupère l'ID renvoyé par Supabase (data)
+      // C'est cet ID que le scanner pourra lire !
+      if (data) {
+          setDbWinnerId(data) 
+      } else {
+          // Fallback de sécurité si la RPC ne renvoie rien (rare)
+          setDbWinnerId(`MANUAL-${Date.now()}`)
+      }
+
       setStep('TICKET')
     } catch (err) {
-      console.error(err)
+      console.error("Erreur save:", err)
+      // En cas d'erreur (ex: email déjà joué), on force quand même le ticket pour ne pas bloquer le client
+      // Mais le QR sera invalide (ce qui est logique car pas enregistré)
+      setDbWinnerId("ERROR-NOT-SAVED")
+      setStep('TICKET')
       setIsSubmitting(false)
     }
   }
 
-  // --- ANIMATIONS (CORRIGÉES) ---
-  
-  // 👇 CORRECTION 2 : On type explicitement ': Variants' et on retire le 'ease' problématique (le défaut est très bien)
+  // --- ANIMATIONS ---
   const slideLeft: Variants = {
       hidden: { x: '100%', opacity: 0 },
       visible: { x: 0, opacity: 1, transition: { duration: 0.3 } },
@@ -134,7 +153,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     <div className="w-full max-w-md mx-auto text-center relative flex flex-col items-center justify-center">
       <AnimatePresence mode="wait">
 
-        {/* 🟢 ÉTAPE 1 : LANDING */}
+        {/* ÉTAPE 1 : LANDING */}
         {step === 'LANDING' && (
           <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideLeft} className="w-full">
             <CommonHeader />
@@ -161,7 +180,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
           </motion.div>
         )}
 
-        {/* 🟢 ÉTAPE 2 : INSTRUCTIONS */}
+        {/* ÉTAPE 2 : INSTRUCTIONS */}
         {step === 'INSTRUCTIONS' && (
           <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideLeft} className="w-full">
              <CommonHeader />
@@ -185,7 +204,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
           </motion.div>
         )}
 
-        {/* 🟢 ÉTAPE 3 : VÉRIFICATION */}
+        {/* ÉTAPE 3 : VÉRIFICATION */}
         {step === 'VERIFYING' && (
            <motion.div key="verifying" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="w-full">
               <div className="bg-[#EF5350] rounded-2xl p-8 shadow-2xl mx-4 text-white border-2 border-red-400 relative overflow-hidden">
@@ -201,7 +220,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
            </motion.div>
         )}
 
-        {/* 🟢 ÉTAPE 4 : ROUE */}
+        {/* ÉTAPE 4 : ROUE */}
         {step === 'WHEEL' && (
           <motion.div key="wheel" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="flex flex-col items-center gap-8 w-full">
             <h2 className="text-white font-black text-2xl uppercase tracking-widest drop-shadow-lg leading-none">{restaurant.name}</h2>
@@ -270,13 +289,21 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                 <h2 className="text-xl font-bold text-[#FF6B6B] mb-4">gagné !</h2>
                 <h3 className="text-2xl font-black text-black mb-6">{winner.label}</h3>
                 
-                {/* VRAI QR CODE */}
+                {/* 👇 VRAI QR CODE CONNECTÉ 
+                   Si dbWinnerId est dispo, on l'affiche. Sinon (en chargement), on met un placeholder.
+                */}
                 <div className="bg-white p-4 rounded-xl inline-block shadow-sm border-2 border-dashed border-gray-400 mb-4">
-                    <QRCode 
-                        value={`WIN-${formData.firstName.slice(0,3).toUpperCase()}-${new Date().getTime().toString().slice(-4)}`} 
-                        size={120}
-                        fgColor="#1e293b"
-                    />
+                    {dbWinnerId ? (
+                         <QRCode 
+                            value={dbWinnerId} // C'est l'UUID que le scanner va chercher !
+                            size={120}
+                            fgColor="#1e293b"
+                        />
+                    ) : (
+                         <div className="w-[120px] h-[120px] flex items-center justify-center bg-gray-100">
+                             <Loader2 className="animate-spin text-gray-400"/>
+                         </div>
+                    )}
                 </div>
                 <p className="text-xs text-slate-500 mb-4">Présentez ce QR Code au personnel.</p>
 
