@@ -1,19 +1,13 @@
-import { createClient } from "@/utils/supabase/server" // 👈 NOUVEAU
-import { redirect } from "next/navigation"
-import { Sidebar } from "@/components/admin/sidebar"
+import React from 'react'
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient() // 👈 IMPORTANT : await ici
-
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect("/login")
-  }
-
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
-    <div className="flex h-screen bg-slate-100">
-      <Sidebar />
+    <div className="min-h-screen bg-slate-100 flex flex-col">
+      {/* On garde juste le conteneur visuel, sans la logique de sécurité Supabase */}
       <main className="flex-1 overflow-auto p-8">
         <div className="max-w-5xl mx-auto">
           {children}
