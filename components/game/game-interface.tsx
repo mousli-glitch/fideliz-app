@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import GameWheel from '../game-wheel' 
+// 👇 CORRECTION DÉFINITIVE : On importe depuis le même dossier (./)
+import GameWheel from './game-wheel'
 import confetti from 'canvas-confetti'
 import { createClient } from '@/utils/supabase/client'
 
@@ -16,7 +17,6 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
   const [prize, setPrize] = useState<string | null>(null)
   const [winnerId, setWinnerId] = useState<string | null>(null)
 
-  // Données du client
   const [formData, setFormData] = useState({
     firstName: '',
     email: '',
@@ -25,7 +25,6 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
 
   const supabase = createClient()
 
-  // 1. Clic sur le bouton "Avis Google"
   const handleStart = () => {
     if (restaurant.google_review_url) {
       window.open(restaurant.google_review_url, '_blank')
@@ -33,7 +32,6 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
     setGameState('form')
   }
 
-  // 2. Soumission du formulaire
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (formData.email && formData.firstName) {
@@ -41,7 +39,6 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
     }
   }
 
-  // 3. Fin de la roue 
   const handleSpinEnd = async (winningPrize: string) => {
     setPrize(winningPrize)
     
@@ -61,7 +58,6 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
         .select()
         .single()
 
-      // CORRECTION ICI : On utilise (data as any) pour forcer TypeScript à accepter .id
       if (data) setWinnerId((data as any).id)
       
       confetti({
