@@ -3,7 +3,6 @@
 import { createClient } from '@supabase/supabase-js'
 
 // 👇 ON UTILISE LA CLÉ SERVICE ROLE (ADMIN SUPRÊME)
-// Cela permet de contourner les règles RLS qui bloquaient l'affichage
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -38,29 +37,26 @@ export async function redeemWinnerAction(winnerId: string) {
     .eq('id', winnerId)
 
   if (error) throw new Error(error.message)
-  
-  // On revalidate pour mettre à jour l'interface sans recharger
   return { success: true }
 }
 
-// 3. Récupérer les stats (Pour le futur dashboard)
+// 3. Récupérer les stats
 export async function getAdminStats() {
     const { count: winnersCount } = await supabaseAdmin.from('winners').select('*', { count: 'exact', head: true })
     const { count: gamesCount } = await supabaseAdmin.from('games').select('*', { count: 'exact', head: true })
     
-    // Exemple simple, on pourra enrichir
     return {
         winners: winnersCount || 0,
         games: gamesCount || 0
     }
 }
 
-// 4. Récupérer les infos du restaurant (On prend le premier trouvé pour la V1)
+// 4. Récupérer les infos du restaurant
 export async function getAdminRestaurant() {
   const { data, error } = await supabaseAdmin
     .from('public_restaurants')
     .select('*')
-    .single() // On suppose qu'il n'y a qu'un resto pour l'instant
+    .single()
 
   if (error) return null
   return data
@@ -76,7 +72,6 @@ export async function updateRestaurantAction(id: string, updates: any) {
   if (error) throw new Error(error.message)
   return { success: true }
 }
-// ... (Code précédent : getAdminRestaurant, updateRestaurantAction, etc.)
 
 // 6. Récupérer tous les jeux
 export async function getAdminGames() {
@@ -96,12 +91,12 @@ export async function getAdminGames() {
 export async function toggleGameStatusAction(id: string, currentStatus: string) {
   const newStatus = currentStatus === 'active' ? 'ended' : 'active'
   
-  // Si on active un jeu, on désactive les autres (Optionnel, pour éviter les conflits)
+  // Si on active un jeu, on désactive les autres
   if (newStatus === 'active') {
      await supabaseAdmin
        .from('games')
        .update({ status: 'ended' })
-       .neq('id', id) // Tous sauf celui-ci
+       .neq('id', id)
   }
 
   const { error } = await supabaseAdmin
@@ -113,7 +108,7 @@ export async function toggleGameStatusAction(id: string, currentStatus: string) 
   return { success: true }
 }
 
-// 8. Supprimer un jeu (Optionnel)
+// 8. Supprimer un jeu
 export async function deleteGameAction(id: string) {
   const { error } = await supabaseAdmin
     .from('games')
@@ -123,10 +118,18 @@ export async function deleteGameAction(id: string) {
   if (error) throw new Error(error.message)
   return { success: true }
 }
-// ... (Code précédent)
 
-// 9. Créer un jeu
+// 9. Créer un jeu (CORRIGÉ : Archive les anciens d'abord)
 export async function createGameAction(restaurantId: string, name: string, actionType: string, actionUrl: string) {
+  
+  // A. On passe tous les jeux existants de ce resto en "ended"
+  // pour éviter le conflit "one_active_game_per_restaurant"
+  await supabaseAdmin
+    .from('games')
+    .update({ status: 'ended' })
+    .eq('restaurant_id', restaurantId)
+
+  // B. On crée le nouveau jeu "active"
   const { data, error } = await supabaseAdmin
     .from('games')
     .insert({
@@ -143,7 +146,7 @@ export async function createGameAction(restaurantId: string, name: string, actio
   return data
 }
 
-// 10. Récupérer UN jeu par son ID (pour la page [id])
+// 10. Récupérer UN jeu par son ID
 export async function getAdminGameById(id: string) {
   const { data, error } = await supabaseAdmin
     .from('games')
