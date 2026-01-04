@@ -1,76 +1,94 @@
 // @ts-nocheck
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
+import { Button } from '@/components/ui/button'
 
-// On importe la roue dynamiquement pour éviter les erreurs serveur
+// Import dynamique pour éviter les erreurs "window not defined"
 const Wheel = dynamic(
   () => import('react-custom-roulette').then((mod) => mod.Wheel),
   { ssr: false }
 )
 
 interface GameWheelProps {
-  onSpinEnd: (prize: string) => void
-  primaryColor?: string
+  prizes: any[]           // On accepte la liste des lots
+  onSpinEnd: (prize: any) => void // On renvoie le lot gagné
+  brandColor?: string     // On accepte la couleur de marque
 }
 
-const data = [
-  { option: 'Burger 🍔', style: { backgroundColor: 'white', textColor: 'black' } },
-  { option: 'Boisson 🥤', style: { backgroundColor: 'black', textColor: 'white' } },
-  { option: 'Café ☕️', style: { backgroundColor: 'white', textColor: 'black' } },
-  { option: 'Dessert 🍦', style: { backgroundColor: 'black', textColor: 'white' } },
-  { option: 'Cheese 🧀', style: { backgroundColor: 'white', textColor: 'black' } },
-  { option: '-50% 🏷️', style: { backgroundColor: 'black', textColor: 'white' } },
-]
-
-export default function GameWheel({ onSpinEnd, primaryColor = '#000000' }: GameWheelProps) {
+export default function GameWheel({ prizes, onSpinEnd, brandColor = '#000000' }: GameWheelProps) {
   const [mustSpin, setMustSpin] = useState(false)
   const [prizeNumber, setPrizeNumber] = useState(0)
+  const [wheelData, setWheelData] = useState<any[]>([])
+
+  // 1. On transforme les données Supabase au format attendu par la librairie de roue
+  useEffect(() => {
+    if (prizes && prizes.length > 0) {
+      const formattedData = prizes.map((prize, index) => ({
+        option: prize.label, // Le texte affiché (ex: "1 Café")
+        style: {
+          backgroundColor: index % 2 === 0 ? brandColor : '#ffffff', // 1 case sur 2 prend la couleur de la marque
+          textColor: index % 2 === 0 ? '#ffffff' : '#000000',
+        },
+        originalPrize: prize // On garde l'objet original pour le renvoyer à la fin
+      }))
+      setWheelData(formattedData)
+    }
+  }, [prizes, brandColor])
 
   const handleSpinClick = () => {
-    if (!mustSpin) {
-      const newPrizeNumber = Math.floor(Math.random() * data.length)
+    if (!mustSpin && wheelData.length > 0) {
+      // ICI : On détermine le gagnant aléatoirement (Côté Client pour l'instant)
+      // Note : Idéalement, le gagnant devrait être déterminé par le serveur avant le lancer
+      const newPrizeNumber = Math.floor(Math.random() * wheelData.length)
       setPrizeNumber(newPrizeNumber)
       setMustSpin(true)
     }
   }
 
+  // Si pas de données, on affiche un chargement ou un message
+  if (wheelData.length === 0) {
+    return <div className="text-slate-400 text-sm">Chargement de la roue...</div>
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center">
-      <div className="scale-90 md:scale-100">
+    <div className="flex flex-col items-center justify-center relative">
+      <div className="scale-90 md:scale-100 relative z-0">
         <Wheel
           mustStartSpinning={mustSpin}
           prizeNumber={prizeNumber}
-          data={data}
+          data={wheelData}
           onStopSpinning={() => {
             setMustSpin(false)
-            onSpinEnd(data[prizeNumber].option)
+            // On renvoie l'objet prize original au parent (GameFlow)
+            onSpinEnd(wheelData[prizeNumber].originalPrize)
           }}
-          backgroundColors={['#ffffff', '#000000']}
-          textColors={['#000000', '#ffffff']}
-          outerBorderColor={primaryColor}
+          // Styles de la roue
+          outerBorderColor="#eeeeee"
           outerBorderWidth={5}
-          innerRadius={20}
-          innerBorderColor={primaryColor}
-          innerBorderWidth={5}
-          radiusLineColor={primaryColor}
-          radiusLineWidth={2}
-          pointerProps={{
-            src: '/pointer.png', 
-            style: { transform: 'rotate(45deg)' } 
-          }}
+          innerRadius={10}
+          innerBorderColor="#eeeeee"
+          innerBorderWidth={0}
+          radiusLineColor="#eeeeee"
+          radiusLineWidth={1}
+          fontSize={16}
+          textDistance={60}
         />
       </div>
       
-      <button
+      {/* Bouton de lancement */}
+      <Button
         onClick={handleSpinClick}
         disabled={mustSpin}
-        style={{ backgroundColor: mustSpin ? '#ccc' : primaryColor }}
-        className="mt-8 px-8 py-3 rounded-full text-white font-black text-lg uppercase tracking-wider shadow-lg transform transition hover:scale-105 active:scale-95"
+        className="mt-8 px-10 py-6 rounded-full font-black text-xl shadow-xl transform transition hover:scale-105 active:scale-95 z-10"
+        style={{ 
+          backgroundColor: mustSpin ? '#cbd5e1' : brandColor,
+          color: 'white'
+        }}
       >
-        {mustSpin ? 'Bonne chance... 🤞' : 'Lancer ! 🎲'}
-      </button>
+        {mustSpin ? 'Bonne chance... 🤞' : 'LANCER ! 🎲'}
+      </Button>
     </div>
   )
 }

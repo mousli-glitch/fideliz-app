@@ -1,19 +1,26 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
+import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 
-// Utilisation de la clé secrète CÔTÉ SERVEUR UNIQUEMENT
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+export async function redeemWinner(formData: FormData) {
+  const winnerId = formData.get("winnerId") as string
 
-export async function redeemWinner(winnerId: string) {
-  // On vérifie que la clé secrète est bien là
-  if (!supabaseServiceKey) {
-    return { success: false, error: "Configuration serveur manquante (Clé)" }
+  if (!winnerId) {
+    console.error("ID Manquant")
+    return
   }
 
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  console.log("🚀 Validation lancée pour :", winnerId)
 
+  // Connexion Admin (Service Role)
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  // 1. Mise à jour dans la BDD
   const { error } = await supabase
     .from("winners")
     .update({ 
@@ -23,9 +30,15 @@ export async function redeemWinner(winnerId: string) {
     .eq("id", winnerId)
 
   if (error) {
-    console.error("Erreur redeem:", error)
-    return { success: false, error: error.message }
+    console.error("❌ Erreur Supabase :", error.message)
+    throw new Error(error.message)
   }
 
-  return { success: true }
+  console.log("✅ Gain validé en base !")
+
+  // 2. On actualise TOUT (La page de vérif + La liste des gagnants admin)
+  revalidatePath("/", "layout") // Actualise tout le site pour être sûr
+  
+  // 3. Redirection (Recharge la page actuelle pour afficher le statut "Déjà utilisé")
+  redirect(`/verify/${winnerId}`)
 }

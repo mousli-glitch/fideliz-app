@@ -24,8 +24,7 @@ export async function createGameAction(data: any) {
     const restaurantId = restos[0].id
     console.log("📍 ID Restaurant trouvé :", restaurantId)
 
-    // 2. Mettre à jour le design (CORRECTION ICI : On tape sur la TABLE 'restaurants') 
-    // 👇 C'est ici que ça bloquait avant (tu tapais sur la vue lecture seule)
+    // 2. Mettre à jour le design (On tape sur la TABLE 'restaurants' pour l'écriture)
     const { error: updateError } = await supabaseAdmin.from("restaurants").update({
       brand_color: data.design.brand_color,
       text_color: data.design.text_color,
@@ -39,32 +38,21 @@ export async function createGameAction(data: any) {
         // On continue quand même pour créer le jeu, mais on log l'erreur
     }
 
-    // 3. ARCHIVAGE FORCÉ
-    
-    // A. On cherche s'il y a des jeux actifs
-    const { data: activeGames } = await supabaseAdmin
+    // 3. ARCHIVAGE FORCÉ (OPTIMISÉ)
+    // Au lieu de boucler, on archive tout ce qui est actif pour ce resto en une seule requête.
+    console.log("🧹 Vérification et archivage des anciens jeux...")
+
+    const { error: archiveError } = await supabaseAdmin
         .from("games")
-        .select("id")
+        .update({ status: 'archived' })
         .eq("restaurant_id", restaurantId)
         .eq("status", "active")
 
-    // B. Si on en trouve, on les archive un par un
-    if (activeGames && activeGames.length > 0) {
-        console.log(`🧹 Nettoyage : ${activeGames.length} jeu(x) actif(s) trouvé(s) à archiver.`)
-        
-        for (const game of activeGames) {
-            const { error: archiveError } = await supabaseAdmin
-                .from("games")
-                .update({ status: 'archived' })
-                .eq('id', game.id)
-            
-            if (archiveError) {
-                console.error("❌ Erreur lors de l'archivage du jeu " + game.id, archiveError)
-                throw new Error("Impossible d'archiver l'ancien jeu. Veuillez réessayer.")
-            }
-        }
+    if (archiveError) {
+        console.error("❌ Erreur lors de l'archivage en masse :", archiveError)
+        throw new Error("Impossible d'archiver les anciens jeux. Veuillez réessayer.")
     } else {
-        console.log("✅ Aucun jeu actif conflictuel trouvé.")
+        console.log("✅ Nettoyage terminé (les anciens jeux sont archivés).")
     }
 
     // 4. Créer le Nouveau Jeu
