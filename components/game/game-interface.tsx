@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-// 👇 CORRECTION DÉFINITIVE : On importe depuis le même dossier (./)
 import GameWheel from './game-wheel'
 import confetti from 'canvas-confetti'
 import { createClient } from '@/utils/supabase/client'
@@ -39,8 +38,11 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
     }
   }
 
-  const handleSpinEnd = async (winningPrize: string) => {
-    setPrize(winningPrize)
+  // MODIFICATION ICI : On reçoit l'objet prize complet de la roue
+  const handleSpinEnd = async (winningPrizeObject: any) => {
+    // On extrait le label pour l'affichage (ex: "1 Café")
+    const prizeLabel = winningPrizeObject.label || winningPrizeObject;
+    setPrize(prizeLabel)
     
     try {
       const { data, error } = await supabase
@@ -48,7 +50,7 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
         .insert([
           {
             restaurant_id: restaurant.id,
-            prize: winningPrize,
+            prize: prizeLabel,
             email: formData.email, 
             first_name: formData.firstName, 
             phone: formData.phone, 
@@ -78,7 +80,6 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
     <div className="w-full max-w-md mx-auto relative min-h-[400px] flex items-center justify-center">
       <AnimatePresence mode="wait">
         
-        {/* ÉTAPE 1 : LANDING */}
         {gameState === 'landing' && (
           <motion.div
             key="landing"
@@ -88,28 +89,22 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
             className="text-center space-y-6 bg-white/10 backdrop-blur-md p-8 rounded-2xl border border-white/20 shadow-xl"
           >
             <div className="space-y-2">
-              {/* 👇 LE MARQUEUR VISUEL POUR VÉRIFIER LA MISE À JOUR 👇 */}
               <div className="bg-white text-red-600 font-bold px-4 py-2 rounded-full inline-block mb-4 border-4 border-red-600">
-                TEST : FORMULAIRE V2 ACTIVÉ ✅
+                PRÊT POUR LE TEST ✅
               </div>
-              
-              <h2 className="text-2xl font-bold text-white">Une étape avant de jouer !</h2>
+              <h2 className="text-2xl font-bold text-white">Gagnez un cadeau !</h2>
               <p className="text-white/80">Soutenez-nous pour débloquer la roue.</p>
             </div>
 
             <button
               onClick={handleStart}
-              className="group relative w-full bg-white text-black font-bold py-4 px-6 rounded-xl shadow-lg hover:bg-gray-50 transition-all flex items-center justify-center gap-3 overflow-hidden"
+              className="w-full bg-white text-black font-bold py-4 px-6 rounded-xl shadow-lg hover:bg-gray-50 transition-all"
             >
-              <span className="relative z-10 flex items-center gap-2">
-                ⭐️ Laisser un avis Google ➔
-              </span>
+              ⭐️ Donner mon avis ➔
             </button>
-            <p className="text-xs text-white/50">Le lien s'ouvrira dans un nouvel onglet.</p>
           </motion.div>
         )}
 
-        {/* ÉTAPE 2 : FORMULAIRE */}
         {gameState === 'form' && (
           <motion.div
             key="form"
@@ -118,99 +113,64 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
             exit={{ opacity: 0, x: -20 }}
             className="w-full bg-white p-6 rounded-2xl shadow-xl"
           >
-            <h3 className="text-xl font-bold text-gray-900 mb-4 text-center">Vos coordonnées</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-4 text-center">Inscrivez-vous pour jouer</h3>
             <form onSubmit={handleFormSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Prénom *</label>
-                <input 
-                  required
-                  type="text"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black outline-none transition"
-                  placeholder="Ex: Thomas"
-                  value={formData.firstName}
-                  onChange={(e) => setFormData({...formData, firstName: e.target.value})}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input 
-                  required
-                  type="email"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black outline-none transition"
-                  placeholder="Ex: thomas@email.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone (Optionnel)</label>
-                <input 
-                  type="tel"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black outline-none transition"
-                  placeholder="06 12 34 56 78"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                />
-              </div>
-
+              <input 
+                required
+                type="text"
+                placeholder="Votre Prénom"
+                className="w-full p-3 border rounded-lg"
+                value={formData.firstName}
+                onChange={(e) => setFormData({...formData, firstName: e.target.value})}
+              />
+              <input 
+                required
+                type="email"
+                placeholder="Votre Email"
+                className="w-full p-3 border rounded-lg"
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+              />
+              <input 
+                type="tel"
+                placeholder="Téléphone (Optionnel)"
+                className="w-full p-3 border rounded-lg"
+                value={formData.phone}
+                onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              />
               <button
                 type="submit"
                 style={{ backgroundColor: restaurant.color_primary || '#000' }}
-                className="w-full text-white font-bold py-4 rounded-xl shadow-md hover:opacity-90 transition-opacity mt-4"
+                className="w-full text-white font-bold py-4 rounded-xl"
               >
-                C'est parti ! 🎲
+                LANCER LA ROUE ! 🎲
               </button>
             </form>
           </motion.div>
         )}
 
-        {/* ÉTAPE 3 : ROUE */}
         {gameState === 'playing' && (
-          <motion.div
-            key="playing"
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="text-center"
-          >
+          <motion.div key="playing" className="text-center">
+            {/* On passe bien prizes et primaryColor ici */}
             <GameWheel 
+              prizes={restaurant.active_prizes || []} // Ajouté pour éviter l'erreur de chargement
               onSpinEnd={handleSpinEnd} 
               primaryColor={restaurant.color_primary} 
             />
           </motion.div>
         )}
 
-        {/* ÉTAPE 4 : RÉSULTAT */}
         {gameState === 'result' && prize && (
           <motion.div
             key="result"
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white p-8 rounded-2xl shadow-2xl text-center max-w-sm w-full mx-4 border-4"
+            className="bg-white p-8 rounded-2xl shadow-2xl text-center border-4"
             style={{ borderColor: restaurant.color_primary || '#fbbf24' }}
           >
-            <div className="text-4xl mb-4">🏆</div>
-            <h2 className="text-2xl font-black text-gray-900 mb-2 uppercase">Félicitations !</h2>
-            <p className="text-gray-500 mb-6">Vous avez gagné :</p>
-            
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6">
-              <span className="text-2xl font-bold" style={{ color: restaurant.color_primary || '#000' }}>
-                {prize}
-              </span>
+            <h2 className="text-2xl font-black mb-4">BRAVO !</h2>
+            <div className="bg-gray-50 p-4 rounded-xl text-2xl font-bold mb-6">
+              {prize}
             </div>
-
-            <div className="text-xs text-gray-400 mb-4 p-3 bg-gray-50 rounded-lg">
-              Présentez cet écran au personnel pour récupérer votre lot.<br/>
-              {winnerId && <span className="font-mono mt-1 block">ID: {winnerId.slice(0, 6).toUpperCase()}</span>}
-            </div>
-
-            <button
-              onClick={() => window.location.reload()}
-              className="text-sm text-gray-400 hover:text-gray-600 underline"
-            >
-              Relancer (Test)
-            </button>
+            <p className="text-xs text-gray-400">ID: {winnerId?.slice(0, 8)}</p>
           </motion.div>
         )}
       </AnimatePresence>

@@ -12,42 +12,50 @@ const Wheel = dynamic(
 )
 
 interface GameWheelProps {
-  prizes: any[]           // On accepte la liste des lots
-  onSpinEnd: (prize: any) => void // On renvoie le lot gagné
-  brandColor?: string     // On accepte la couleur de marque
+  prizes: any[]           
+  onSpinEnd: (prize: any) => void 
+  brandColor?: string     
+  primaryColor?: string   // 👈 AJOUTÉ : Pour accepter la prop envoyée par game-interface.tsx
 }
 
-export default function GameWheel({ prizes, onSpinEnd, brandColor = '#000000' }: GameWheelProps) {
+// On récupère primaryColor dans les arguments et on l'utilise comme secours pour brandColor
+export default function GameWheel({ 
+  prizes, 
+  onSpinEnd, 
+  brandColor, 
+  primaryColor 
+}: GameWheelProps) {
+  
+  // On définit la couleur finale : priorité à brandColor, sinon primaryColor, sinon noir
+  const activeColor = brandColor || primaryColor || '#000000'
+
   const [mustSpin, setMustSpin] = useState(false)
   const [prizeNumber, setPrizeNumber] = useState(0)
   const [wheelData, setWheelData] = useState<any[]>([])
 
-  // 1. On transforme les données Supabase au format attendu par la librairie de roue
   useEffect(() => {
     if (prizes && prizes.length > 0) {
       const formattedData = prizes.map((prize, index) => ({
-        option: prize.label, // Le texte affiché (ex: "1 Café")
+        option: prize.label, 
         style: {
-          backgroundColor: index % 2 === 0 ? brandColor : '#ffffff', // 1 case sur 2 prend la couleur de la marque
+          // On utilise activeColor pour le design des segments
+          backgroundColor: index % 2 === 0 ? activeColor : '#ffffff', 
           textColor: index % 2 === 0 ? '#ffffff' : '#000000',
         },
-        originalPrize: prize // On garde l'objet original pour le renvoyer à la fin
+        originalPrize: prize 
       }))
       setWheelData(formattedData)
     }
-  }, [prizes, brandColor])
+  }, [prizes, activeColor])
 
   const handleSpinClick = () => {
     if (!mustSpin && wheelData.length > 0) {
-      // ICI : On détermine le gagnant aléatoirement (Côté Client pour l'instant)
-      // Note : Idéalement, le gagnant devrait être déterminé par le serveur avant le lancer
       const newPrizeNumber = Math.floor(Math.random() * wheelData.length)
       setPrizeNumber(newPrizeNumber)
       setMustSpin(true)
     }
   }
 
-  // Si pas de données, on affiche un chargement ou un message
   if (wheelData.length === 0) {
     return <div className="text-slate-400 text-sm">Chargement de la roue...</div>
   }
@@ -61,10 +69,8 @@ export default function GameWheel({ prizes, onSpinEnd, brandColor = '#000000' }:
           data={wheelData}
           onStopSpinning={() => {
             setMustSpin(false)
-            // On renvoie l'objet prize original au parent (GameFlow)
             onSpinEnd(wheelData[prizeNumber].originalPrize)
           }}
-          // Styles de la roue
           outerBorderColor="#eeeeee"
           outerBorderWidth={5}
           innerRadius={10}
@@ -77,13 +83,12 @@ export default function GameWheel({ prizes, onSpinEnd, brandColor = '#000000' }:
         />
       </div>
       
-      {/* Bouton de lancement */}
       <Button
         onClick={handleSpinClick}
         disabled={mustSpin}
         className="mt-8 px-10 py-6 rounded-full font-black text-xl shadow-xl transform transition hover:scale-105 active:scale-95 z-10"
         style={{ 
-          backgroundColor: mustSpin ? '#cbd5e1' : brandColor,
+          backgroundColor: mustSpin ? '#cbd5e1' : activeColor,
           color: 'white'
         }}
       >
