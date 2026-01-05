@@ -2,7 +2,6 @@
 import { useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
-// Correction de l'import : lucide-react au lieu de lucide-center
 import { Lock, Mail, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
@@ -26,24 +25,26 @@ export default function LoginPage() {
     })
 
     if (authError) {
-      setError("Identifiants incorrects")
+      // DEBUG : Affiche l'erreur système (ex: Mot de passe invalide)
+      setError(`Erreur Auth : ${authError.message}`)
       setLoading(false)
       return
     }
 
-    // 2. Récupération du profil avec forçage de type (as any) pour corriger l'erreur TS 'never'
+    // 2. Récupération du profil avec debug
     const { data: profile, error: profileError } = await (supabase
       .from('profiles')
       .select('role, restaurants(slug)')
       .single() as any)
 
     if (profileError || !profile) {
-      setError("Profil utilisateur non trouvé")
+      // DEBUG : Affiche si le profil est manquant dans la table
+      setError(`Erreur Profil : ${profileError?.message || 'Utilisateur inconnu dans la table profiles'}`)
       setLoading(false)
       return
     }
 
-    // 3. Redirection selon le rôle
+    // 3. Redirection intelligente
     const role = profile.role
     const slug = profile.restaurants?.slug
 
@@ -57,7 +58,7 @@ export default function LoginPage() {
       router.push(`/admin/${slug}`)
     } 
     else {
-      setError("Accès non configuré")
+      setError(`Accès refusé : Rôle=${role}, Slug=${slug || 'aucun'}`)
       setLoading(false)
     }
   }
@@ -75,7 +76,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-6">
           {error && (
-            <div className="bg-red-500/10 text-red-500 p-4 rounded-xl text-xs font-bold border border-red-500/20 text-center uppercase tracking-wider">
+            <div className="bg-red-500/10 text-red-500 p-4 rounded-xl text-xs font-bold border border-red-500/20 text-center uppercase tracking-wider leading-relaxed">
               {error}
             </div>
           )}
