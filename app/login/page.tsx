@@ -60,7 +60,8 @@ export default function LoginPage() {
           break
           
         case 'sales':
-          router.push('/super-admin/root/sales-management') 
+          // CORRECTION ICI : Redirection vers le Tableau de Bord du Commercial
+          router.push('/super-admin/sales/dashboard') 
           break
           
         case 'admin':
