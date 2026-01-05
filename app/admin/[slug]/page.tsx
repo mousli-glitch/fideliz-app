@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js"
 import { Users, Gamepad2, Trophy, TrendingUp, Settings, DollarSign, ArrowUpRight, Zap } from "lucide-react"
 import Link from "next/link"
+// On importe le bouton qu'on vient de créer
+import LogoutButton from "@/components/LogoutButton" 
 
 export const dynamic = "force-dynamic"
 
@@ -46,22 +48,27 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
     <div className="min-h-screen bg-[#F8FAFC] p-8">
       <div className="max-w-6xl mx-auto space-y-10">
         
-        {/* HEADER RELOOKÉ */}
+        {/* HEADER RELOOKÉ AVEC BOUTON DECONNEXION */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Dashboard</h1>
             <p className="text-slate-500 font-medium text-lg italic">{restaurant.name} — Performance en direct</p>
           </div>
-          <div className="bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-             <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-             <span className="text-sm font-bold text-slate-700 uppercase tracking-tighter">Système Opérationnel</span>
+          
+          <div className="flex items-center gap-3">
+            <div className="bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+               <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">En Ligne</span>
+            </div>
+            {/* LE BOUTON EST ICI */}
+            <LogoutButton />
           </div>
         </div>
 
         {/* CARTES DE STATS "PREMIUM" */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           
-          {/* CARD CA ESTIMÉ - MISE EN AVANT */}
+          {/* CARD CA ESTIMÉ */}
           <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-2xl shadow-slate-200 relative overflow-hidden group">
              <DollarSign className="absolute -right-4 -bottom-4 w-32 h-32 text-white/5 group-hover:text-white/10 transition-all" />
              <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">CA Généré (Est.)</p>
@@ -72,6 +79,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
              <p className="text-slate-500 text-[10px] mt-4 font-bold italic">Basé sur {redeemedCount} retours clients</p>
           </div>
 
+          {/* CARD BASE CLIENTS */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
              <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4">
                 <Users size={20} />
@@ -81,6 +89,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
              <p className="text-green-600 text-[10px] font-black mt-2">+100% Croissance</p>
           </div>
 
+          {/* CARD TAUX DE RETOUR */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
              <div className="w-10 h-10 bg-green-50 text-green-600 rounded-xl flex items-center justify-center mb-4">
                 <TrendingUp size={20} />
@@ -90,6 +99,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
              <p className="text-slate-400 text-[10px] font-bold mt-2">Conversion des gains</p>
           </div>
 
+          {/* CARD JEUX JOUÉS */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
              <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-4">
                 <Zap size={20} />
@@ -100,7 +110,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
           </div>
         </div>
 
-        {/* ACTIONS RAPIDES - NOUVEAU DESIGN */}
+        {/* ACTIONS RAPIDES */}
         <div className="space-y-4">
           <h3 className="text-xl font-black text-slate-800 tracking-tight">Pilotage de l'activité</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

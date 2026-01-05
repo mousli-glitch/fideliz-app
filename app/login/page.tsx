@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link' // J'ai ajouté cet import
 import { Lock, Mail, Loader2, AlertTriangle } from 'lucide-react'
 
 export default function LoginPage() {
@@ -31,7 +32,7 @@ export default function LoginPage() {
     }
 
     if (authData.user) {
-      // 2. Récupération du profil (Avec le correctif 'as any' pour éviter les lignes rouges)
+      // 2. Récupération du profil
       const { data: profile, error: profileError } = await (supabase
         .from('profiles')
         .select('*')
@@ -45,7 +46,7 @@ export default function LoginPage() {
         return
       }
 
-      // 3. Vérification du Disjoncteur (Compte Actif/Inactif)
+      // 3. Vérification du Disjoncteur
       if (profile.is_active === false) {
         setErrorMsg("Ce compte a été désactivé. Contactez l'administrateur.")
         await supabase.auth.signOut()
@@ -60,13 +61,11 @@ export default function LoginPage() {
           break
           
         case 'sales':
-          // CORRECTION ICI : Redirection vers le Tableau de Bord du Commercial
           router.push('/super-admin/sales/dashboard') 
           break
           
         case 'admin':
           if (profile.restaurant_id) {
-            // Correctif 'as any' ici aussi pour la récupération du restaurant
             const { data: resto } = await (supabase
               .from('restaurants')
               .select('slug')
@@ -144,9 +143,10 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-8 text-center">
-          <a href="#" className="text-slate-500 text-xs hover:text-white transition-colors border-b border-transparent hover:border-slate-500 pb-0.5">
+          {/* C'est ICI que j'ai fait la modification */}
+          <Link href="/forgot-password" className="text-slate-500 text-xs hover:text-white transition-colors border-b border-transparent hover:border-slate-500 pb-0.5">
             Mot de passe oublié ?
-          </a>
+          </Link>
         </div>
       </div>
     </div>
