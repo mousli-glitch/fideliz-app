@@ -3,23 +3,27 @@
 import { useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Store, MapPin, Globe, Loader2, Save } from 'lucide-react'
+import { ArrowLeft, Store, MapPin, Globe, Loader2, Save, Mail, Lock } from 'lucide-react'
 import Link from 'next/link'
 
-export default function NewRestaurant() {
+export default function NewRestaurantSales() {
+  // Infos Restaurant
   const [name, setName] = useState('')
   const [city, setCity] = useState('')
   const [slug, setSlug] = useState('')
-  const [loading, setLoading] = useState(false)
   
+  // Infos Compte Admin (Restaurateur)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  
+  const [loading, setLoading] = useState(false)
   const supabase = createClient()
   const router = useRouter()
 
-  // Génération automatique du lien (Slug) quand on tape le nom
+  // Génération automatique du lien (Slug)
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     setName(val)
-    // Transforme "Chez Mario" en "chez-mario"
     setSlug(val.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, ''))
   }
 
@@ -27,30 +31,62 @@ export default function NewRestaurant() {
     e.preventDefault()
     setLoading(true)
 
-    // 1. On récupère l'ID du commercial connecté
-    const { data: { user } } = await supabase.auth.getUser()
+    // 1. Qui crée ce restaurant ? (Le commercial connecté)
+    const { data: { user: salesUser } } = await supabase.auth.getUser()
 
-    if (!user) {
-      alert("Erreur: Vous devez être connecté")
+    if (!salesUser) {
+      alert("Session expirée")
       router.push('/login')
       return
     }
 
-    // 2. On insère le restaurant dans la base
-    // CORRECTIF : On utilise ( ... as any) pour contourner totalement la vérification TypeScript
-    const { error } = await (supabase.from('restaurants') as any).insert({
-      name,
-      city,
-      slug,
-      owner_id: user.id, // On note qui a créé ce restaurant (le commercial)
-      is_active: true
+    // --- ÉTAPE A : CRÉATION DU RESTAURANT ---
+    // (J'utilise 'as any' pour contourner les erreurs TypeScript)
+    const { data: newResto, error: restoError } = await (supabase.from('restaurants') as any)
+      .insert({
+        name,
+        city,         // C'est cette colonne qu'on vient d'ajouter
+        slug,
+        owner_id: salesUser.id,
+        is_active: true
+      })
+      .select()
+      .single()
+
+    if (restoError) {
+      alert("Erreur création restaurant : " + restoError.message)
+      setLoading(false)
+      return
+    }
+
+    // --- ÉTAPE B : CRÉATION DU COMPTE RESTAURATEUR ---
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
     })
 
-    if (error) {
-      alert("Erreur lors de la création : " + error.message)
-    } else {
-      alert("Restaurant créé avec succès ! 🎉")
-      router.push('/super-admin/sales/dashboard')
+    if (authError) {
+      alert("Restaurant créé, mais erreur sur le compte utilisateur : " + authError.message)
+      setLoading(false)
+      return
+    }
+
+    // --- ÉTAPE C : LIAISON (On donne les clés au nouveau compte) ---
+    if (authData.user && newResto) {
+      const { error: profileError } = await (supabase.from('profiles') as any)
+        .update({
+          role: 'admin',
+          restaurant_id: newResto.id,
+          is_active: true
+        })
+        .eq('id', authData.user.id)
+
+      if (profileError) {
+        alert("Compte créé mais erreur de liaison : " + profileError.message)
+      } else {
+        alert("Succès ! Restaurant et Compte Admin créés. 🎉")
+        router.push('/super-admin/sales/dashboard')
+      }
     }
     setLoading(false)
   }
@@ -59,7 +95,6 @@ export default function NewRestaurant() {
     <div className="min-h-screen bg-slate-950 text-white p-8 flex justify-center">
       <div className="w-full max-w-2xl">
         
-        {/* BOUTON RETOUR */}
         <Link href="/super-admin/sales/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-white mb-8 transition-colors w-fit text-xs font-bold uppercase tracking-widest">
           <ArrowLeft size={16} /> Retour Dashboard
         </Link>
@@ -70,73 +105,89 @@ export default function NewRestaurant() {
               <Store size={32} className="text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-black italic">NOUVEAU <span className="text-blue-500">CLIENT</span></h1>
-              <p className="text-slate-500 text-sm">Ajouter un établissement au réseau Fideliz</p>
+              <h1 className="text-3xl font-black italic">NOUVEL <span className="text-blue-500">ÉTABLISSEMENT</span></h1>
+              <p className="text-slate-500 text-sm">Espace Commercial : Création Client</p>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-8">
             
-            {/* NOM DU RESTAURANT */}
-            <div>
-              <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block">Enseigne</label>
-              <div className="relative group">
-                <Store className="absolute left-4 top-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" size={20} />
-                <input 
-                  type="text" 
-                  required
-                  value={name}
-                  onChange={handleNameChange}
-                  className="w-full bg-slate-950 border border-slate-800 text-white pl-12 pr-4 py-4 rounded-2xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-bold placeholder:text-slate-700"
-                  placeholder="Ex: Le Bistrot Parisien"
-                />
-              </div>
-            </div>
-
-            {/* VILLE & SLUG (2 colonnes) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block">Ville</label>
-                <div className="relative group">
-                  <MapPin className="absolute left-4 top-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" size={20} />
+            {/* SECTION 1 : INFOS RESTAURANT */}
+            <div className="space-y-6 p-6 bg-slate-950/50 rounded-3xl border border-slate-800/50">
+              <h3 className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4">Infos Restaurant</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-2 block">Nom du Restaurant</label>
                   <input 
-                    type="text" 
-                    required
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 text-white pl-12 pr-4 py-4 rounded-2xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-medium placeholder:text-slate-700"
-                    placeholder="Ex: Paris 11"
+                    type="text" required value={name} onChange={handleNameChange}
+                    className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-xl outline-none focus:border-blue-500 font-bold"
+                    placeholder="Ex: Le Kiosque"
                   />
                 </div>
-              </div>
+                
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-2 block">Ville</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-3 text-slate-600" size={18} />
+                    <input 
+                      type="text" required value={city} onChange={(e) => setCity(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 text-white pl-10 pr-4 py-3 rounded-xl outline-none focus:border-blue-500"
+                      placeholder="Paris"
+                    />
+                  </div>
+                </div>
 
-              <div>
-                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block">Lien (Slug)</label>
-                <div className="relative group">
-                  <Globe className="absolute left-4 top-4 text-slate-600 group-focus-within:text-blue-500 transition-colors" size={20} />
-                  <input 
-                    type="text" 
-                    required
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 text-blue-400 pl-12 pr-4 py-4 rounded-2xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono text-sm placeholder:text-slate-700"
-                    placeholder="le-bistrot-parisien"
-                  />
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-2 block">slug-url</label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-3 text-slate-600" size={18} />
+                    <input 
+                      type="text" required value={slug} onChange={(e) => setSlug(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 text-blue-400 pl-10 pr-4 py-3 rounded-xl outline-none focus:border-blue-500 font-mono text-sm"
+                      placeholder="le-kiosque"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* BOUTON VALIDER */}
+            {/* SECTION 2 : ACCÈS ADMIN */}
+            <div className="space-y-6 p-6 bg-slate-950/50 rounded-3xl border border-slate-800/50">
+              <h3 className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4">Accès Administrateur</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-2 block">Email du client</label>
+                  <div className="relative group">
+                    <Mail className="absolute left-4 top-3.5 text-slate-600 group-focus-within:text-blue-500 transition-colors" size={20} />
+                    <input 
+                      type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 text-white pl-12 pr-4 py-3.5 rounded-xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                      placeholder="client@restaurant.com"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-2 block">Mot de passe provisoire</label>
+                  <div className="relative group">
+                    <Lock className="absolute left-4 top-3.5 text-slate-600 group-focus-within:text-blue-500 transition-colors" size={20} />
+                    <input 
+                      type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 text-white pl-12 pr-4 py-3.5 rounded-xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button 
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-5 rounded-2xl mt-8 transition-all shadow-xl shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 text-lg transform active:scale-[0.98]"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-5 rounded-2xl mt-4 transition-all shadow-xl shadow-blue-900/20 disabled:opacity-50 flex items-center justify-center gap-3 uppercase tracking-wide text-sm"
             >
-              {loading ? <Loader2 className="animate-spin" /> : (
-                <>
-                  <Save size={24} />
-                  ENREGISTRER LE RESTAURANT
-                </>
-              )}
+              {loading ? <Loader2 className="animate-spin" /> : "CRÉER ET ENVOYER LES ACCÈS"}
             </button>
 
           </form>
