@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Navbar from '@/components/Navbar'
-import { UserPlus, Shield, Activity, ArrowLeft, X, Loader2, Power, Ban, TrendingUp } from 'lucide-react'
+import { UserPlus, Shield, ArrowLeft, X, Loader2, Power, Ban, TrendingUp, Trash2, Store } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SalesManagement() {
@@ -12,23 +12,41 @@ export default function SalesManagement() {
   const [showForm, setShowForm] = useState(false)        
   const [email, setEmail] = useState('')                 
   const [password, setPassword] = useState('')           
-  const [isCreating, setIsCreating] = useState(false)    
+  const [isCreating, setIsCreating] = useState(false)
+  
+  // Nouvel état pour gérer le chargement de la suppression
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null)
 
   const supabase = createClient()
 
-  // --- 2. FONCTION POUR RÉCUPÉRER LA LISTE ---
+  // --- 2. FONCTION POUR RÉCUPÉRER LA LISTE + STATS ---
   async function loadSales() {
     setLoading(true)
-    // Petit délai pour la synchronisation
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const { data } = await supabase
+    
+    // A. On récupère les profils "sales"
+    const { data: agents, error } = await supabase
       .from('profiles' as any)
       .select('*')
       .eq('role', 'sales')
-      .order('created_at', { ascending: false }) // Trié du plus récent au plus ancien
+      .order('created_at', { ascending: false })
+
+    if (error || !agents) {
+      console.error("Erreur chargement:", error)
+      setLoading(false)
+      return
+    }
+
+    // B. On récupère le nombre de restaurants pour CHAQUE agent
+    const agentsWithStats = await Promise.all(agents.map(async (agent: any) => {
+      const { count } = await supabase
+        .from('restaurants')
+        .select('*', { count: 'exact', head: true })
+        .eq('owner_id', agent.id)
+      
+      return { ...agent, restaurants_count: count || 0 }
+    }))
     
-    setSalesUsers(data || [])
+    setSalesUsers(agentsWithStats)
     setLoading(false)
   }
 
@@ -39,19 +57,16 @@ export default function SalesManagement() {
 
   // --- 4. LE DISJONCTEUR (Bloquer/Débloquer) ---
   const toggleStatus = async (id: string, currentStatus: boolean) => {
-    // A. Mise à jour visuelle immédiate (Optimiste)
-    // On suppose que ça va marcher pour que l'interface soit rapide
+    // Optimiste UI update
     setSalesUsers(salesUsers.map(user => 
       user.id === id ? { ...user, is_active: !currentStatus } : user
     ))
 
-    // B. Envoi à Supabase
     const query: any = supabase.from('profiles' as any)
     const { error } = await query
       .update({ is_active: !currentStatus })
       .eq('id', id)
 
-    // C. Si erreur, on annule le changement visuel
     if (error) {
       alert("Erreur lors du changement de statut")
       loadSales()
@@ -76,7 +91,6 @@ export default function SalesManagement() {
 
     if (authData.user) {
       const query: any = supabase.from('profiles' as any)
-      // On force le rôle sales et on active par défaut
       const { error: profileError } = await query
         .update({ role: 'sales', is_active: true }) 
         .eq('id', authData.user.id)
@@ -92,6 +106,26 @@ export default function SalesManagement() {
       }
     }
     setIsCreating(false)
+  }
+
+  // --- 6. SUPPRESSION DU COMMERCIAL ---
+  const handleDelete = async (id: string, email: string) => {
+    if (!confirm(`⚠️ ATTENTION : Es-tu sûr de vouloir supprimer définitivement ${email} ?\nCela supprimera aussi l'accès à ses restaurants.`)) return
+
+    setDeleteLoading(id)
+
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      alert("Erreur lors de la suppression : " + error.message)
+    } else {
+      // On retire l'agent de la liste locale sans recharger
+      setSalesUsers(salesUsers.filter(user => user.id !== id))
+    }
+    setDeleteLoading(null)
   }
 
   return (
@@ -151,7 +185,7 @@ export default function SalesManagement() {
           </div>
         )}
 
-        {/* LISTE DES COMMERCIAUX AVEC DISJONCTEUR */}
+        {/* LISTE DES COMMERCIAUX */}
         <div className="grid grid-cols-1 gap-4">
           {loading ? (
             <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-500" size={40} /></div>
@@ -170,40 +204,42 @@ export default function SalesManagement() {
                   <div className="flex items-center gap-4 mt-1">
                     <p className="text-slate-500 text-[10px] font-mono uppercase">ID: {sales.id.substring(0, 8)}...</p>
                     
-                    {/* ZONE PERFORMANCE (STATIQUE POUR L'INSTANT) */}
-                    <div className="flex items-center gap-1 text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
-                      <TrendingUp size={12} />
-                      PERF: À VENIR
+                    {/* ZONE PERFORMANCE (DYNAMIQUE MAINTENANT) */}
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
+                      <Store size={12} />
+                      {sales.restaurants_count} RESTAURANT{sales.restaurants_count > 1 ? 'S' : ''}
                     </div>
                   </div>
                 </div>
               </div>
               
               {/* ACTIONS DROITE */}
-              <div className="flex gap-6 items-center w-full md:w-auto justify-between md:justify-end">
-                <div className="text-right hidden md:block">
-                  <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Statut</p>
-                  {sales.is_active !== false ? (
-                    <span className="text-green-500 text-sm font-bold uppercase italic tracking-wide">Actif</span>
-                  ) : (
-                    <span className="text-red-500 text-sm font-bold uppercase italic tracking-wide">Bloqué</span>
-                  )}
-                </div>
-
-                <div className="h-10 w-px bg-slate-700 mx-2 hidden md:block"></div>
-
-                {/* LE BOUTON DISJONCTEUR */}
+              <div className="flex gap-4 items-center w-full md:w-auto justify-between md:justify-end">
+                
+                {/* BOUTON DISJONCTEUR */}
                 <button 
                   onClick={() => toggleStatus(sales.id, sales.is_active)}
                   className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-xs uppercase transition-all shadow-lg ${
                     sales.is_active !== false
-                    ? 'bg-slate-700 text-slate-400 hover:bg-red-500 hover:text-white hover:shadow-red-900/20'
+                    ? 'bg-slate-700 text-slate-400 hover:bg-amber-500 hover:text-white hover:shadow-amber-900/20'
                     : 'bg-green-600 text-white hover:bg-green-500 hover:shadow-green-900/20'
                   }`}
+                  title={sales.is_active !== false ? "Bloquer temporairement" : "Réactiver le compte"}
                 >
                   <Power size={16} />
-                  {sales.is_active !== false ? 'BLOQUER L\'ACCÈS' : 'RÉACTIVER LE COMPTE'}
+                  {sales.is_active !== false ? 'BLOQUER' : 'ACTIVER'}
                 </button>
+
+                {/* BOUTON SUPPRIMER (NOUVEAU) */}
+                <button 
+                  onClick={() => handleDelete(sales.id, sales.email)}
+                  disabled={deleteLoading === sales.id}
+                  className="bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-white px-4 py-3 rounded-xl transition-all shadow-lg shadow-red-900/0 hover:shadow-red-900/40 disabled:opacity-50"
+                  title="Supprimer définitivement"
+                >
+                  {deleteLoading === sales.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                </button>
+
               </div>
             </div>
           ))}
