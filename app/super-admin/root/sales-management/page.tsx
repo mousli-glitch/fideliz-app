@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Navbar from '@/components/Navbar'
-import { UserPlus, Shield, ArrowLeft, X, Loader2, Power, Ban, TrendingUp, Trash2, Store } from 'lucide-react'
+import { UserPlus, Shield, ArrowLeft, X, Loader2, Power, Ban, Trash2, Store } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SalesManagement() {
@@ -13,8 +13,6 @@ export default function SalesManagement() {
   const [email, setEmail] = useState('')                 
   const [password, setPassword] = useState('')           
   const [isCreating, setIsCreating] = useState(false)
-  
-  // Nouvel état pour gérer le chargement de la suppression
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null)
 
   const supabase = createClient()
@@ -57,7 +55,6 @@ export default function SalesManagement() {
 
   // --- 4. LE DISJONCTEUR (Bloquer/Débloquer) ---
   const toggleStatus = async (id: string, currentStatus: boolean) => {
-    // Optimiste UI update
     setSalesUsers(salesUsers.map(user => 
       user.id === id ? { ...user, is_active: !currentStatus } : user
     ))
@@ -108,22 +105,47 @@ export default function SalesManagement() {
     setIsCreating(false)
   }
 
-  // --- 6. SUPPRESSION DU COMMERCIAL ---
-  const handleDelete = async (id: string, email: string) => {
-    if (!confirm(`⚠️ ATTENTION : Es-tu sûr de vouloir supprimer définitivement ${email} ?\nCela supprimera aussi l'accès à ses restaurants.`)) return
+  // --- 6. SUPPRESSION SÉCURISÉE (AVEC HÉRITAGE) ---
+  const handleDelete = async (id: string, email: string, count: number) => {
+    // A. Message d'avertissement intelligent
+    const message = count > 0 
+      ? `⚠️ ATTENTION : Ce commercial gère ${count} restaurant(s).\n\nSi vous le supprimez, ces restaurants vous seront automatiquement réattribués (Super Admin).\n\nVoulez-vous continuer ?`
+      : `Êtes-vous sûr de vouloir supprimer ${email} ?`;
+
+    if (!confirm(message)) return
 
     setDeleteLoading(id)
 
+    // B. Récupération de TON id (Super Admin) pour le transfert
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+
+    if (currentUser && count > 0) {
+      // C. Transfert des restaurants vers TOI
+      const { error: updateError } = await (supabase.from('restaurants') as any)
+        .update({ owner_id: currentUser.id })
+        .eq('owner_id', id)
+
+      if (updateError) {
+        alert("Erreur critique lors du transfert des restaurants : " + updateError.message)
+        setDeleteLoading(null)
+        return // On arrête tout pour ne pas perdre les restos
+      }
+    }
+
+    // D. Suppression du profil commercial
     const { error } = await supabase
       .from('profiles')
       .delete()
       .eq('id', id)
 
     if (error) {
-      alert("Erreur lors de la suppression : " + error.message)
+      alert("Erreur lors de la suppression du profil : " + error.message)
     } else {
-      // On retire l'agent de la liste locale sans recharger
+      // E. Mise à jour visuelle
       setSalesUsers(salesUsers.filter(user => user.id !== id))
+      if (count > 0) {
+        alert(`Succès : Commercial supprimé. Ses ${count} restaurants sont maintenant dans votre portefeuille.`)
+      }
     }
     setDeleteLoading(null)
   }
@@ -204,7 +226,7 @@ export default function SalesManagement() {
                   <div className="flex items-center gap-4 mt-1">
                     <p className="text-slate-500 text-[10px] font-mono uppercase">ID: {sales.id.substring(0, 8)}...</p>
                     
-                    {/* ZONE PERFORMANCE (DYNAMIQUE MAINTENANT) */}
+                    {/* ZONE PERFORMANCE */}
                     <div className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
                       <Store size={12} />
                       {sales.restaurants_count} RESTAURANT{sales.restaurants_count > 1 ? 'S' : ''}
@@ -230,12 +252,13 @@ export default function SalesManagement() {
                   {sales.is_active !== false ? 'BLOQUER' : 'ACTIVER'}
                 </button>
 
-                {/* BOUTON SUPPRIMER (NOUVEAU) */}
+                {/* BOUTON SUPPRIMER AVEC SÉCURITÉ HÉRITAGE */}
                 <button 
-                  onClick={() => handleDelete(sales.id, sales.email)}
+                  // On passe bien les 3 arguments ici : id, email, et nombre de restaurants
+                  onClick={() => handleDelete(sales.id, sales.email, sales.restaurants_count)}
                   disabled={deleteLoading === sales.id}
                   className="bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-white px-4 py-3 rounded-xl transition-all shadow-lg shadow-red-900/0 hover:shadow-red-900/40 disabled:opacity-50"
-                  title="Supprimer définitivement"
+                  title="Supprimer définitivement (Transfère les restos si nécessaire)"
                 >
                   {deleteLoading === sales.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                 </button>
