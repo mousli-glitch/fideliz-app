@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
+import Link from 'next/link' // Importation nécessaire pour la navigation
 import { LayoutDashboard, Users, Store, Settings, Activity, PlusCircle } from 'lucide-react'
 
 export default function RootDashboard() {
@@ -11,6 +12,7 @@ export default function RootDashboard() {
 
   useEffect(() => {
     async function loadStats() {
+      // Récupération des statistiques globales pour le Super Admin Root
       const { count: restoCount } = await supabase.from('restaurants').select('*', { count: 'exact', head: true })
       const { count: winnersCount } = await supabase.from('winners').select('*', { count: 'exact', head: true })
       const { count: usersCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
@@ -33,10 +35,15 @@ export default function RootDashboard() {
           <h1 className="text-4xl font-black tracking-tight">FIDELIZ <span className="text-blue-500">ROOT</span></h1>
           <p className="text-slate-400 mt-1 uppercase text-xs font-bold tracking-widest">Contrôle Total Système</p>
         </div>
+        
+        {/* BOUTON CORRIGÉ : Redirige vers le formulaire de création */}
         <div className="flex gap-4">
-          <button className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all">
+          <Link 
+            href="/super-admin/root/new-restaurant" 
+            className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-2xl font-bold flex items-center gap-2 transition-all text-white shadow-lg shadow-blue-900/20"
+          >
             <PlusCircle size={20} /> Nouveau Restaurant
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -47,7 +54,7 @@ export default function RootDashboard() {
         <StatCard title="Utilisateurs" value={stats.totalUsers} icon={<Users className="text-purple-400" />} color="bg-purple-500/10" />
       </div>
 
-      {/* Section Gestion */}
+      {/* Section Gestion Technique */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8">
           <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
@@ -55,20 +62,24 @@ export default function RootDashboard() {
           </h2>
           <div className="space-y-4">
             <div className="p-4 bg-slate-800 rounded-2xl border border-slate-700 flex justify-between items-center">
-              <span>Base de données Supabase</span>
-              <span className="text-green-500 font-bold text-sm">OPÉRATIONNEL</span>
+              <span className="text-slate-300 font-medium">Base de données Supabase</span>
+              <span className="text-green-500 font-bold text-sm bg-green-500/10 px-3 py-1 rounded-full">OPÉRATIONNEL</span>
             </div>
             <div className="p-4 bg-slate-800 rounded-2xl border border-slate-700 flex justify-between items-center">
-              <span>Middleware de Sécurité</span>
-              <span className="text-green-500 font-bold text-sm">ACTIF</span>
+              <span className="text-slate-300 font-medium">Middleware de Sécurité</span>
+              <span className="text-green-500 font-bold text-sm bg-green-500/10 px-3 py-1 rounded-full">ACTIF</span>
             </div>
           </div>
         </div>
 
+        {/* Placeholder pour la future gestion Commerciale (Sales) */}
         <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8 flex flex-col items-center justify-center text-center">
-          <p className="text-slate-400 mb-4 italic">Bientôt disponible : Gestion des commerciaux (Sales)</p>
-          <button disabled className="bg-slate-700 text-slate-500 px-6 py-3 rounded-2xl font-bold">
-            Accéder à l'espace Sales
+          <div className="p-4 bg-slate-900/50 rounded-full mb-4">
+            <Users className="text-slate-600" size={32} />
+          </div>
+          <p className="text-slate-400 mb-4 italic text-sm">Bientôt disponible : Interface dédiée à la gestion des commerciaux (Sales)</p>
+          <button disabled className="bg-slate-700 text-slate-500 px-6 py-3 rounded-2xl font-bold cursor-not-allowed">
+            Espace Sales verrouillé
           </button>
         </div>
       </div>
@@ -78,12 +89,12 @@ export default function RootDashboard() {
 
 function StatCard({ title, value, icon, color }: { title: string, value: number, icon: any, color: string }) {
   return (
-    <div className={`${color} border border-white/5 rounded-3xl p-8`}>
+    <div className={`${color} border border-white/5 rounded-3xl p-8 transition-transform hover:scale-[1.02]`}>
       <div className="flex justify-between items-start mb-4">
-        <div className="p-3 bg-slate-900/50 rounded-xl">{icon}</div>
+        <div className="p-3 bg-slate-900/50 rounded-xl shadow-inner">{icon}</div>
       </div>
-      <div className="text-4xl font-black mb-1">{value}</div>
-      <div className="text-slate-400 font-bold text-sm uppercase tracking-wider">{title}</div>
+      <div className="text-4xl font-black mb-1 tabular-nums">{value}</div>
+      <div className="text-slate-400 font-bold text-xs uppercase tracking-widest">{title}</div>
     </div>
   )
 }
