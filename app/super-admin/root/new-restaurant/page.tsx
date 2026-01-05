@@ -21,15 +21,19 @@ export default function NewRestaurant() {
     setLoading(true)
 
     try {
-      // Insertion sécurisée en forçant le type any pour éviter les erreurs de cache
+      // 1. On vérifie la session actuelle pour être sûr d'être authentifié
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error("Session expirée. Veuillez vous reconnecter.")
+
+      // 2. Insertion du restaurant
       const { data: resto, error: restoError } = await (supabase
         .from('restaurants') as any)
         .insert([
           { 
             name: formData.name, 
             slug: formData.slug.toLowerCase().trim(),
-            // On n'envoie color_primary que si on est sûr qu'elle existe
-            color_primary: '#3b82f6' 
+            color_primary: '#3b82f6',
+            // On peut optionnellement lier le resto au créateur ici si besoin
           }
         ])
         .select()
@@ -37,12 +41,12 @@ export default function NewRestaurant() {
 
       if (restoError) throw restoError
 
-      alert(`Succès ! Le restaurant "${formData.name}" a été créé.`)
+      alert(`Félicitations ! Le restaurant "${formData.name}" est désormais configuré.`)
       router.push('/super-admin/root')
       
     } catch (error: any) {
       console.error("Erreur de création:", error)
-      alert("Erreur de base de données : " + error.message)
+      alert("Erreur de sécurité ou base de données : " + error.message)
     } finally {
       setLoading(false)
     }
@@ -65,13 +69,12 @@ export default function NewRestaurant() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8 bg-slate-800/40 p-10 rounded-[32px] border border-slate-700/50 backdrop-blur-sm shadow-2xl">
-          
           <div className="space-y-6">
-            <h2 className="text-xs font-black text-blue-500 uppercase tracking-[0.2em] mb-4">Informations Générales</h2>
+            <h2 className="text-xs font-black text-blue-500 uppercase tracking-[0.2em] mb-4 text-center">Informations Générales</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Nom du Restaurant</label>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1 text-center block">Nom du Restaurant</label>
                 <div className="relative text-white">
                   <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
                   <input 
@@ -85,7 +88,7 @@ export default function NewRestaurant() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Slug (URL)</label>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1 text-center block">Slug (URL)</label>
                 <input 
                   required
                   className="w-full bg-slate-900/80 border border-slate-700 rounded-2xl py-4 px-6 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono text-sm placeholder:text-slate-600"
@@ -98,10 +101,10 @@ export default function NewRestaurant() {
           </div>
 
           <div className="pt-8 border-t border-slate-700/50 space-y-6">
-            <h2 className="text-xs font-black text-blue-500 uppercase tracking-[0.2em] mb-4">Contact Gérant</h2>
+            <h2 className="text-xs font-black text-blue-500 uppercase tracking-[0.2em] mb-4 text-center">Contact Gérant</h2>
             
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase ml-1">Email professionnel</label>
+              <label className="text-xs font-bold text-slate-500 uppercase ml-1 text-center block">Email professionnel</label>
               <div className="relative text-white">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
                 <input 
