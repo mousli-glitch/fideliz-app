@@ -33,7 +33,7 @@ export default function RootDashboard() {
       {/* AJOUT DE LA NAVBAR ICI */}
       <Navbar roleName="Super Admin" />
 
-      {/* Le reste de ton contenu est maintenant enveloppé dans un padding pour ne pas coller à la navbar */}
+      {/* Contenu principal */}
       <div className="p-8">
         {/* Header */}
         <div className="flex justify-between items-center mb-12">
@@ -59,8 +59,9 @@ export default function RootDashboard() {
           <StatCard title="Utilisateurs" value={stats.totalUsers} icon={<Users className="text-purple-400" />} color="bg-purple-500/10" />
         </div>
 
-        {/* Section Gestion Technique */}
+        {/* Section Gestion Technique & Commerciale */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Maintenance */}
           <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
               <Settings className="text-slate-400" /> Maintenance Technique
@@ -77,14 +78,19 @@ export default function RootDashboard() {
             </div>
           </div>
 
+          {/* ESPACE SALES DÉVERROUILLÉ */}
           <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8 flex flex-col items-center justify-center text-center">
-            <div className="p-4 bg-slate-900/50 rounded-full mb-4">
-              <Users className="text-slate-600" size={32} />
+            <div className="p-4 bg-blue-500/10 rounded-full mb-4">
+              <Users className="text-blue-500" size={32} />
             </div>
-            <p className="text-slate-400 mb-4 italic text-sm">Bientôt disponible : Interface dédiée à la gestion des commerciaux (Sales)</p>
-            <button disabled className="bg-slate-700 text-slate-500 px-6 py-3 rounded-2xl font-bold cursor-not-allowed">
-              Espace Sales verrouillé
-            </button>
+            <h3 className="text-slate-200 font-bold mb-1 text-lg">Gestion Commerciale (Sales)</h3>
+            <p className="text-slate-400 mb-6 text-sm">Gérez votre équipe de vente et suivez les performances.</p>
+            <Link 
+              href="/super-admin/root/sales-management" 
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-blue-900/20 w-full md:w-auto"
+            >
+              ACCÉDER À L'ÉQUIPE SALES
+            </Link>
           </div>
         </div>
       </div>
