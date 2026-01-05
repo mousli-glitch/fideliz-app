@@ -25,26 +25,25 @@ export default function LoginPage() {
     })
 
     if (authError) {
-      // DEBUG : Affiche l'erreur système (ex: Mot de passe invalide)
-      setError(`Erreur Auth : ${authError.message}`)
+      // Message propre pour l'utilisateur final
+      setError("Identifiants incorrects")
       setLoading(false)
       return
     }
 
-    // 2. Récupération du profil avec debug
+    // 2. Récupération du profil
     const { data: profile, error: profileError } = await (supabase
       .from('profiles')
       .select('role, restaurants(slug)')
       .single() as any)
 
     if (profileError || !profile) {
-      // DEBUG : Affiche si le profil est manquant dans la table
-      setError(`Erreur Profil : ${profileError?.message || 'Utilisateur inconnu dans la table profiles'}`)
+      setError("Erreur de configuration du profil")
       setLoading(false)
       return
     }
 
-    // 3. Redirection intelligente
+    // 3. Redirection intelligente selon le rôle
     const role = profile.role
     const slug = profile.restaurants?.slug
 
@@ -58,7 +57,7 @@ export default function LoginPage() {
       router.push(`/admin/${slug}`)
     } 
     else {
-      setError(`Accès refusé : Rôle=${role}, Slug=${slug || 'aucun'}`)
+      setError("Accès non autorisé ou mal configuré")
       setLoading(false)
     }
   }
