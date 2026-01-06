@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Moon, Plus } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Moon, Plus, Rocket } from "lucide-react"
 import Link from "next/link"
+import GooglePlaceInput from "@/components/GooglePlaceInput" // <--- L'assistant Google
 
 const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
@@ -58,14 +59,12 @@ export default function EditGamePage() {
         const idToLoad = params?.id
         if(!idToLoad) return;
 
-        // A. On charge le JEU
         const { data: game } = await (supabase.from('games') as any).select('*').eq('id', idToLoad).single()
         
         if (game) {
             setGameId(game.id)
             setRestaurantId(game.restaurant_id) 
             
-            // B. On charge le RESTAURANT (C'est lui qui a le logo et la couleur)
             const { data: restaurant } = await (supabase.from('restaurants') as any)
                 .select('*')
                 .eq('id', game.restaurant_id)
@@ -80,19 +79,17 @@ export default function EditGamePage() {
                 has_min_spend: Number(game.min_spend) > 0
             })
 
-            // C. On détecte le mode sombre via le restaurant (text_color)
             const isDark = restaurant?.text_color === '#FFFFFF'
 
             setDesignData({
-                primary_color: restaurant?.primary_color || "#E11D48", // Vient du Resto
-                logo_url: restaurant?.logo_url || "",                 // Vient du Resto
-                bg_choice: game.bg_choice || 0,                       // Vient du Jeu
-                title_style: game.title_style || 'STYLE_1',           // Vient du Jeu
-                bg_image_url: game.bg_image_url || "",                // Vient du Jeu
-                card_style: isDark ? 'dark' : 'light'                 // Déduit du Resto
+                primary_color: restaurant?.primary_color || "#E11D48",
+                logo_url: restaurant?.logo_url || "",
+                bg_choice: game.bg_choice || 0,
+                title_style: game.title_style || 'STYLE_1',
+                bg_image_url: game.bg_image_url || "",
+                card_style: isDark ? 'dark' : 'light'
             })
 
-            // D. On charge les lots
             const { data: prizesData } = await (supabase.from('prizes') as any).select('*').eq('game_id', game.id).order('weight', {ascending: false})
             setPrizes(prizesData || [])
         }
@@ -102,14 +99,19 @@ export default function EditGamePage() {
   }, [params])
 
 
-  // --- 2. SAUVEGARDE CORRECTE ---
+  // --- 2. SAUVEGARDE ---
   const handleUpdate = async () => {
-    if (!formData.name) return alert("Veuillez donner un nom.")
+    if (!formData.name) return alert("Veuillez donner un Nom au Jeu.")
+    
+    // Vérification du lien pour Google (si non vide)
+    if (formData.active_action === 'GOOGLE_REVIEW' && formData.action_url && !formData.action_url.includes('google.com')) {
+         return alert("❌ Veuillez sélectionner un établissement Google valide.")
+    }
+
     setSaving(true)
 
     try {
-        // 1. Mise à jour du JEU (Table 'games')
-        // On ne met QUE ce qui appartient au jeu (pas le logo, pas la couleur primaire)
+        // 1. Update JEU
         const { error: gameError } = await (supabase.from('games') as any).update({
             name: formData.name,
             active_action: formData.active_action,
@@ -119,16 +121,13 @@ export default function EditGamePage() {
             bg_choice: designData.bg_choice,
             title_style: designData.title_style,
             bg_image_url: designData.bg_image_url
-            // Note: On ne met pas card_style ici car ce n'est pas une colonne de la BDD, c'est visuel
         }).eq('id', gameId)
 
         if (gameError) throw new Error("Erreur Jeu: " + gameError.message)
 
-        // 2. Mise à jour du RESTAURANT (Table 'restaurants')
-        // C'est ICI qu'on sauve le Logo, la Couleur et le Mode Sombre (text_color)
+        // 2. Update RESTAURANT (Logo + Couleur + Mode Sombre)
         if (restaurantId) {
             const finalTextColor = designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A'
-            
             const { error: restoError } = await (supabase.from('restaurants') as any).update({
                 logo_url: designData.logo_url,
                 primary_color: designData.primary_color,
@@ -138,7 +137,7 @@ export default function EditGamePage() {
             if (restoError) throw new Error("Erreur Restaurant: " + restoError.message)
         }
 
-        // 3. Mise à jour des LOTS
+        // 3. Update LOTS
         await (supabase.from('prizes') as any).delete().eq('game_id', gameId)
         const prizesToInsert = prizes.map(p => ({
             game_id: gameId,
@@ -193,14 +192,59 @@ export default function EditGamePage() {
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Nom de la campagne</label><input type="text" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}/></div>
-                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Action cible</label><select className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.active_action} onChange={e => setFormData({...formData, active_action: e.target.value})}><option value="GOOGLE_REVIEW">Avis Google</option><option value="INSTAGRAM">Instagram</option><option value="FACEBOOK">Facebook</option><option value="TIKTOK">TikTok</option></select></div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Nom du Jeu</label>
+                                <input type="text" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Objectif (Action)</label>
+                                <select 
+                                    className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" 
+                                    value={formData.active_action} 
+                                    onChange={e => setFormData({...formData, active_action: e.target.value})}
+                                >
+                                    <option value="GOOGLE_REVIEW">⭐ Avis Google (Recommandé)</option>
+                                    <option value="INSTAGRAM">📸 S'abonner Instagram</option>
+                                    <option value="FACEBOOK">👍 S'abonner Facebook</option>
+                                    <option value="TIKTOK">🎵 S'abonner TikTok</option>
+                                </select>
+                            </div>
                         </div>
-                        <div><label className="block text-sm font-bold text-slate-700 mb-2">Lien URL</label><input type="url" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.action_url} onChange={e => setFormData({...formData, action_url: e.target.value})}/></div>
+
+                        {/* SECTION LOGIQUE GOOGLE VS MANUEL */}
+                        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 transition-all">
+                            <label className="block text-sm font-bold text-slate-700 mb-2">
+                                {formData.active_action === 'GOOGLE_REVIEW' ? 'Rechercher votre établissement :' : 'Lien URL de votre page :'}
+                            </label>
+
+                            {formData.active_action === 'GOOGLE_REVIEW' ? (
+                                <div className="space-y-2">
+                                    {/* Le composant Google Assistant */}
+                                    <GooglePlaceInput 
+                                        onSelect={(url) => setFormData({...formData, action_url: url})} 
+                                        defaultValue={formData.action_url} 
+                                    />
+                                    <p className="text-xs text-slate-500">
+                                        💡 Tapez le nom de votre commerce pour mettre à jour le lien.
+                                    </p>
+                                    {formData.action_url && <p className="text-[10px] text-slate-400 truncate">Lien actuel : {formData.action_url}</p>}
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <input 
+                                        type="url" 
+                                        className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" 
+                                        value={formData.action_url} 
+                                        onChange={e => setFormData({...formData, action_url: e.target.value})}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
                         <div className="border-t border-slate-100 pt-6 mt-6">
                             <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Validité (Jours)</label><input type="number" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}/></div>
+                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Validité du Gain (Jours)</label><input type="number" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}/></div>
                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                                     <div className="flex items-center gap-3 mb-3"><input type="checkbox" className="w-5 h-5 accent-blue-600" checked={formData.has_min_spend} onChange={e => setFormData({...formData, has_min_spend: e.target.checked})}/><label className="text-sm font-bold text-slate-700 cursor-pointer">Activer minimum commande</label></div>
                                     {formData.has_min_spend && (<div className="flex items-center gap-2"><span className="text-slate-400 font-bold">Min:</span><input type="number" className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={formData.min_spend} onChange={e => setFormData({...formData, min_spend: parseInt(e.target.value) || 0})}/><span className="text-slate-400 font-bold">€</span></div>)}
@@ -210,6 +254,7 @@ export default function EditGamePage() {
                     </div>
                 )}
 
+                {/* LES AUTRES ONGLETS (DESIGN / LOTS) */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-6">
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-4">
@@ -224,35 +269,14 @@ export default function EditGamePage() {
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div 
-                                    onClick={() => setDesignData({...designData, card_style: 'light'})}
-                                    className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
-                                >
-                                    <Sun size={24} className={designData.card_style !== 'dark' ? "text-blue-600" : "text-slate-400"} />
-                                    <div className="bg-white border border-slate-200 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]">
-                                        <span className="text-slate-900 font-bold text-sm">Texte Noir</span>
-                                    </div>
-                                    <p className="text-xs font-bold text-slate-500 mt-1">Cartes Claires (Standard)</p>
-                                </div>
-
-                                <div 
-                                    onClick={() => setDesignData({...designData, card_style: 'dark'})}
-                                    className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}
-                                >
-                                    <Moon size={24} className={designData.card_style === 'dark' ? "text-blue-400" : "text-slate-600"} />
-                                    <div className="bg-slate-800 border border-slate-700 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]">
-                                        <span className="text-white font-bold text-sm">Texte Blanc</span>
-                                    </div>
-                                    <p className="text-xs font-bold text-slate-400 mt-1">Cartes Sombres</p>
-                                </div>
+                                <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}><Sun size={24} className={designData.card_style !== 'dark' ? "text-blue-600" : "text-slate-400"} /><div className="bg-white border border-slate-200 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]"><span className="text-slate-900 font-bold text-sm">Texte Noir</span></div><p className="text-xs font-bold text-slate-500 mt-1">Cartes Claires (Standard)</p></div>
+                                <div onClick={() => setDesignData({...designData, card_style: 'dark'})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}><Moon size={24} className={designData.card_style === 'dark' ? "text-blue-400" : "text-slate-600"} /><div className="bg-slate-800 border border-slate-700 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]"><span className="text-white font-bold text-sm">Texte Blanc</span></div><p className="text-xs font-bold text-slate-400 mt-1">Cartes Sombres</p></div>
                             </div>
                         </div>
 
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Style du Titre</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {TITLE_STYLES.map((style) => (<div key={style.id} onClick={() => setDesignData({...designData, title_style: style.id})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all ${designData.title_style === style.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}><p className="font-bold text-sm mb-2 text-slate-700">{style.label}</p><div className="text-xs bg-slate-900 text-white p-2 rounded font-black italic">{style.preview}</div></div>))}
-                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{TITLE_STYLES.map((style) => (<div key={style.id} onClick={() => setDesignData({...designData, title_style: style.id})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all ${designData.title_style === style.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}><p className="font-bold text-sm mb-2 text-slate-700">{style.label}</p><div className="text-xs bg-slate-900 text-white p-2 rounded font-black italic">{style.preview}</div></div>))}</div>
                         </div>
 
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
