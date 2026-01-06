@@ -23,8 +23,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // CLÉ EXACTE FOURNIE PAR TOI (Copier-Coller strict)
-  const GOOGLE_API_KEY = "AIzaSyD3z2IopLG0FvN_dOOIsR9Y65bxZRDaUtU";
+  // ⚠️ ACTION REQUISE ICI ⚠️
+  // 1. Mets ton curseur entre les guillemets ci-dessous.
+  // 2. Fais COLLER (Ctrl+V ou Cmd+V).
+  // 3. Vérifie qu'il n'y a pas d'espace avant ou après.
+  const GOOGLE_API_KEY = "AIzaSyD3z2IopLG0FvN_dOOIsR9Y65bxZRDaUtU"; 
 
   return (
     <html lang="fr">
@@ -33,7 +36,7 @@ export default function RootLayout({
       >
         {children}
 
-        {/* Le Moteur Google Maps */}
+        {/* Script Google Maps */}
         <Script
           src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&libraries=places`}
           strategy="beforeInteractive" 
