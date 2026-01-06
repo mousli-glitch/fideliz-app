@@ -1,38 +1,76 @@
-import { createClient } from "@supabase/supabase-js"
+"use client"
+
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight } from "lucide-react"
+import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight, Loader2 } from "lucide-react"
+import { createClient } from "@/utils/supabase/client"
+import { useParams } from "next/navigation"
 
-// Configuration Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const supabase = createClient(supabaseUrl, supabaseKey)
+export default function GamesListPage() {
+  // 1. FORCE LE TYPE ICI AVEC <any[]>
+  const [games, setGames] = useState<any[]>([]) 
+  const [restaurant, setRestaurant] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  
+  const params = useParams()
+  const supabase = createClient()
+  const slug = params?.slug as string
 
-export default async function GamesListPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>
-}) {
-  const { slug } = await params
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!slug) return
 
-  // 1. On récupère l'ID du restaurant via le slug
-  const { data: restaurant } = await supabase
-    .from("restaurants")
-    .select("id, name")
-    .eq("slug", slug)
-    .single()
+      // 2. On récupère le restaurant
+      const { data: rawResto } = await supabase
+        .from("restaurants")
+        .select("id, name, slug")
+        .eq("slug", slug)
+        .single()
+      
+      // 3. FORCE LE TYPE DU RESTAURANT POUR ÉVITER L'ERREUR 'NEVER'
+      const restoData = rawResto as any
 
-  // 2. On récupère la liste des jeux (Correction: Table 'games')
-  const { data: games } = await supabase
-    .from("games") 
-    .select("*")
-    .eq("restaurant_id", restaurant?.id) // C'est ce filtre qui empêche la fuite entre restaurants
-    .order("created_at", { ascending: false })
+      if (restoData) {
+        setRestaurant(restoData)
+
+        // 4. On récupère les jeux
+        const { data: gamesData } = await supabase
+          .from("games")
+          .select("*")
+          .eq("restaurant_id", restoData.id) // Ici ça ne plantera plus grâce au 'as any' au dessus
+          .order("created_at", { ascending: false })
+        
+        setGames(gamesData || [])
+      }
+      setLoading(false)
+    }
+    fetchData()
+  }, [slug])
+
+  const handleDelete = async (gameId: string) => {
+    if (confirm("Êtes-vous sûr de vouloir supprimer ce jeu ?")) {
+      const { error } = await supabase
+        .from("games")
+        .delete()
+        .eq("id", gameId)
+
+      if (!error) {
+        setGames(games.filter((g) => g.id !== gameId))
+      } else {
+        alert("Erreur lors de la suppression.")
+      }
+    }
+  }
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600 w-10 h-10"/></div>
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-8 pb-20">
       <div className="max-w-6xl mx-auto space-y-8">
         
-        {/* --- EN-TÊTE --- */}
+        {/* EN-TÊTE */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
@@ -40,7 +78,7 @@ export default async function GamesListPage({
               Mes Jeux
             </h1>
             <p className="text-slate-500 font-medium mt-1">
-              Gérez vos campagnes de fidélité pour {restaurant?.name || "votre restaurant"}.
+              Gérez vos campagnes de fidélité pour <span className="text-slate-900 font-bold">{restaurant?.name}</span>.
             </p>
           </div>
 
@@ -53,9 +91,9 @@ export default async function GamesListPage({
           </Link>
         </div>
 
-        {/* --- LISTE DES JEUX --- */}
+        {/* LISTE DES JEUX */}
         <div className="space-y-4">
-          {games && games.length > 0 ? (
+          {games.length > 0 ? (
             games.map((game) => (
               <div
                 key={game.id}
@@ -67,7 +105,6 @@ export default async function GamesListPage({
                     <h2 className="text-xl font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
                       {game.name || "Jeu sans nom"}
                     </h2>
-                    {/* Badge Statut */}
                     <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-green-200">
                       <span className="w-1.5 h-1.5 bg-green-600 rounded-full animate-pulse"></span>
                       En ligne
@@ -78,9 +115,7 @@ export default async function GamesListPage({
                     <span className="bg-slate-100 px-2 py-1 rounded-lg text-slate-600 font-mono text-[10px] uppercase border border-slate-200">
                       {game.active_action || "JEU"}
                     </span>
-                    
                     <span className="hidden md:inline text-slate-300">•</span>
-                    
                     <a
                       href={game.action_url}
                       target="_blank"
@@ -106,26 +141,33 @@ export default async function GamesListPage({
                   </Link>
 
                   {/* QR Code */}
-                  <button className="w-11 h-11 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-100">
+                  <Link
+                    href={`/qr/${game.id}`}
+                    target="_blank"
+                    className="w-11 h-11 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-100 cursor-pointer"
+                  >
                     <QrCode size={20} />
-                  </button>
+                  </Link>
                   
-                  {/* Supprimer (visuel pour l'instant) */}
-                  <button className="w-11 h-11 flex items-center justify-center bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors border border-red-100 opacity-60 hover:opacity-100">
+                  {/* Supprimer */}
+                  <button 
+                    onClick={() => handleDelete(game.id)}
+                    className="w-11 h-11 flex items-center justify-center bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors border border-red-100 opacity-60 hover:opacity-100"
+                  >
                     <Trash2 size={20} />
                   </button>
                 </div>
               </div>
             ))
           ) : (
-            // --- EMPTY STATE (Si aucun jeu) ---
+            // EMPTY STATE
             <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-slate-300 text-center">
               <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 text-slate-300">
                 <Gamepad2 size={40} />
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">Aucun jeu créé</h3>
               <p className="text-slate-500 max-w-sm mb-8">
-                Vous n'avez pas encore de campagne active pour ce restaurant.
+                Vous n'avez pas encore de campagne active.
               </p>
               <Link
                 href={`/admin/${slug}/games/new`}

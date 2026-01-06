@@ -12,19 +12,26 @@ export async function createGameAction(data: any) {
   try {
     console.log("🚀 Début de l'action createGameAction")
 
-    // 1. Récupérer l'ID du restaurant (On lit la Vue, c'est OK)
-    const { data: restos, error: restoError } = await supabaseAdmin
-        .from("public_restaurants")
-        .select("id")
-        .limit(1)
-
-    if (restoError || !restos || restos.length === 0) {
-        throw new Error("Impossible de trouver le restaurant : " + (restoError?.message || "Aucune donnée"))
+    // 0. VÉRIFICATION DU SLUG (Crucial)
+    if (!data.slug) {
+        throw new Error("Slug du restaurant manquant. Impossible d'identifier le restaurant.")
     }
-    const restaurantId = restos[0].id
+
+    // 1. Récupérer l'ID du restaurant VIA LE SLUG
+    // On cherche LE bon restaurant, pas n'importe lequel
+    const { data: restaurant, error: restoError } = await supabaseAdmin
+        .from("restaurants")
+        .select("id")
+        .eq("slug", data.slug)
+        .single()
+
+    if (restoError || !restaurant) {
+        throw new Error("Impossible de trouver le restaurant lié à ce lien (" + data.slug + ")")
+    }
+    const restaurantId = restaurant.id
     console.log("📍 ID Restaurant trouvé :", restaurantId)
 
-    // 2. Mettre à jour le design (On tape sur la TABLE 'restaurants' pour l'écriture)
+    // 2. Mettre à jour le design
     const { error: updateError } = await supabaseAdmin.from("restaurants").update({
       brand_color: data.design.brand_color,
       text_color: data.design.text_color,
@@ -35,11 +42,9 @@ export async function createGameAction(data: any) {
 
     if (updateError) {
         console.error("❌ Erreur mise à jour Design :", updateError)
-        // On continue quand même pour créer le jeu, mais on log l'erreur
     }
 
-    // 3. ARCHIVAGE FORCÉ (OPTIMISÉ)
-    // Au lieu de boucler, on archive tout ce qui est actif pour ce resto en une seule requête.
+    // 3. ARCHIVAGE FORCÉ
     console.log("🧹 Vérification et archivage des anciens jeux...")
 
     const { error: archiveError } = await supabaseAdmin
@@ -50,10 +55,7 @@ export async function createGameAction(data: any) {
 
     if (archiveError) {
         console.error("❌ Erreur lors de l'archivage en masse :", archiveError)
-        throw new Error("Impossible d'archiver les anciens jeux. Veuillez réessayer.")
-    } else {
-        console.log("✅ Nettoyage terminé (les anciens jeux sont archivés).")
-    }
+    } 
 
     // 4. Créer le Nouveau Jeu
     console.log("🆕 Création du nouveau jeu...")
