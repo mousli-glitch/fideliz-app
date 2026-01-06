@@ -3,10 +3,10 @@
 import { useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createGameAction } from "@/app/actions/create-game"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Plus, Rocket } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Plus, Rocket, Sun, Moon } from "lucide-react"
 import Link from "next/link"
 
-// --- CONSTANTES (IDENTIQUES A LA PAGE MODIFICATION) ---
+// --- CONSTANTES ---
 const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1000&auto=format&fit=crop", 
@@ -28,23 +28,23 @@ export default function NewGamePage() {
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<'INFOS' | 'DESIGN' | 'LOTS'>('INFOS')
 
-  // --- 1. INITIALISATION (VIDE OU PAR DÉFAUT) ---
-  // J'ai mis les mêmes valeurs par défaut que celles utilisées dans ta logique
   const [formData, setFormData] = useState({
     name: "",
     active_action: "GOOGLE_REVIEW",
     action_url: "",
-    validity_days: 30, // Par défaut 30 jours
+    validity_days: 30, 
     min_spend: 0,
     has_min_spend: false
   })
 
+  // J'ai ajouté 'card_style' ici
   const [designData, setDesignData] = useState({
-      primary_color: "#E11D48", // Rouge par défaut
+      primary_color: "#E11D48", 
       logo_url: "",
       bg_choice: 0,
       title_style: 'STYLE_1',
       bg_image_url: "",
+      card_style: 'light' // Par défaut 'light'
   })
 
   const [prizes, setPrizes] = useState([
@@ -53,7 +53,7 @@ export default function NewGamePage() {
     { label: "Dessert Offert", color: "#f59e0b", weight: 20 }
   ])
 
-  // --- 2. FONCTION DE CRÉATION ---
+  // --- FONCTION DE CRÉATION ---
   const handleCreate = async () => {
     if (!formData.name) return alert("Veuillez donner un nom à votre campagne.")
     if (!formData.action_url) return alert("Veuillez mettre le lien URL.")
@@ -61,9 +61,8 @@ export default function NewGamePage() {
     setSaving(true)
     try {
         const cleanData = {
-            // On envoie tout l'objet proprement
             form: { ...formData, min_spend: formData.has_min_spend ? formData.min_spend : 0 },
-            design: designData,
+            design: designData, // Cela inclut maintenant card_style
             prizes: prizes.map(p => ({ label: p.label, color: p.color, weight: Number(p.weight) }))
         }
 
@@ -71,7 +70,6 @@ export default function NewGamePage() {
         
         if (!res.success) throw new Error(res.error)
         
-        // Redirection vers la liste des jeux
         router.push(`/admin/${params.slug}/games`)
         router.refresh()
 
@@ -86,7 +84,6 @@ export default function NewGamePage() {
     <div className="min-h-screen bg-slate-50 p-6 pb-20">
       <div className="max-w-4xl mx-auto">
         
-        {/* EN-TÊTE : Seule différence avec la page Edit (Titre + Bouton Créer) */}
         <div className="flex items-center justify-between mb-8">
             <div>
                 <Link href={`/admin/${params.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Annuler</Link>
@@ -102,7 +99,6 @@ export default function NewGamePage() {
             </button>
         </div>
 
-        {/* --- DÉBUT DU CONTENU IDENTIQUE À EDIT --- */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="flex border-b border-slate-200 bg-slate-50">
                 <button onClick={() => setActiveTab('INFOS')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'INFOS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Layout size={18}/> Infos Jeu</button>
@@ -119,7 +115,6 @@ export default function NewGamePage() {
                         </div>
                         <div><label className="block text-sm font-bold text-slate-700 mb-2">Lien URL</label><input type="url" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={formData.action_url} onChange={e => setFormData({...formData, action_url: e.target.value})}/></div>
                         <div className="border-t border-slate-100 pt-6 mt-6">
-                            {/* C'est ICI que ça changeait : j'ai remis exactement le code de ta page Edit */}
                             <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div><label className="block text-sm font-bold text-slate-700 mb-2">Validité (Jours)</label><input type="number" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}/></div>
@@ -134,6 +129,8 @@ export default function NewGamePage() {
 
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-6">
+                        
+                        {/* 1. IDENTITÉ VISUELLE */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-4">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Identité Visuelle</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -142,6 +139,35 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
+                        {/* 2. CONTRASTE DES CARTES (C'EST ICI QUE JE L'AI RAJOUTÉ) */}
+                        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
+                            <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Option CLAIRE */}
+                                <div 
+                                    onClick={() => setDesignData({...designData, card_style: 'light'})}
+                                    className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                                >
+                                    <div className="bg-white border border-slate-200 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]">
+                                        <span className="text-slate-900 font-bold text-sm">Texte Noir</span>
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-500 mt-1">Cartes Claires (Standard)</p>
+                                </div>
+
+                                {/* Option SOMBRE */}
+                                <div 
+                                    onClick={() => setDesignData({...designData, card_style: 'dark'})}
+                                    className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}
+                                >
+                                    <div className="bg-slate-800 border border-slate-700 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]">
+                                        <span className="text-white font-bold text-sm">Texte Blanc</span>
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-400 mt-1">Cartes Sombres (Pour logo blanc)</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 3. STYLE DU TITRE */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Style du Titre</h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -149,6 +175,7 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
+                        {/* 4. FOND D'ECRAN */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Fond d'écran</h3>
                             <div className="mb-6"><label className="block text-sm font-bold text-slate-700 mb-3">Choisir un thème :</label><div className="grid grid-cols-2 md:grid-cols-5 gap-3">{BACKGROUNDS.map((bg, index) => (<div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 ring-2 ring-blue-200 scale-105 shadow-md' : 'border-transparent opacity-70 hover:opacity-100'}`}><img src={bg} className="w-full h-full object-cover" alt="Fond" />{(!designData.bg_image_url && designData.bg_choice === index) && (<div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center"><div className="bg-white rounded-full p-1 shadow-sm"><div className="w-2 h-2 bg-blue-600 rounded-full"></div></div></div>)}</div>))}</div></div>
