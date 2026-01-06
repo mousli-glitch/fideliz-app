@@ -3,9 +3,10 @@
 import { useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createGameAction } from "@/app/actions/create-game"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Plus, Rocket } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Plus, Rocket, Sun, Moon } from "lucide-react"
 import Link from "next/link"
 
+// --- CONSTANTES ---
 const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1000&auto=format&fit=crop", 
@@ -27,6 +28,7 @@ export default function NewGamePage() {
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<'INFOS' | 'DESIGN' | 'LOTS'>('INFOS')
 
+  // Données du formulaire
   const [formData, setFormData] = useState({
     name: "",
     active_action: "GOOGLE_REVIEW",
@@ -36,13 +38,14 @@ export default function NewGamePage() {
     has_min_spend: false
   })
 
+  // Données du design (AVEC card_style pour Sombre/Clair)
   const [designData, setDesignData] = useState({
       primary_color: "#E11D48", 
       logo_url: "",
       bg_choice: 0,
       title_style: 'STYLE_1',
       bg_image_url: "",
-      card_style: 'light'
+      card_style: 'light' // Par défaut 'light' (texte noir)
   })
 
   const [prizes, setPrizes] = useState([
@@ -51,30 +54,48 @@ export default function NewGamePage() {
     { label: "Dessert Offert", color: "#f59e0b", weight: 20 }
   ])
 
-  // --- FONCTION DE CRÉATION CORRIGÉE ---
+  // --- FONCTION DE CRÉATION ---
   const handleCreate = async () => {
-    if (!formData.name) return alert("Veuillez donner un nom à votre campagne.")
-    if (!formData.action_url) return alert("Veuillez mettre le lien URL.")
+    // 1. Validation basique
+    if (!formData.name) return alert("❌ Veuillez donner un nom à votre campagne.")
+    if (!formData.action_url) return alert("❌ Veuillez mettre le lien URL.")
 
     setSaving(true)
+    
+    // MOUCHARD 1
+    console.log("🖱️ Clic sur Créer - Début du traitement")
+
     try {
+        // 2. Conversion du Style (Sombre/Clair) en Couleur Hexadécimale pour la Base de Données
+        // La BDD attend "text_color", mais nous on utilise "card_style" dans l'interface
+        const finalTextColor = designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A'
+
         const cleanData = {
-            // AJOUT CRUCIAL : On passe le slug pour identifier le restaurant
-            slug: params.slug, 
+            slug: params.slug,
             form: { ...formData, min_spend: formData.has_min_spend ? formData.min_spend : 0 },
-            design: designData,
+            design: {
+                ...designData,
+                text_color: finalTextColor // C'est ici qu'on sauve la préférence Sombre/Clair
+            },
             prizes: prizes.map(p => ({ label: p.label, color: p.color, weight: Number(p.weight) }))
         }
+
+        // MOUCHARD 2
+        console.log("📤 Envoi des données au serveur...", cleanData)
+        // (Tu peux réactiver l'alert ici si tu veux être sûr, mais le console.log suffit souvent)
+        // alert("Envoi au serveur...") 
 
         const res = await createGameAction(cleanData)
         
         if (!res.success) throw new Error(res.error)
         
+        // MOUCHARD 3
+        console.log("✅ Succès ! Redirection...")
         router.push(`/admin/${params.slug}/games`)
         router.refresh()
 
     } catch (e: any) {
-        console.error(e)
+        console.error("🚨 ERREUR :", e)
         alert("Erreur lors de la création : " + e.message)
     } finally {
         setSaving(false)
@@ -85,6 +106,7 @@ export default function NewGamePage() {
     <div className="min-h-screen bg-slate-50 p-6 pb-20">
       <div className="max-w-4xl mx-auto">
         
+        {/* HEADER */}
         <div className="flex items-center justify-between mb-8">
             <div>
                 <Link href={`/admin/${params.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Annuler</Link>
@@ -101,6 +123,7 @@ export default function NewGamePage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            {/* ONGLETS */}
             <div className="flex border-b border-slate-200 bg-slate-50">
                 <button onClick={() => setActiveTab('INFOS')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'INFOS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Layout size={18}/> Infos Jeu</button>
                 <button onClick={() => setActiveTab('DESIGN')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'DESIGN' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Palette size={18}/> Design & Logo</button>
@@ -108,6 +131,7 @@ export default function NewGamePage() {
             </div>
 
             <div className="p-8">
+                {/* --- TAB 1: INFOS --- */}
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -128,6 +152,7 @@ export default function NewGamePage() {
                     </div>
                 )}
 
+                {/* --- TAB 2: DESIGN --- */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-6">
                         
@@ -140,12 +165,33 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
-                        {/* 2. CONTRASTE DES CARTES */}
+                        {/* 2. CONTRASTE DES CARTES (C'EST ICI QUE C'ÉTAIT PARTI !) */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                            <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes</h3>
+                            <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes (Sombre / Clair)</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}><div className="bg-white border border-slate-200 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]"><span className="text-slate-900 font-bold text-sm">Texte Noir</span></div><p className="text-xs font-bold text-slate-500 mt-1">Cartes Claires (Standard)</p></div>
-                                <div onClick={() => setDesignData({...designData, card_style: 'dark'})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}><div className="bg-slate-800 border border-slate-700 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]"><span className="text-white font-bold text-sm">Texte Blanc</span></div><p className="text-xs font-bold text-slate-400 mt-1">Cartes Sombres (Pour logo blanc)</p></div>
+                                {/* Option CLAIRE */}
+                                <div 
+                                    onClick={() => setDesignData({...designData, card_style: 'light'})}
+                                    className={`cursor-pointer p-6 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-3 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                                >
+                                    <Sun size={32} className={designData.card_style !== 'dark' ? "text-blue-600" : "text-slate-400"} />
+                                    <div className="bg-white border border-slate-200 px-4 py-2 rounded-lg shadow-sm">
+                                        <span className="text-slate-900 font-bold text-sm">Texte Noir</span>
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-500">Mode Clair (Standard)</p>
+                                </div>
+
+                                {/* Option SOMBRE */}
+                                <div 
+                                    onClick={() => setDesignData({...designData, card_style: 'dark'})}
+                                    className={`cursor-pointer p-6 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-3 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}
+                                >
+                                    <Moon size={32} className={designData.card_style === 'dark' ? "text-blue-400" : "text-slate-600"} />
+                                    <div className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg shadow-sm">
+                                        <span className="text-white font-bold text-sm">Texte Blanc</span>
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-400">Mode Sombre</p>
+                                </div>
                             </div>
                         </div>
 
@@ -166,6 +212,7 @@ export default function NewGamePage() {
                     </div>
                 )}
 
+                {/* --- TAB 3: LOTS --- */}
                 {activeTab === 'LOTS' && (
                     <div className="space-y-6">
                         <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-xl text-sm mb-4 flex items-center gap-3"><Gift size={20}/> <span>Plus le <strong>"Poids"</strong> est élevé, plus le lot sort souvent.</span></div>
