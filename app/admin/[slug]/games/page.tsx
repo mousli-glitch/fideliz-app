@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import Link from "next/link"
 import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight } from "lucide-react"
 
-// 1. Configuration Supabase (identique à ton layout serveur)
+// Configuration Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
@@ -14,19 +14,18 @@ export default async function GamesListPage({
 }) {
   const { slug } = await params
 
-  // 2. On récupère l'ID du restaurant via le slug
+  // 1. On récupère l'ID du restaurant via le slug
   const { data: restaurant } = await supabase
     .from("restaurants")
     .select("id, name")
     .eq("slug", slug)
     .single()
 
-  // 3. On récupère la liste des jeux (Table 'game_campaigns' ou 'games' selon ta BDD)
-  // J'utilise 'game_campaigns' car c'est le standard, change si besoin.
+  // 2. On récupère la liste des jeux (Correction: Table 'games')
   const { data: games } = await supabase
-    .from("game_campaigns") 
+    .from("games") 
     .select("*")
-    .eq("restaurant_id", restaurant?.id)
+    .eq("restaurant_id", restaurant?.id) // C'est ce filtre qui empêche la fuite entre restaurants
     .order("created_at", { ascending: false })
 
   return (
@@ -45,7 +44,6 @@ export default async function GamesListPage({
             </p>
           </div>
 
-          {/* Ce bouton redirige bien vers le dossier /new qui contient ton ancien code */}
           <Link
             href={`/admin/${slug}/games/new`}
             className="bg-slate-900 text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 shadow-lg shadow-slate-900/20 active:scale-95 transition-all"
@@ -67,7 +65,7 @@ export default async function GamesListPage({
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center gap-3">
                     <h2 className="text-xl font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
-                      {game.name || "Campagne sans nom"}
+                      {game.name || "Jeu sans nom"}
                     </h2>
                     {/* Badge Statut */}
                     <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-green-200">
@@ -112,7 +110,7 @@ export default async function GamesListPage({
                     <QrCode size={20} />
                   </button>
                   
-                  {/* Supprimer (pour plus tard) */}
+                  {/* Supprimer (visuel pour l'instant) */}
                   <button className="w-11 h-11 flex items-center justify-center bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors border border-red-100 opacity-60 hover:opacity-100">
                     <Trash2 size={20} />
                   </button>
@@ -127,7 +125,7 @@ export default async function GamesListPage({
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">Aucun jeu créé</h3>
               <p className="text-slate-500 max-w-sm mb-8">
-                Vous n'avez pas encore de campagne active. Créez votre premier jeu pour booster vos avis Google ou Instagram.
+                Vous n'avez pas encore de campagne active pour ce restaurant.
               </p>
               <Link
                 href={`/admin/${slug}/games/new`}

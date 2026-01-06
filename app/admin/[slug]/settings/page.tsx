@@ -59,7 +59,7 @@ export default function AdminSettingsPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // Liste des thèmes (Images statiques pour l'exemple)
+  // Liste des thèmes
   const themes = [
     { id: 'casino', name: 'Casino Royal', img: 'https://images.unsplash.com/photo-1596838132731-3301c3fd4317?auto=format&fit=crop&w=300&q=80' },
     { id: 'arcade', name: 'Arcade Néon', img: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=300&q=80' },
@@ -76,7 +76,7 @@ export default function AdminSettingsPage() {
         <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
           <Store className="text-blue-600" /> Paramètres
         </h1>
-        <p className="text-slate-500 font-medium mt-1">Gérez les informations de contact de votre établissement.</p>
+        <p className="text-slate-500 font-medium mt-1">Gérez les informations de contact et le design de votre établissement.</p>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
@@ -109,7 +109,7 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* SECTION 2 : DESIGN & THÈME (RÉINTÉGRÉ ICI AUSSI POUR ETRE SUR) */}
+        {/* SECTION 2 : DESIGN & THÈME */}
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
             <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><Palette size={20}/> Design & Thème Global</h2>
             

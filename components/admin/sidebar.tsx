@@ -1,12 +1,23 @@
-import { LayoutDashboard, Gamepad2, Trophy, Settings, Users } from "lucide-react"
+"use client"
+
+import { LayoutDashboard, Gamepad2, Trophy, Settings, Users, LogOut } from "lucide-react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { createClient } from "@/utils/supabase/client"
 
 export function Sidebar({ restaurant }: { restaurant: any }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const supabase = createClient()
   
   // Fonction pour vérifier si le lien est actif
   const isActive = (path: string) => pathname?.includes(path)
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push("/login")
+    router.refresh()
+  }
 
   return (
     <div className="w-64 bg-slate-900 text-white flex flex-col h-screen p-4 sticky top-0">
@@ -39,7 +50,7 @@ export function Sidebar({ restaurant }: { restaurant: any }) {
           <Gamepad2 size={20} /> Mes Jeux
         </Link>
 
-        {/* --- NOUVEAU BOUTON : CLIENTS CRM --- */}
+        {/* CLIENTS CRM */}
         <Link 
           href={`/admin/${restaurant.slug}/customers`}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
@@ -48,7 +59,6 @@ export function Sidebar({ restaurant }: { restaurant: any }) {
         >
           <Users size={20} /> Clients CRM
         </Link>
-        {/* ------------------------------------ */}
 
         {/* GAGNANTS */}
         <Link 
@@ -72,12 +82,17 @@ export function Sidebar({ restaurant }: { restaurant: any }) {
 
       </nav>
 
-      {/* FOOTER SCANNER */}
+      {/* FOOTER - DÉCONNEXION (Remplacement du Scanner) */}
       <div className="mt-auto pt-4 border-t border-slate-800">
-          <Link href={`/admin/${restaurant.slug}/scan`} className="bg-slate-800 hover:bg-slate-700 transition p-3 rounded-xl flex items-center gap-3 text-sm font-bold text-slate-300">
-            <div className="bg-black w-8 h-8 rounded-full flex items-center justify-center text-white">📷</div>
-            Ouvrir le Scanner
-          </Link>
+          <button 
+            onClick={handleLogout}
+            className="w-full bg-slate-800 hover:bg-red-900/30 hover:text-red-400 transition p-3 rounded-xl flex items-center gap-3 text-sm font-bold text-slate-300 group"
+          >
+            <div className="bg-black group-hover:bg-red-900/50 w-8 h-8 rounded-full flex items-center justify-center text-white transition-colors">
+                <LogOut size={14} />
+            </div>
+            Déconnexion
+          </button>
       </div>
     </div>
   )
