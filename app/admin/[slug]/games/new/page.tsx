@@ -3,10 +3,10 @@
 import { useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createGameAction } from "@/app/actions/create-game"
+// AJOUT : J'ai ajouté Sun et Moon pour les icônes
 import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Plus, Rocket, Sun, Moon } from "lucide-react"
 import Link from "next/link"
 
-// --- CONSTANTES ---
 const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1000&auto=format&fit=crop", 
@@ -28,7 +28,6 @@ export default function NewGamePage() {
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<'INFOS' | 'DESIGN' | 'LOTS'>('INFOS')
 
-  // Données du formulaire
   const [formData, setFormData] = useState({
     name: "",
     active_action: "GOOGLE_REVIEW",
@@ -38,14 +37,14 @@ export default function NewGamePage() {
     has_min_spend: false
   })
 
-  // Données du design (AVEC card_style pour Sombre/Clair)
+  // AJOUT : J'ai ajouté 'card_style' ici pour gérer le choix (light par défaut)
   const [designData, setDesignData] = useState({
       primary_color: "#E11D48", 
       logo_url: "",
       bg_choice: 0,
       title_style: 'STYLE_1',
       bg_image_url: "",
-      card_style: 'light' // Par défaut 'light' (texte noir)
+      card_style: 'light' 
   })
 
   const [prizes, setPrizes] = useState([
@@ -56,46 +55,30 @@ export default function NewGamePage() {
 
   // --- FONCTION DE CRÉATION ---
   const handleCreate = async () => {
-    // 1. Validation basique
-    if (!formData.name) return alert("❌ Veuillez donner un nom à votre campagne.")
-    if (!formData.action_url) return alert("❌ Veuillez mettre le lien URL.")
+    if (!formData.name) return alert("Veuillez donner un nom à votre campagne.")
+    if (!formData.action_url) return alert("Veuillez mettre le lien URL.")
 
     setSaving(true)
-    
-    // MOUCHARD 1
-    console.log("🖱️ Clic sur Créer - Début du traitement")
-
     try {
-        // 2. Conversion du Style (Sombre/Clair) en Couleur Hexadécimale pour la Base de Données
-        // La BDD attend "text_color", mais nous on utilise "card_style" dans l'interface
+        // AJOUT : Calcul de la couleur du texte selon le choix Light/Dark
         const finalTextColor = designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A'
 
         const cleanData = {
-            slug: params.slug,
+            slug: params.slug, // AJOUT : Important pour retrouver le restaurant
             form: { ...formData, min_spend: formData.has_min_spend ? formData.min_spend : 0 },
-            design: {
-                ...designData,
-                text_color: finalTextColor // C'est ici qu'on sauve la préférence Sombre/Clair
-            },
+            // AJOUT : On injecte la couleur de texte calculée
+            design: { ...designData, text_color: finalTextColor },
             prizes: prizes.map(p => ({ label: p.label, color: p.color, weight: Number(p.weight) }))
         }
-
-        // MOUCHARD 2
-        console.log("📤 Envoi des données au serveur...", cleanData)
-        // (Tu peux réactiver l'alert ici si tu veux être sûr, mais le console.log suffit souvent)
-        // alert("Envoi au serveur...") 
 
         const res = await createGameAction(cleanData)
         
         if (!res.success) throw new Error(res.error)
         
-        // MOUCHARD 3
-        console.log("✅ Succès ! Redirection...")
         router.push(`/admin/${params.slug}/games`)
         router.refresh()
 
     } catch (e: any) {
-        console.error("🚨 ERREUR :", e)
         alert("Erreur lors de la création : " + e.message)
     } finally {
         setSaving(false)
@@ -106,7 +89,6 @@ export default function NewGamePage() {
     <div className="min-h-screen bg-slate-50 p-6 pb-20">
       <div className="max-w-4xl mx-auto">
         
-        {/* HEADER */}
         <div className="flex items-center justify-between mb-8">
             <div>
                 <Link href={`/admin/${params.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Annuler</Link>
@@ -123,7 +105,6 @@ export default function NewGamePage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            {/* ONGLETS */}
             <div className="flex border-b border-slate-200 bg-slate-50">
                 <button onClick={() => setActiveTab('INFOS')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'INFOS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Layout size={18}/> Infos Jeu</button>
                 <button onClick={() => setActiveTab('DESIGN')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'DESIGN' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Palette size={18}/> Design & Logo</button>
@@ -131,7 +112,6 @@ export default function NewGamePage() {
             </div>
 
             <div className="p-8">
-                {/* --- TAB 1: INFOS --- */}
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -152,11 +132,9 @@ export default function NewGamePage() {
                     </div>
                 )}
 
-                {/* --- TAB 2: DESIGN --- */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-6">
                         
-                        {/* 1. IDENTITÉ VISUELLE */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-4">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Identité Visuelle</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -165,7 +143,7 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
-                        {/* 2. CONTRASTE DES CARTES (C'EST ICI QUE C'ÉTAIT PARTI !) */}
+                        {/* --- AJOUT : LE BLOC MANQUANT "CONTRASTE CARTES" --- */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes (Sombre / Clair)</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -194,8 +172,8 @@ export default function NewGamePage() {
                                 </div>
                             </div>
                         </div>
+                        {/* --------------------------------------------------- */}
 
-                        {/* 3. STYLE DU TITRE */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Style du Titre</h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -203,7 +181,6 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
-                        {/* 4. FOND D'ECRAN */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Fond d'écran</h3>
                             <div className="mb-6"><label className="block text-sm font-bold text-slate-700 mb-3">Choisir un thème :</label><div className="grid grid-cols-2 md:grid-cols-5 gap-3">{BACKGROUNDS.map((bg, index) => (<div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 ring-2 ring-blue-200 scale-105 shadow-md' : 'border-transparent opacity-70 hover:opacity-100'}`}><img src={bg} className="w-full h-full object-cover" alt="Fond" />{(!designData.bg_image_url && designData.bg_choice === index) && (<div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center"><div className="bg-white rounded-full p-1 shadow-sm"><div className="w-2 h-2 bg-blue-600 rounded-full"></div></div></div>)}</div>))}</div></div>
@@ -212,7 +189,6 @@ export default function NewGamePage() {
                     </div>
                 )}
 
-                {/* --- TAB 3: LOTS --- */}
                 {activeTab === 'LOTS' && (
                     <div className="space-y-6">
                         <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-xl text-sm mb-4 flex items-center gap-3"><Gift size={20}/> <span>Plus le <strong>"Poids"</strong> est élevé, plus le lot sort souvent.</span></div>
