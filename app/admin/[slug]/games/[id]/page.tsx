@@ -30,7 +30,7 @@ export default function EditGamePage() {
   const [activeTab, setActiveTab] = useState<'INFOS' | 'DESIGN' | 'LOTS'>('INFOS')
 
   const [gameId, setGameId] = useState<string>("")
-  const [restaurantId, setRestaurantId] = useState<string>("") // Important pour sauvegarder le logo
+  const [restaurantId, setRestaurantId] = useState<string>("") 
   
   const [formData, setFormData] = useState<any>({
     name: "",
@@ -58,14 +58,14 @@ export default function EditGamePage() {
         const idToLoad = params?.id
         if(!idToLoad) return;
 
-        // 1. Récupérer le JEU
+        // A. On charge le JEU
         const { data: game } = await (supabase.from('games') as any).select('*').eq('id', idToLoad).single()
         
         if (game) {
             setGameId(game.id)
-            setRestaurantId(game.restaurant_id) // On garde l'ID du resto pour plus tard
+            setRestaurantId(game.restaurant_id) 
             
-            // 2. Récupérer le RESTAURANT (car le Logo et la Couleur sont là-bas !)
+            // B. On charge le RESTAURANT (C'est lui qui a le logo et la couleur)
             const { data: restaurant } = await (supabase.from('restaurants') as any)
                 .select('*')
                 .eq('id', game.restaurant_id)
@@ -80,17 +80,19 @@ export default function EditGamePage() {
                 has_min_spend: Number(game.min_spend) > 0
             })
 
-            // On mélange les infos du Jeu (style cartes) et du Restaurant (Logo, Couleur)
+            // C. On détecte le mode sombre via le restaurant (text_color)
+            const isDark = restaurant?.text_color === '#FFFFFF'
+
             setDesignData({
-                primary_color: restaurant?.primary_color || "#E11D48", // Vient du Restaurant
-                logo_url: restaurant?.logo_url || "",                 // Vient du Restaurant
+                primary_color: restaurant?.primary_color || "#E11D48", // Vient du Resto
+                logo_url: restaurant?.logo_url || "",                 // Vient du Resto
                 bg_choice: game.bg_choice || 0,                       // Vient du Jeu
                 title_style: game.title_style || 'STYLE_1',           // Vient du Jeu
                 bg_image_url: game.bg_image_url || "",                // Vient du Jeu
-                card_style: game.card_style || 'light'                // Vient du Jeu
+                card_style: isDark ? 'dark' : 'light'                 // Déduit du Resto
             })
 
-            // 3. Récupérer les LOTS
+            // D. On charge les lots
             const { data: prizesData } = await (supabase.from('prizes') as any).select('*').eq('game_id', game.id).order('weight', {ascending: false})
             setPrizes(prizesData || [])
         }
@@ -100,14 +102,14 @@ export default function EditGamePage() {
   }, [params])
 
 
-  // --- 2. SAUVEGARDE (LA CORRECTION EST ICI) ---
+  // --- 2. SAUVEGARDE CORRECTE ---
   const handleUpdate = async () => {
     if (!formData.name) return alert("Veuillez donner un nom.")
     setSaving(true)
 
     try {
-        // A. Mise à jour du JEU (Table 'games')
-        // On ne met QUE les champs qui existent dans 'games'
+        // 1. Mise à jour du JEU (Table 'games')
+        // On ne met QUE ce qui appartient au jeu (pas le logo, pas la couleur primaire)
         const { error: gameError } = await (supabase.from('games') as any).update({
             name: formData.name,
             active_action: formData.active_action,
@@ -116,26 +118,27 @@ export default function EditGamePage() {
             min_spend: formData.has_min_spend ? formData.min_spend : 0,
             bg_choice: designData.bg_choice,
             title_style: designData.title_style,
-            bg_image_url: designData.bg_image_url,
-            card_style: designData.card_style // Sombre ou Clair
+            bg_image_url: designData.bg_image_url
+            // Note: On ne met pas card_style ici car ce n'est pas une colonne de la BDD, c'est visuel
         }).eq('id', gameId)
 
         if (gameError) throw new Error("Erreur Jeu: " + gameError.message)
 
-        // B. Mise à jour du RESTAURANT (Table 'restaurants')
-        // C'est ici qu'on sauve le Logo et la Couleur !
+        // 2. Mise à jour du RESTAURANT (Table 'restaurants')
+        // C'est ICI qu'on sauve le Logo, la Couleur et le Mode Sombre (text_color)
         if (restaurantId) {
+            const finalTextColor = designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A'
+            
             const { error: restoError } = await (supabase.from('restaurants') as any).update({
                 logo_url: designData.logo_url,
                 primary_color: designData.primary_color,
-                // On met aussi à jour la couleur de texte globale du restaurant selon le mode sombre/clair
-                text_color: designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A' 
+                text_color: finalTextColor 
             }).eq('id', restaurantId)
 
             if (restoError) throw new Error("Erreur Restaurant: " + restoError.message)
         }
 
-        // C. Mise à jour des LOTS
+        // 3. Mise à jour des LOTS
         await (supabase.from('prizes') as any).delete().eq('game_id', gameId)
         const prizesToInsert = prizes.map(p => ({
             game_id: gameId,
