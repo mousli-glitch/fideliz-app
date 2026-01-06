@@ -1,14 +1,11 @@
 "use client"
 
-// 1. Imports
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-// J'ai bien ajouté 'Plus' et 'Sun', 'Moon' ici
 import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Moon, Plus } from "lucide-react"
 import Link from "next/link"
 
-// 2. Constantes
 const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1000&auto=format&fit=crop", 
@@ -33,8 +30,8 @@ export default function EditGamePage() {
   const [activeTab, setActiveTab] = useState<'INFOS' | 'DESIGN' | 'LOTS'>('INFOS')
 
   const [gameId, setGameId] = useState<string>("")
+  const [restaurantId, setRestaurantId] = useState<string>("") // Important pour sauvegarder le logo
   
-  // --- LE FIX EST ICI : On utilise <any> pour dire à l'ordi "T'inquiète pas" ---
   const [formData, setFormData] = useState<any>({
     name: "",
     active_action: "GOOGLE_REVIEW",
@@ -54,21 +51,26 @@ export default function EditGamePage() {
   })
 
   const [prizes, setPrizes] = useState<any[]>([])
-  // --------------------------------------------------------------------------
 
   // --- 1. CHARGEMENT ---
   useEffect(() => {
     const loadGame = async () => {
-        // Sécurisation de l'ID
         const idToLoad = params?.id
         if(!idToLoad) return;
 
-        // On utilise 'as any' pour forcer la lecture même si les types bloquent
+        // 1. Récupérer le JEU
         const { data: game } = await (supabase.from('games') as any).select('*').eq('id', idToLoad).single()
         
         if (game) {
             setGameId(game.id)
+            setRestaurantId(game.restaurant_id) // On garde l'ID du resto pour plus tard
             
+            // 2. Récupérer le RESTAURANT (car le Logo et la Couleur sont là-bas !)
+            const { data: restaurant } = await (supabase.from('restaurants') as any)
+                .select('*')
+                .eq('id', game.restaurant_id)
+                .single()
+
             setFormData({
                 name: game.name,
                 active_action: game.active_action,
@@ -78,61 +80,69 @@ export default function EditGamePage() {
                 has_min_spend: Number(game.min_spend) > 0
             })
 
-            const isDark = game.text_color === '#FFFFFF'
-            
+            // On mélange les infos du Jeu (style cartes) et du Restaurant (Logo, Couleur)
             setDesignData({
-                primary_color: game.primary_color || "#E11D48",
-                logo_url: game.logo_url || "",
-                bg_choice: game.bg_choice || 0,
-                title_style: game.title_style || 'STYLE_1',
-                bg_image_url: game.bg_image_url || "",
-                card_style: isDark ? 'dark' : 'light'
+                primary_color: restaurant?.primary_color || "#E11D48", // Vient du Restaurant
+                logo_url: restaurant?.logo_url || "",                 // Vient du Restaurant
+                bg_choice: game.bg_choice || 0,                       // Vient du Jeu
+                title_style: game.title_style || 'STYLE_1',           // Vient du Jeu
+                bg_image_url: game.bg_image_url || "",                // Vient du Jeu
+                card_style: game.card_style || 'light'                // Vient du Jeu
             })
 
+            // 3. Récupérer les LOTS
             const { data: prizesData } = await (supabase.from('prizes') as any).select('*').eq('game_id', game.id).order('weight', {ascending: false})
             setPrizes(prizesData || [])
         }
         setLoading(false)
     }
     loadGame()
-  }, [params]) // On surveille params globalement
+  }, [params])
 
 
-  // --- 2. SAUVEGARDE ---
+  // --- 2. SAUVEGARDE (LA CORRECTION EST ICI) ---
   const handleUpdate = async () => {
     if (!formData.name) return alert("Veuillez donner un nom.")
     setSaving(true)
 
     try {
-        const finalTextColor = designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A'
-
-        // Update Jeu
+        // A. Mise à jour du JEU (Table 'games')
+        // On ne met QUE les champs qui existent dans 'games'
         const { error: gameError } = await (supabase.from('games') as any).update({
             name: formData.name,
             active_action: formData.active_action,
             action_url: formData.action_url,
             validity_days: formData.validity_days,
             min_spend: formData.has_min_spend ? formData.min_spend : 0,
-            primary_color: designData.primary_color,
-            logo_url: designData.logo_url,
             bg_choice: designData.bg_choice,
             title_style: designData.title_style,
             bg_image_url: designData.bg_image_url,
-            text_color: finalTextColor
+            card_style: designData.card_style // Sombre ou Clair
         }).eq('id', gameId)
 
-        if (gameError) throw gameError
+        if (gameError) throw new Error("Erreur Jeu: " + gameError.message)
 
-        // Update Lots
+        // B. Mise à jour du RESTAURANT (Table 'restaurants')
+        // C'est ici qu'on sauve le Logo et la Couleur !
+        if (restaurantId) {
+            const { error: restoError } = await (supabase.from('restaurants') as any).update({
+                logo_url: designData.logo_url,
+                primary_color: designData.primary_color,
+                // On met aussi à jour la couleur de texte globale du restaurant selon le mode sombre/clair
+                text_color: designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A' 
+            }).eq('id', restaurantId)
+
+            if (restoError) throw new Error("Erreur Restaurant: " + restoError.message)
+        }
+
+        // C. Mise à jour des LOTS
         await (supabase.from('prizes') as any).delete().eq('game_id', gameId)
-        
         const prizesToInsert = prizes.map(p => ({
             game_id: gameId,
             label: p.label,
             color: p.color,
             weight: Number(p.weight)
         }))
-        
         if (prizesToInsert.length > 0) {
             await (supabase.from('prizes') as any).insert(prizesToInsert)
         }
@@ -142,7 +152,7 @@ export default function EditGamePage() {
         router.refresh()
 
     } catch (e: any) {
-        alert("Erreur : " + e.message)
+        alert("Oups : " + e.message)
     } finally {
         setSaving(false)
     }
@@ -180,10 +190,10 @@ export default function EditGamePage() {
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Nom de la campagne</label><input type="text" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})}/></div>
-                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Action cible</label><select className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.active_action || ''} onChange={e => setFormData({...formData, active_action: e.target.value})}><option value="GOOGLE_REVIEW">Avis Google</option><option value="INSTAGRAM">Instagram</option><option value="FACEBOOK">Facebook</option><option value="TIKTOK">TikTok</option></select></div>
+                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Nom de la campagne</label><input type="text" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}/></div>
+                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Action cible</label><select className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.active_action} onChange={e => setFormData({...formData, active_action: e.target.value})}><option value="GOOGLE_REVIEW">Avis Google</option><option value="INSTAGRAM">Instagram</option><option value="FACEBOOK">Facebook</option><option value="TIKTOK">TikTok</option></select></div>
                         </div>
-                        <div><label className="block text-sm font-bold text-slate-700 mb-2">Lien URL</label><input type="url" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.action_url || ''} onChange={e => setFormData({...formData, action_url: e.target.value})}/></div>
+                        <div><label className="block text-sm font-bold text-slate-700 mb-2">Lien URL</label><input type="url" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.action_url} onChange={e => setFormData({...formData, action_url: e.target.value})}/></div>
                         <div className="border-t border-slate-100 pt-6 mt-6">
                             <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -202,8 +212,8 @@ export default function EditGamePage() {
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-4">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Identité Visuelle</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Logo URL</label><div className="flex gap-4 items-center"><input type="url" className="flex-1 p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" value={designData.logo_url || ''} onChange={e => setDesignData({...designData, logo_url: e.target.value})}/>{designData.logo_url && <img src={designData.logo_url} alt="Preview" className="w-12 h-12 rounded-full border-2 border-slate-200 object-cover shadow-sm bg-white"/>}</div></div>
-                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Couleur Boutons (Action)</label><div className="flex gap-2"><input type="color" className="h-12 w-16 rounded cursor-pointer border shadow-sm" value={designData.primary_color || ''} onChange={e => setDesignData({...designData, primary_color: e.target.value})}/><input type="text" className="flex-1 p-3 border rounded-xl bg-white text-sm font-mono" value={designData.primary_color} readOnly/></div></div>
+                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Logo URL</label><div className="flex gap-4 items-center"><input type="url" className="flex-1 p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" value={designData.logo_url} onChange={e => setDesignData({...designData, logo_url: e.target.value})}/>{designData.logo_url && <img src={designData.logo_url} alt="Preview" className="w-12 h-12 rounded-full border-2 border-slate-200 object-cover shadow-sm bg-white"/>}</div></div>
+                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Couleur Boutons (Action)</label><div className="flex gap-2"><input type="color" className="h-12 w-16 rounded cursor-pointer border shadow-sm" value={designData.primary_color} onChange={e => setDesignData({...designData, primary_color: e.target.value})}/><input type="text" className="flex-1 p-3 border rounded-xl bg-white text-sm font-mono" value={designData.primary_color} readOnly/></div></div>
                             </div>
                         </div>
 
