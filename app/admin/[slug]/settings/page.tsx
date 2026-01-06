@@ -1,25 +1,39 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { getAdminRestaurant, updateRestaurantAction } from "@/app/actions/admin"
+import { updateRestaurantAction } from "@/app/actions/admin" 
 import { Loader2, Save, Store, Globe, Mail, Copy, Check, ImageIcon, Palette } from "lucide-react"
+import { useParams } from "next/navigation"
+import { createClient } from "@/utils/supabase/client"
 
 export default function AdminSettingsPage() {
   const [restaurant, setRestaurant] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
+  
+  const params = useParams()
+  const supabase = createClient()
 
+  // 1. Chargement sécurisé via le SLUG
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      const data = await getAdminRestaurant()
+      const slugSecurise = params?.slug ? String(params.slug) : ""
+      
+      const { data } = await (supabase
+        .from('restaurants') as any)
+        .select('*')
+        .eq('slug', slugSecurise)
+        .single()
+
       if (data) setRestaurant(data)
       setLoading(false)
     }
     load()
-  }, [])
+  }, [params.slug])
 
+  // 2. Sauvegarde
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -27,8 +41,8 @@ export default function AdminSettingsPage() {
       await updateRestaurantAction(restaurant.id, {
         name: restaurant.name,
         contact_email: restaurant.contact_email,
-        theme: restaurant.theme,            // Ajouté
-        background_url: restaurant.background_url // Ajouté
+        theme: restaurant.theme,
+        background_url: restaurant.background_url 
       })
       alert("✅ Paramètres mis à jour !")
     } catch (err) {
@@ -54,7 +68,7 @@ export default function AdminSettingsPage() {
   ]
 
   if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin w-10 h-10 text-blue-600"/></div>
-  if (!restaurant) return <div className="p-10 text-center">Aucun restaurant trouvé.</div>
+  if (!restaurant) return <div className="p-10 text-center">Aucun restaurant trouvé pour ce lien.</div>
 
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
@@ -62,14 +76,13 @@ export default function AdminSettingsPage() {
         <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
           <Store className="text-blue-600" /> Paramètres
         </h1>
-        <p className="text-slate-500 font-medium mt-1">Gérez les informations et le design de votre établissement.</p>
+        <p className="text-slate-500 font-medium mt-1">Gérez les informations de contact de votre établissement.</p>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-8">
+      <form onSubmit={handleSave} className="space-y-6">
         
         {/* SECTION 1 : INFOS GÉNÉRALES */}
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-          <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><Store size={20}/> Informations</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">Nom de l'établissement</label>
@@ -96,13 +109,13 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* SECTION 2 : DESIGN & THÈME (RÉINTÉGRÉ) */}
+        {/* SECTION 2 : DESIGN & THÈME (RÉINTÉGRÉ ICI AUSSI POUR ETRE SUR) */}
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><Palette size={20}/> Design & Thème</h2>
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><Palette size={20}/> Design & Thème Global</h2>
             
             <div className="space-y-6">
                 <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-4">Choisir un thème :</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-4">Choisir un thème par défaut :</label>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {themes.map((theme) => (
                             <div 
@@ -155,13 +168,13 @@ export default function AdminSettingsPage() {
               className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
             >
               {copied ? <Check size={16} className="text-green-400"/> : <Copy size={16}/>}
-              {copied ? "Copié !" : "Copier"}
+              {copied ? "Copié !" : "Copier le lien"}
             </button>
           </div>
         </div>
 
         {/* Bouton Sauvegarder */}
-        <div className="flex justify-end pt-4">
+        <div className="flex justify-end">
           <button 
             type="submit" 
             disabled={saving}
