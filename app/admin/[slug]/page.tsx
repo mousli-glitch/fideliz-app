@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
-import { Users, Gamepad2, Trophy, TrendingUp, Settings, DollarSign, ArrowUpRight, Zap, Lock } from "lucide-react"
+import { Users, Gamepad2, Trophy, TrendingUp, Settings, DollarSign, ArrowUpRight, Zap } from "lucide-react"
 import Link from "next/link"
 // On importe le bouton qu'on vient de créer
 import LogoutButton from "@/components/LogoutButton" 
@@ -15,45 +15,13 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // 1. On récupère le restaurant ET son statut is_active
   const { data: restaurant } = await supabase
      .from("restaurants")
-     .select("id, name, is_active") // J'ai ajouté is_active ici
+     .select("id, name")
      .eq("slug", slug)
      .single()
   
   if (!restaurant) return <div>Restaurant introuvable</div>
-
-  // 🛑 2. LE VIGILE : BLOCAGE IMMÉDIAT SI DÉSACTIVÉ
-  if (restaurant.is_active === false) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="bg-red-900/10 border border-red-900 p-8 rounded-3xl max-w-md w-full text-center space-y-6">
-          <div className="w-20 h-20 bg-red-600/20 text-red-500 rounded-full flex items-center justify-center mx-auto animate-pulse">
-            <Lock size={40} />
-          </div>
-          
-          <div>
-            <h1 className="text-3xl font-black text-white uppercase">Accès Suspendu</h1>
-            <p className="text-red-400 font-medium mt-2">
-              L'accès au dashboard de <strong>{restaurant.name}</strong> a été temporairement désactivé par l'administrateur.
-            </p>
-          </div>
-
-          <div className="bg-slate-900 p-4 rounded-xl text-slate-400 text-sm">
-            Raison possible : Facture impayée ou maintenance technique. Veuillez contacter le support.
-          </div>
-
-          <div className="pt-4 flex justify-center">
-            {/* Le bouton déconnexion pour qu'il puisse partir */}
-            <LogoutButton />
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // --- SI TOUT EST OK, ON CHARGE LA SUITE (Ton code original) ---
 
   const { data: games } = await supabase
     .from("games")
