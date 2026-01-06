@@ -3,8 +3,7 @@
 import { useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createGameAction } from "@/app/actions/create-game"
-// AJOUT : J'ai ajouté Sun et Moon pour les icônes
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Plus, Rocket, Sun, Moon } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Plus, Rocket } from "lucide-react"
 import Link from "next/link"
 
 const BACKGROUNDS = [
@@ -37,14 +36,14 @@ export default function NewGamePage() {
     has_min_spend: false
   })
 
-  // AJOUT : J'ai ajouté 'card_style' ici pour gérer le choix (light par défaut)
+  // J'ai ajouté card_style: 'light' ici pour que ça marche
   const [designData, setDesignData] = useState({
       primary_color: "#E11D48", 
       logo_url: "",
       bg_choice: 0,
       title_style: 'STYLE_1',
       bg_image_url: "",
-      card_style: 'light' 
+      card_style: 'light' // Par défaut
   })
 
   const [prizes, setPrizes] = useState([
@@ -53,21 +52,22 @@ export default function NewGamePage() {
     { label: "Dessert Offert", color: "#f59e0b", weight: 20 }
   ])
 
-  // --- FONCTION DE CRÉATION ---
   const handleCreate = async () => {
     if (!formData.name) return alert("Veuillez donner un nom à votre campagne.")
     if (!formData.action_url) return alert("Veuillez mettre le lien URL.")
 
     setSaving(true)
     try {
-        // AJOUT : Calcul de la couleur du texte selon le choix Light/Dark
+        // On convertit le style visuel (light/dark) en couleur de texte pour la base de données
         const finalTextColor = designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A'
 
         const cleanData = {
-            slug: params.slug, // AJOUT : Important pour retrouver le restaurant
+            slug: params.slug,
             form: { ...formData, min_spend: formData.has_min_spend ? formData.min_spend : 0 },
-            // AJOUT : On injecte la couleur de texte calculée
-            design: { ...designData, text_color: finalTextColor },
+            design: { 
+              ...designData, 
+              text_color: finalTextColor // On injecte la couleur calculée
+            },
             prizes: prizes.map(p => ({ label: p.label, color: p.color, weight: Number(p.weight) }))
         }
 
@@ -143,36 +143,34 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
-                        {/* --- AJOUT : LE BLOC MANQUANT "CONTRASTE CARTES" --- */}
+                        {/* --- AJOUT : CONTRASTE DES CARTES (Le bloc qui manquait) --- */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                            <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes (Sombre / Clair)</h3>
+                            <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Option CLAIRE */}
                                 <div 
                                     onClick={() => setDesignData({...designData, card_style: 'light'})}
-                                    className={`cursor-pointer p-6 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-3 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                                    className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
                                 >
-                                    <Sun size={32} className={designData.card_style !== 'dark' ? "text-blue-600" : "text-slate-400"} />
-                                    <div className="bg-white border border-slate-200 px-4 py-2 rounded-lg shadow-sm">
+                                    <div className="bg-white border border-slate-200 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]">
                                         <span className="text-slate-900 font-bold text-sm">Texte Noir</span>
                                     </div>
-                                    <p className="text-xs font-bold text-slate-500">Mode Clair (Standard)</p>
+                                    <p className="text-xs font-bold text-slate-500 mt-1">Cartes Claires (Standard)</p>
                                 </div>
 
                                 {/* Option SOMBRE */}
                                 <div 
                                     onClick={() => setDesignData({...designData, card_style: 'dark'})}
-                                    className={`cursor-pointer p-6 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-3 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}
+                                    className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}
                                 >
-                                    <Moon size={32} className={designData.card_style === 'dark' ? "text-blue-400" : "text-slate-600"} />
-                                    <div className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg shadow-sm">
+                                    <div className="bg-slate-800 border border-slate-700 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]">
                                         <span className="text-white font-bold text-sm">Texte Blanc</span>
                                     </div>
-                                    <p className="text-xs font-bold text-slate-400">Mode Sombre</p>
+                                    <p className="text-xs font-bold text-slate-400 mt-1">Cartes Sombres (Pour logo blanc)</p>
                                 </div>
                             </div>
                         </div>
-                        {/* --------------------------------------------------- */}
+                        {/* -------------------------------------------------------- */}
 
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Style du Titre</h3>
