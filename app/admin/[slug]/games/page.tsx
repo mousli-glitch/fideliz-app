@@ -1,28 +1,50 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { getAdminGames, deleteGameAction } from "../../../actions/admin"
+import { deleteGameAction } from "../../../actions/admin"
 import { Loader2, Plus, Trash2, QrCode, Gamepad2, Star, Camera, Facebook, Video, Pencil, Globe } from "lucide-react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
+import { createClient } from "@/utils/supabase/client"
 
 export default function AdminGamesPage() {
   const [games, setGames] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const params = useParams()
+  const supabase = createClient()
 
   const fetchGames = async () => {
     setLoading(true)
-    const data = await getAdminGames()
     
-    // TRI : Le jeu actif en premier, puis les archivés par date décroissante
-    const sortedGames = data.sort((a: any, b: any) => {
-        if (a.status === 'active') return -1
-        if (b.status === 'active') return 1
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    })
+    // CORRECTION 1 : On sécurise le slug avec String() pour éviter l'erreur de type
+    const slugSecurise = params?.slug ? String(params.slug) : ""
 
-    setGames(sortedGames)
+    // CORRECTION 2 : On ajoute "as any" pour forcer TypeScript à accepter la table restaurants
+    const { data: restaurant } = await (supabase
+      .from('restaurants') as any)
+      .select('id')
+      .eq('slug', slugSecurise)
+      .single()
+
+    if (restaurant) {
+        // CORRECTION 3 : Idem ici, on ajoute "as any" pour la table games
+        const { data: gamesData } = await (supabase
+            .from('games') as any)
+            .select('*')
+            .eq('restaurant_id', restaurant.id) 
+            .order('created_at', { ascending: false })
+
+        if (gamesData) {
+            // TRI : Le jeu actif en premier
+            const sortedGames = gamesData.sort((a: any, b: any) => {
+                if (a.status === 'active') return -1
+                if (b.status === 'active') return 1
+                return 0
+            })
+            setGames(sortedGames)
+        }
+    }
+    
     setLoading(false)
   }
 
@@ -77,8 +99,7 @@ export default function AdminGamesPage() {
                   <div className="mb-4 md:mb-0 text-center md:text-left">
                       <div className="flex items-center gap-3 justify-center md:justify-start mb-2">
                           <h3 className={`text-xl font-bold ${isActive ? 'text-slate-900' : 'text-slate-500'}`}>{game.name}</h3>
-                          
-                          {/* BADGES DE STATUT : VERT VS ROUGE */}
+                           
                           {isActive ? (
                               <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] uppercase font-black border border-green-200 flex items-center gap-2 tracking-wider">
                                 <span className="relative flex h-2 w-2">

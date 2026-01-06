@@ -1,29 +1,37 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useParams } from "next/navigation" // 1. Ajout de useParams
-import { LayoutDashboard, Trophy, Settings, Gamepad2, Users, LogOut } from "lucide-react" // 2. Ajout de l'icône Users
+import { usePathname, useParams, useRouter } from "next/navigation"
+import { LayoutDashboard, Trophy, Settings, Gamepad2, Users, LogOut } from "lucide-react"
+import { createClient } from "@/utils/supabase/client" // Import nécessaire pour la déconnexion
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const params = useParams() // 3. On récupère les paramètres de l'URL
+  const params = useParams()
+  const router = useRouter()
+  const supabase = createClient()
   
-  // On sécurise le slug (s'il n'est pas encore chargé, on met une chaine vide pour éviter les bugs)
+  // On sécurise le slug
   const slug = params?.slug ? String(params.slug) : ""
 
-  // 4. On construit les liens dynamiquement avec le slug
   const navItems = [
     { label: "Dashboard", href: `/admin/${slug}`, icon: LayoutDashboard },
     { label: "Mes Jeux", href: `/admin/${slug}/games`, icon: Gamepad2 },
-    { label: "Clients CRM", href: `/admin/${slug}/customers`, icon: Users }, // <--- LE VOICI !
+    { label: "Clients CRM", href: `/admin/${slug}/customers`, icon: Users },
     { label: "Gagnants", href: `/admin/${slug}/winners`, icon: Trophy },
     { label: "Paramètres", href: `/admin/${slug}/settings`, icon: Settings },
   ]
 
+  // Fonction de déconnexion
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       
-      {/* SIDEBAR (Navigation) */}
+      {/* SIDEBAR */}
       <aside className="w-full md:w-64 bg-slate-900 text-white p-6 flex flex-col justify-between shrink-0 h-screen sticky top-0">
         <div>
           <div className="mb-10 flex items-center gap-3">
@@ -33,7 +41,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <nav className="space-y-2">
             {navItems.map((item) => {
-              // On vérifie si l'URL actuelle contient le lien (pour garder actif même dans les sous-pages)
               const isActive = pathname === item.href || (item.href !== `/admin/${slug}` && pathname?.startsWith(item.href))
               
               return (
@@ -54,17 +61,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </nav>
         </div>
 
+        {/* FOOTER : BOUTON DÉCONNEXION */}
         <div className="pt-6 border-t border-slate-800">
-           <p className="text-xs text-slate-500 mb-2">Connecté via Basic Auth</p>
-           {/* Le bouton scan */}
-           <Link href={`/admin/${slug}/scan`} className="block w-full bg-slate-800 hover:bg-slate-700 text-center py-2 rounded-lg text-sm text-white transition-colors">
-              Ouvrir le Scanner 📷
-           </Link>
+           <button 
+             onClick={handleLogout}
+             className="w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-white py-3 rounded-xl transition-all font-bold text-sm"
+           >
+             <LogOut size={18} />
+             Déconnexion
+           </button>
         </div>
       </aside>
 
       {/* CONTENU PRINCIPAL */}
-      <main className="flex-1 overflow-y-auto h-screen">
+      <main className="flex-1 overflow-y-auto h-screen relative">
         {children}
       </main>
 
