@@ -1,14 +1,14 @@
 "use client"
 
-import { useState, useEffect, use } from "react"
+// 1. Imports
+import { useState, useEffect } from "react"
+import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { useRouter } from "next/navigation"
-import { updateGameAction } from "@/app/actions/update-game"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Plus } from "lucide-react"
+// J'ai bien ajouté 'Plus' et 'Sun', 'Moon' ici
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Moon, Plus } from "lucide-react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
 
-// ... (Gardons tes constantes BACKGROUNDS et TITLE_STYLES ici si elles y sont)
+// 2. Constantes
 const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1000&auto=format&fit=crop", 
@@ -23,75 +23,124 @@ const TITLE_STYLES = [
   { id: 'STYLE_3', label: 'Tournez / ET GAGNEZ', preview: 'ET GAGNEZ !' },
 ]
 
-export default function EditGamePage({ params }: { params: Promise<{ id: string }> }) {
-  // On récupère l'ID depuis les paramètres
-  const { id: gameId } = use(params)
-  // On récupère le slug pour le bouton retour (via le hook useParams)
-  const urlParams = useParams()
-  
-  const supabase = createClient()
+export default function EditGamePage() {
+  const params = useParams()
   const router = useRouter()
+  const supabase = createClient()
   
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<'INFOS' | 'DESIGN' | 'LOTS'>('INFOS')
-  const [restaurantId, setRestaurantId] = useState("")
 
-  const [formData, setFormData] = useState<any>({})
-  const [designData, setDesignData] = useState<any>({})
+  const [gameId, setGameId] = useState<string>("")
+  
+  // --- LE FIX EST ICI : On utilise <any> pour dire à l'ordi "T'inquiète pas" ---
+  const [formData, setFormData] = useState<any>({
+    name: "",
+    active_action: "GOOGLE_REVIEW",
+    action_url: "",
+    validity_days: 30, 
+    min_spend: 0,
+    has_min_spend: false
+  })
+
+  const [designData, setDesignData] = useState<any>({
+      primary_color: "#E11D48", 
+      logo_url: "",
+      bg_choice: 0,
+      title_style: 'STYLE_1',
+      bg_image_url: "",
+      card_style: 'light' 
+  })
+
   const [prizes, setPrizes] = useState<any[]>([])
+  // --------------------------------------------------------------------------
 
-  // 🔥 C'EST ICI LA DIFFÉRENCE CLÉ : On charge les données existantes
+  // --- 1. CHARGEMENT ---
   useEffect(() => {
-    const fetchGame = async () => {
-      // 1. Charger le Jeu
-      const { data: game } = await (supabase.from("games") as any).select("*").eq("id", gameId).single()
-      if (!game) return
-      
-      setFormData({
-        name: game.name,
-        active_action: game.active_action,
-        action_url: game.action_url,
-        validity_days: game.validity_days || 30,
-        min_spend: game.min_spend || 0,
-        has_min_spend: (game.min_spend || 0) > 0
-      })
-      setRestaurantId(game.restaurant_id)
+    const loadGame = async () => {
+        // Sécurisation de l'ID
+        const idToLoad = params?.id
+        if(!idToLoad) return;
 
-      // 2. Charger le Restaurant
-      const { data: resto } = await (supabase.from("public_restaurants") as any).select("*").eq("id", game.restaurant_id).single()
-      
-      setDesignData({
-          primary_color: resto?.primary_color || "#E11D48",
-          logo_url: resto?.logo_url || "",
-          bg_choice: game.bg_choice !== undefined ? game.bg_choice : 0,
-          title_style: game.title_style || 'STYLE_1',
-          bg_image_url: game.bg_image_url || "",
-      })
+        // On utilise 'as any' pour forcer la lecture même si les types bloquent
+        const { data: game } = await (supabase.from('games') as any).select('*').eq('id', idToLoad).single()
+        
+        if (game) {
+            setGameId(game.id)
+            
+            setFormData({
+                name: game.name,
+                active_action: game.active_action,
+                action_url: game.action_url || "",
+                validity_days: game.validity_days || 30,
+                min_spend: game.min_spend ? Number(game.min_spend) : 0,
+                has_min_spend: Number(game.min_spend) > 0
+            })
 
-      // 3. Charger les lots
-      const { data: gamePrizes } = await (supabase.from("prizes") as any).select("*").eq("game_id", gameId).order('weight', {ascending: false})
-      setPrizes(gamePrizes || [])
-      setLoading(false)
+            const isDark = game.text_color === '#FFFFFF'
+            
+            setDesignData({
+                primary_color: game.primary_color || "#E11D48",
+                logo_url: game.logo_url || "",
+                bg_choice: game.bg_choice || 0,
+                title_style: game.title_style || 'STYLE_1',
+                bg_image_url: game.bg_image_url || "",
+                card_style: isDark ? 'dark' : 'light'
+            })
+
+            const { data: prizesData } = await (supabase.from('prizes') as any).select('*').eq('game_id', game.id).order('weight', {ascending: false})
+            setPrizes(prizesData || [])
+        }
+        setLoading(false)
     }
-    fetchGame()
-  }, [gameId])
+    loadGame()
+  }, [params]) // On surveille params globalement
 
+
+  // --- 2. SAUVEGARDE ---
   const handleUpdate = async () => {
+    if (!formData.name) return alert("Veuillez donner un nom.")
     setSaving(true)
+
     try {
-        const cleanData = {
-            restaurant_id: restaurantId,
-            form: { ...formData, min_spend: formData.has_min_spend ? formData.min_spend : 0 },
-            design: designData,
-            prizes: prizes.map(p => ({ label: p.label, color: p.color, weight: Number(p.weight) }))
+        const finalTextColor = designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A'
+
+        // Update Jeu
+        const { error: gameError } = await (supabase.from('games') as any).update({
+            name: formData.name,
+            active_action: formData.active_action,
+            action_url: formData.action_url,
+            validity_days: formData.validity_days,
+            min_spend: formData.has_min_spend ? formData.min_spend : 0,
+            primary_color: designData.primary_color,
+            logo_url: designData.logo_url,
+            bg_choice: designData.bg_choice,
+            title_style: designData.title_style,
+            bg_image_url: designData.bg_image_url,
+            text_color: finalTextColor
+        }).eq('id', gameId)
+
+        if (gameError) throw gameError
+
+        // Update Lots
+        await (supabase.from('prizes') as any).delete().eq('game_id', gameId)
+        
+        const prizesToInsert = prizes.map(p => ({
+            game_id: gameId,
+            label: p.label,
+            color: p.color,
+            weight: Number(p.weight)
+        }))
+        
+        if (prizesToInsert.length > 0) {
+            await (supabase.from('prizes') as any).insert(prizesToInsert)
         }
 
-        const res = await updateGameAction(gameId, cleanData)
-        if (!res.success) throw new Error(res.error)
-        
-        alert("✅ Sauvegardé avec succès !")
+        alert("✅ Jeu modifié avec succès !")
+        router.push(`/admin/${params.slug}/games`)
         router.refresh()
+
     } catch (e: any) {
         alert("Erreur : " + e.message)
     } finally {
@@ -99,18 +148,25 @@ export default function EditGamePage({ params }: { params: Promise<{ id: string 
     }
   }
 
-  if (loading) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin w-10 h-10 text-slate-400"/></div>
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600"/></div>
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 pb-20">
       <div className="max-w-4xl mx-auto">
+        
         <div className="flex items-center justify-between mb-8">
             <div>
-                {/* Lien de retour corrigé avec le slug */}
-                <Link href={`/admin/${urlParams.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Retour</Link>
-                <h1 className="text-3xl font-black text-slate-900">Modifier le Jeu ✏️</h1>
+                <Link href={`/admin/${params.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Retour</Link>
+                <h1 className="text-3xl font-black text-slate-900 flex items-center gap-2">Modifier le Jeu ✏️</h1>
             </div>
-            <button onClick={handleUpdate} disabled={saving} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 shadow-lg active:scale-95">{saving ? <Loader2 className="animate-spin"/> : <Save size={20}/>} Enregistrer tout</button>
+            <button 
+                onClick={handleUpdate} 
+                disabled={saving} 
+                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 shadow-lg active:scale-95 transition-all"
+            >
+                {saving ? <Loader2 className="animate-spin"/> : <Save size={20}/>} 
+                Enregistrer tout
+            </button>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -125,16 +181,16 @@ export default function EditGamePage({ params }: { params: Promise<{ id: string 
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div><label className="block text-sm font-bold text-slate-700 mb-2">Nom de la campagne</label><input type="text" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})}/></div>
-                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Action cible</label><select className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.active_action || 'GOOGLE_REVIEW'} onChange={e => setFormData({...formData, active_action: e.target.value})}><option value="GOOGLE_REVIEW">Avis Google</option><option value="INSTAGRAM">Instagram</option><option value="FACEBOOK">Facebook</option><option value="TIKTOK">TikTok</option></select></div>
+                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Action cible</label><select className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.active_action || ''} onChange={e => setFormData({...formData, active_action: e.target.value})}><option value="GOOGLE_REVIEW">Avis Google</option><option value="INSTAGRAM">Instagram</option><option value="FACEBOOK">Facebook</option><option value="TIKTOK">TikTok</option></select></div>
                         </div>
-                        <div><label className="block text-sm font-bold text-slate-700 mb-2">Lien URL</label><input type="url" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={formData.action_url || ''} onChange={e => setFormData({...formData, action_url: e.target.value})}/></div>
+                        <div><label className="block text-sm font-bold text-slate-700 mb-2">Lien URL</label><input type="url" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.action_url || ''} onChange={e => setFormData({...formData, action_url: e.target.value})}/></div>
                         <div className="border-t border-slate-100 pt-6 mt-6">
                             <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div><label className="block text-sm font-bold text-slate-700 mb-2">Validité (Jours)</label><input type="number" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}/></div>
                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                    <div className="flex items-center gap-3 mb-3"><input type="checkbox" id="min_spend" className="w-5 h-5 accent-blue-600" checked={formData.has_min_spend} onChange={e => setFormData({...formData, has_min_spend: e.target.checked})}/><label htmlFor="min_spend" className="text-sm font-bold text-slate-700 cursor-pointer">Activer minimum commande</label></div>
-                                    {formData.has_min_spend && (<div className="flex items-center gap-2"><span className="text-slate-400 font-bold">Min:</span><input type="number" className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: 15" value={formData.min_spend} onChange={e => setFormData({...formData, min_spend: parseInt(e.target.value) || 0})}/><span className="text-slate-400 font-bold">€</span></div>)}
+                                    <div className="flex items-center gap-3 mb-3"><input type="checkbox" className="w-5 h-5 accent-blue-600" checked={formData.has_min_spend} onChange={e => setFormData({...formData, has_min_spend: e.target.checked})}/><label className="text-sm font-bold text-slate-700 cursor-pointer">Activer minimum commande</label></div>
+                                    {formData.has_min_spend && (<div className="flex items-center gap-2"><span className="text-slate-400 font-bold">Min:</span><input type="number" className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={formData.min_spend} onChange={e => setFormData({...formData, min_spend: parseInt(e.target.value) || 0})}/><span className="text-slate-400 font-bold">€</span></div>)}
                                 </div>
                             </div>
                         </div>
@@ -146,8 +202,36 @@ export default function EditGamePage({ params }: { params: Promise<{ id: string 
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-4">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Identité Visuelle</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Logo URL</label><div className="flex gap-4 items-center"><input type="url" className="flex-1 p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={designData.logo_url || ''} onChange={e => setDesignData({...designData, logo_url: e.target.value})}/>{designData.logo_url && <img src={designData.logo_url} alt="Preview" className="w-12 h-12 rounded-full border-2 border-slate-200 object-cover shadow-sm bg-white"/>}</div></div>
-                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Couleur Boutons (Action)</label><div className="flex gap-2"><input type="color" className="h-12 w-16 rounded cursor-pointer border shadow-sm" value={designData.primary_color || '#E11D48'} onChange={e => setDesignData({...designData, primary_color: e.target.value})}/><input type="text" className="flex-1 p-3 border rounded-xl bg-white text-sm font-mono" value={designData.primary_color} readOnly/></div></div>
+                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Logo URL</label><div className="flex gap-4 items-center"><input type="url" className="flex-1 p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" value={designData.logo_url || ''} onChange={e => setDesignData({...designData, logo_url: e.target.value})}/>{designData.logo_url && <img src={designData.logo_url} alt="Preview" className="w-12 h-12 rounded-full border-2 border-slate-200 object-cover shadow-sm bg-white"/>}</div></div>
+                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Couleur Boutons (Action)</label><div className="flex gap-2"><input type="color" className="h-12 w-16 rounded cursor-pointer border shadow-sm" value={designData.primary_color || ''} onChange={e => setDesignData({...designData, primary_color: e.target.value})}/><input type="text" className="flex-1 p-3 border rounded-xl bg-white text-sm font-mono" value={designData.primary_color} readOnly/></div></div>
+                            </div>
+                        </div>
+
+                        {/* BLOC CONTRASTE */}
+                        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
+                            <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div 
+                                    onClick={() => setDesignData({...designData, card_style: 'light'})}
+                                    className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                                >
+                                    <Sun size={24} className={designData.card_style !== 'dark' ? "text-blue-600" : "text-slate-400"} />
+                                    <div className="bg-white border border-slate-200 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]">
+                                        <span className="text-slate-900 font-bold text-sm">Texte Noir</span>
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-500 mt-1">Cartes Claires (Standard)</p>
+                                </div>
+
+                                <div 
+                                    onClick={() => setDesignData({...designData, card_style: 'dark'})}
+                                    className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-2 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}
+                                >
+                                    <Moon size={24} className={designData.card_style === 'dark' ? "text-blue-400" : "text-slate-600"} />
+                                    <div className="bg-slate-800 border border-slate-700 px-6 py-3 rounded-lg shadow-sm w-full max-w-[200px]">
+                                        <span className="text-white font-bold text-sm">Texte Blanc</span>
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-400 mt-1">Cartes Sombres</p>
+                                </div>
                             </div>
                         </div>
 
