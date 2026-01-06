@@ -27,7 +27,7 @@ export default function RootLayout({
   // 1. Mets ton curseur entre les guillemets ci-dessous.
   // 2. Fais COLLER (Ctrl+V ou Cmd+V).
   // 3. Vérifie qu'il n'y a pas d'espace avant ou après.
-  const GOOGLE_API_KEY = "AIzaSyD3z2IopLG0FvN_dOOIsR9Y65bxZRDaUtU"; 
+  const GOOGLE_API_KEY = "AIzaSyAcidMbRAwpwvmW8ZfjhUrOMrcn-HjT-bs"; 
 
   return (
     <html lang="fr">
