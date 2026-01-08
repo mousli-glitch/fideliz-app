@@ -404,9 +404,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                      <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
                      <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
                      
-                     {/* Logo à gauche (ENCORE PLUS GRAND ICI : w-32 h-32) */}
+                     {/* Logo à gauche (AGRANDI ICI : w-48 h-48) */}
                      {restaurant.logo_url && (
-                         <img src={restaurant.logo_url} alt={restaurant.name} className="w-32 h-32 object-contain bg-white/5 rounded-lg p-1" />
+                         <img src={restaurant.logo_url} alt={restaurant.name} className="w-48 h-48 object-contain bg-white/5 rounded-lg p-1" />
                      )}
                      
                      {/* Texte à droite */}
