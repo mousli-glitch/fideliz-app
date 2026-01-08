@@ -264,8 +264,8 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         
         {restaurant.logo_url && (
            <div className="absolute top-4 left-1/2 -translate-x-1/2 mb-8 z-20">
-              {/* LOGO HEADER : Taille augmentée pour être plus visible */}
-              <img src={restaurant.logo_url} alt="Logo" className="h-28 w-auto max-w-[240px] object-contain drop-shadow-lg" />
+              {/* LOGO HEADER : Taille DOUBLÉE (h-48 et max-w-400px) */}
+              <img src={restaurant.logo_url} alt="Logo" className="h-48 w-auto max-w-[400px] object-contain drop-shadow-lg" />
            </div>
         )}
         
@@ -404,7 +404,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                      <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
                      <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
                      
-                     {/* Logo à gauche (AGRANDI ICI : w-48 h-48) */}
+                     {/* Logo à gauche (Taille XXL : w-48 h-48) */}
                      {restaurant.logo_url && (
                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-48 h-48 object-contain bg-white/5 rounded-lg p-1" />
                      )}
