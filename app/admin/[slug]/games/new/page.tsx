@@ -5,7 +5,8 @@ import { useRouter, useParams } from "next/navigation"
 import { createGameAction } from "@/app/actions/create-game"
 import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Plus, Rocket, Sun, Moon } from "lucide-react"
 import Link from "next/link"
-import GooglePlaceInput from "@/components/GooglePlaceInput" // <--- Import du nouveau composant
+import GooglePlaceInput from "@/components/GooglePlaceInput"
+import LogoUploader from "@/components/LogoUploader" // <--- 1. Import du LogoUploader
 
 // --- CONSTANTES ---
 const BACKGROUNDS = [
@@ -119,11 +120,10 @@ export default function NewGamePage() {
             </div>
 
             <div className="p-8">
-                {/* --- TAB 1: INFOS (MISE A JOUR AVEC GOOGLE) --- */}
+                {/* --- TAB 1: INFOS --- */}
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* 1. NOM DU JEU (Modifié) */}
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Nom du Jeu</label>
                                 <input 
@@ -135,13 +135,12 @@ export default function NewGamePage() {
                                 />
                             </div>
                             
-                            {/* 2. ACTION CIBLE */}
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Objectif (Action)</label>
                                 <select 
                                     className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" 
                                     value={formData.active_action} 
-                                    onChange={e => setFormData({...formData, active_action: e.target.value, action_url: ""})} // Reset URL si on change
+                                    onChange={e => setFormData({...formData, active_action: e.target.value, action_url: ""})}
                                 >
                                     <option value="GOOGLE_REVIEW">⭐ Avis Google (Recommandé)</option>
                                     <option value="INSTAGRAM">📸 S'abonner Instagram</option>
@@ -151,14 +150,13 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
-                        {/* 3. LOGIQUE CONDITIONNELLE : GOOGLE vs MANUEL */}
+                        {/* SECTION GOOGLE / MANUEL */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 transition-all">
                             <label className="block text-sm font-bold text-slate-700 mb-2">
                                 {formData.active_action === 'GOOGLE_REVIEW' ? 'Rechercher votre établissement :' : 'Lien URL de votre page :'}
                             </label>
 
                             {formData.active_action === 'GOOGLE_REVIEW' ? (
-                                // MODE GOOGLE ASSISTANT
                                 <div className="space-y-2">
                                     <GooglePlaceInput 
                                         onSelect={(url) => setFormData({...formData, action_url: url})} 
@@ -168,7 +166,6 @@ export default function NewGamePage() {
                                     </p>
                                 </div>
                             ) : (
-                                // MODE MANUEL
                                 <div className="space-y-2">
                                     <input 
                                         type="url" 
@@ -187,7 +184,6 @@ export default function NewGamePage() {
                         <div className="border-t border-slate-100 pt-6 mt-6">
                             <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* 4. VALIDITÉ DU GAIN (Modifié) */}
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Validité du Gain (Jours)</label>
                                     <input 
@@ -208,49 +204,44 @@ export default function NewGamePage() {
                     </div>
                 )}
 
-                {/* --- TAB 2: DESIGN (INCHANGÉ POUR L'INSTANT) --- */}
+                {/* --- TAB 2: DESIGN --- */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-6">
-                        {/* 1. IDENTITÉ VISUELLE */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-4">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Identité Visuelle</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Logo URL</label><div className="flex gap-4 items-center"><input type="url" className="flex-1 p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={designData.logo_url} onChange={e => setDesignData({...designData, logo_url: e.target.value})}/>{designData.logo_url && <img src={designData.logo_url} alt="Preview" className="w-12 h-12 rounded-full border-2 border-slate-200 object-cover shadow-sm bg-white"/>}</div></div>
+                                
+                                {/* --- 2. LE LOGO UPLOADER (Nouveau) --- */}
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Logo du commerce</label>
+                                    <LogoUploader 
+                                        currentUrl={designData.logo_url} 
+                                        onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
+                                    />
+                                </div>
+
                                 <div><label className="block text-sm font-bold text-slate-700 mb-2">Couleur Boutons (Action)</label><div className="flex gap-2"><input type="color" className="h-12 w-16 rounded cursor-pointer border shadow-sm" value={designData.primary_color} onChange={e => setDesignData({...designData, primary_color: e.target.value})}/><input type="text" className="flex-1 p-3 border rounded-xl bg-white text-sm font-mono" value={designData.primary_color} readOnly/></div></div>
                             </div>
                         </div>
 
-                        {/* 2. CONTRASTE DES CARTES */}
+                        {/* CONTRASTE */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes (Sombre / Clair)</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Option CLAIRE */}
-                                <div 
-                                    onClick={() => setDesignData({...designData, card_style: 'light'})}
-                                    className={`cursor-pointer p-6 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-3 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
-                                >
+                                <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-6 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-3 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                                     <Sun size={32} className={designData.card_style !== 'dark' ? "text-blue-600" : "text-slate-400"} />
-                                    <div className="bg-white border border-slate-200 px-4 py-2 rounded-lg shadow-sm">
-                                        <span className="text-slate-900 font-bold text-sm">Texte Noir</span>
-                                    </div>
+                                    <div className="bg-white border border-slate-200 px-4 py-2 rounded-lg shadow-sm"><span className="text-slate-900 font-bold text-sm">Texte Noir</span></div>
                                     <p className="text-xs font-bold text-slate-500">Mode Clair (Standard)</p>
                                 </div>
-
-                                {/* Option SOMBRE */}
-                                <div 
-                                    onClick={() => setDesignData({...designData, card_style: 'dark'})}
-                                    className={`cursor-pointer p-6 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-3 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}
-                                >
+                                <div onClick={() => setDesignData({...designData, card_style: 'dark'})} className={`cursor-pointer p-6 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-3 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}>
                                     <Moon size={32} className={designData.card_style === 'dark' ? "text-blue-400" : "text-slate-600"} />
-                                    <div className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg shadow-sm">
-                                        <span className="text-white font-bold text-sm">Texte Blanc</span>
-                                    </div>
+                                    <div className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg shadow-sm"><span className="text-white font-bold text-sm">Texte Blanc</span></div>
                                     <p className="text-xs font-bold text-slate-400">Mode Sombre</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* 3. STYLE DU TITRE */}
+                        {/* STYLE TITRE */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Style du Titre</h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -258,7 +249,7 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
-                        {/* 4. FOND D'ECRAN */}
+                        {/* FOND D'ECRAN */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Fond d'écran</h3>
                             <div className="mb-6"><label className="block text-sm font-bold text-slate-700 mb-3">Choisir un thème :</label><div className="grid grid-cols-2 md:grid-cols-5 gap-3">{BACKGROUNDS.map((bg, index) => (<div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 ring-2 ring-blue-200 scale-105 shadow-md' : 'border-transparent opacity-70 hover:opacity-100'}`}><img src={bg} className="w-full h-full object-cover" alt="Fond" />{(!designData.bg_image_url && designData.bg_choice === index) && (<div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center"><div className="bg-white rounded-full p-1 shadow-sm"><div className="w-2 h-2 bg-blue-600 rounded-full"></div></div></div>)}</div>))}</div></div>

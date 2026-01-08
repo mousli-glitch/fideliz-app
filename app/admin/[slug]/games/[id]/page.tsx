@@ -5,7 +5,8 @@ import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Moon, Plus, Rocket } from "lucide-react"
 import Link from "next/link"
-import GooglePlaceInput from "@/components/GooglePlaceInput" // <--- L'assistant Google
+import GooglePlaceInput from "@/components/GooglePlaceInput"
+import LogoUploader from "@/components/LogoUploader" // <--- 1. Import ajouté
 
 const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
@@ -53,7 +54,6 @@ export default function EditGamePage() {
 
   const [prizes, setPrizes] = useState<any[]>([])
 
-  // --- 1. CHARGEMENT ---
   useEffect(() => {
     const loadGame = async () => {
         const idToLoad = params?.id
@@ -99,11 +99,9 @@ export default function EditGamePage() {
   }, [params])
 
 
-  // --- 2. SAUVEGARDE ---
   const handleUpdate = async () => {
     if (!formData.name) return alert("Veuillez donner un Nom au Jeu.")
     
-    // Vérification du lien pour Google (si non vide)
     if (formData.active_action === 'GOOGLE_REVIEW' && formData.action_url && !formData.action_url.includes('google.com')) {
          return alert("❌ Veuillez sélectionner un établissement Google valide.")
     }
@@ -111,7 +109,6 @@ export default function EditGamePage() {
     setSaving(true)
 
     try {
-        // 1. Update JEU
         const { error: gameError } = await (supabase.from('games') as any).update({
             name: formData.name,
             active_action: formData.active_action,
@@ -125,7 +122,6 @@ export default function EditGamePage() {
 
         if (gameError) throw new Error("Erreur Jeu: " + gameError.message)
 
-        // 2. Update RESTAURANT (Logo + Couleur + Mode Sombre)
         if (restaurantId) {
             const finalTextColor = designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A'
             const { error: restoError } = await (supabase.from('restaurants') as any).update({
@@ -137,7 +133,6 @@ export default function EditGamePage() {
             if (restoError) throw new Error("Erreur Restaurant: " + restoError.message)
         }
 
-        // 3. Update LOTS
         await (supabase.from('prizes') as any).delete().eq('game_id', gameId)
         const prizesToInsert = prizes.map(p => ({
             game_id: gameId,
@@ -211,7 +206,6 @@ export default function EditGamePage() {
                             </div>
                         </div>
 
-                        {/* SECTION LOGIQUE GOOGLE VS MANUEL */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 transition-all">
                             <label className="block text-sm font-bold text-slate-700 mb-2">
                                 {formData.active_action === 'GOOGLE_REVIEW' ? 'Rechercher votre établissement :' : 'Lien URL de votre page :'}
@@ -219,7 +213,6 @@ export default function EditGamePage() {
 
                             {formData.active_action === 'GOOGLE_REVIEW' ? (
                                 <div className="space-y-2">
-                                    {/* Le composant Google Assistant */}
                                     <GooglePlaceInput 
                                         onSelect={(url) => setFormData({...formData, action_url: url})} 
                                         defaultValue={formData.action_url} 
@@ -254,18 +247,25 @@ export default function EditGamePage() {
                     </div>
                 )}
 
-                {/* LES AUTRES ONGLETS (DESIGN / LOTS) */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-6">
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-4">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Identité Visuelle</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Logo URL</label><div className="flex gap-4 items-center"><input type="url" className="flex-1 p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" value={designData.logo_url} onChange={e => setDesignData({...designData, logo_url: e.target.value})}/>{designData.logo_url && <img src={designData.logo_url} alt="Preview" className="w-12 h-12 rounded-full border-2 border-slate-200 object-cover shadow-sm bg-white"/>}</div></div>
+                                
+                                {/* --- 2. REMPLACEMENT DU BLOC LOGO --- */}
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Logo du commerce</label>
+                                    <LogoUploader 
+                                        currentUrl={designData.logo_url} 
+                                        onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
+                                    />
+                                </div>
+
                                 <div><label className="block text-sm font-bold text-slate-700 mb-2">Couleur Boutons (Action)</label><div className="flex gap-2"><input type="color" className="h-12 w-16 rounded cursor-pointer border shadow-sm" value={designData.primary_color} onChange={e => setDesignData({...designData, primary_color: e.target.value})}/><input type="text" className="flex-1 p-3 border rounded-xl bg-white text-sm font-mono" value={designData.primary_color} readOnly/></div></div>
                             </div>
                         </div>
 
-                        {/* BLOC CONTRASTE */}
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                             <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
