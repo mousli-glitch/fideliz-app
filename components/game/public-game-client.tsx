@@ -113,8 +113,16 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const handleDownloadTicket = async () => {
     if (ticketRef.current === null) return;
     try {
-        // Capture l'élément et force le fond noir pour éviter la transparence
-        const dataUrl = await toPng(ticketRef.current, { backgroundColor: '#000000' });
+        // Capture l'élément
+        const dataUrl = await toPng(ticketRef.current, { 
+            backgroundColor: '#000000', // Force le fond noir
+            // 👇 AJOUT CRUCIAL : Filtre pour ignorer les boutons lors de la photo
+            filter: (node) => {
+                const element = node as HTMLElement;
+                return !(element.tagName && element.hasAttribute && element.hasAttribute('data-html2canvas-ignore'));
+            }
+        });
+        
         const link = document.createElement('a');
         const fileName = `ticket-${restaurant.name.replace(/\s+/g, '-').toLowerCase()}.png`;
         link.download = fileName;
@@ -256,7 +264,8 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         
         {restaurant.logo_url && (
            <div className="absolute top-4 left-1/2 -translate-x-1/2 mb-8 z-20">
-              <img src={restaurant.logo_url} alt="Logo" className="h-20 w-auto max-w-[200px] object-contain drop-shadow-lg" />
+              {/* LOGO HEADER : Taille augmentée pour être plus visible */}
+              <img src={restaurant.logo_url} alt="Logo" className="h-28 w-auto max-w-[240px] object-contain drop-shadow-lg" />
            </div>
         )}
         
@@ -362,7 +371,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     <input required type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full p-3 rounded-xl border outline-none focus:border-blue-500 bg-gray-900 border-gray-700 text-white placeholder-gray-500"/>
                     <input type="tel" placeholder="Mobile" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full p-3 rounded-xl border outline-none focus:border-blue-500 bg-gray-900 border-gray-700 text-white placeholder-gray-500"/>
                     
-                    {/* --- CORRECTION ICI : "required" SUPPRIMÉ --- */}
                     <div className="flex items-start gap-3 mt-4">
                         <input 
                             type="checkbox" 
@@ -376,7 +384,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         </label>
                     </div>
                     
-                    {/* BOUTON CONNECTÉ */}
                     <button type="submit" disabled={isSubmitting} className="w-full text-white font-bold text-lg py-4 rounded-xl mt-4 shadow-md transition-colors" style={{ backgroundColor: primaryColor }}>
                         {isSubmitting ? "..." : "RÉCUPÉRER MON LOT"}
                     </button>
@@ -397,9 +404,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                      <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
                      <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
                      
-                     {/* Logo à gauche */}
+                     {/* Logo à gauche (AGRANDI ICI) */}
                      {restaurant.logo_url && (
-                         <img src={restaurant.logo_url} alt={restaurant.name} className="w-16 h-16 object-contain bg-white/5 rounded-lg p-1" />
+                         <img src={restaurant.logo_url} alt={restaurant.name} className="w-24 h-24 object-contain bg-white/5 rounded-lg p-1" />
                      )}
                      
                      {/* Texte à droite */}
@@ -431,7 +438,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                      </div>
                      
                      {/* BOUTONS D'ACTION (Enregistrer et Offrir) */}
-                     {/* On ajoute data-html2canvas-ignore sur ce conteneur pour qu'il ne soit pas sur la photo */}
+                     {/* data-html2canvas-ignore sera détecté par notre filtre manuel dans toPng */}
                      <div className="grid grid-cols-2 gap-3 w-full" data-html2canvas-ignore="true">
                          <button onClick={handleDownloadTicket} className="flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors">
                              <Download size={16}/> Enregistrer
