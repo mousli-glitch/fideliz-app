@@ -1,13 +1,11 @@
 "use client"
 
-// On ajoute useRef pour cibler le ticket à capturer
 import { useState, useEffect, useRef } from "react"
 import { registerWinnerAction } from "@/app/actions/register-winner"
 import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook } from "lucide-react"
 import confetti from "canvas-confetti"
 import { motion, AnimatePresence, Variants } from "framer-motion"
 import QRCode from "react-qr-code"
-// On importe la librairie de capture d'image
 import { toPng } from 'html-to-image'
 
 // --- CONFIGURATION ---
@@ -59,7 +57,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const [wheelRotation, setWheelRotation] = useState(0)
   const [formData, setFormData] = useState({ firstName: '', email: '', phone: '', optIn: false })
 
-  // Référence pour capturer le ticket en image
   const ticketRef = useRef<HTMLDivElement>(null)
 
   const todayDate = new Date().toLocaleDateString('fr-FR');
@@ -73,12 +70,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     : (BACKGROUNDS[game.bg_choice || 0] || BACKGROUNDS[0]);
 
   const primaryColor = restaurant.primary_color || '#E11D48';
-
-  // --- STYLE UNIFORME NOIR ---
   const blackCardClass = "rounded-3xl p-8 shadow-2xl mx-4 text-center relative bg-black border border-gray-800 text-white";
   const subTextClass = "text-gray-400"; 
 
-  // --- LOGIQUE TEXTES ---
   const getActionLabel = () => {
     switch(game.active_action) {
         case 'GOOGLE_REVIEW': return "Noter sur Google";
@@ -109,20 +103,16 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }
   }, [step])
 
-  // --- FONCTION TÉLÉCHARGER TICKET (Enregistrer) ---
   const handleDownloadTicket = async () => {
     if (ticketRef.current === null) return;
     try {
-        // Capture l'élément
         const dataUrl = await toPng(ticketRef.current, { 
-            backgroundColor: '#000000', // Force le fond noir
-            // 👇 AJOUT CRUCIAL : Filtre pour ignorer les boutons lors de la photo
+            backgroundColor: '#000000', 
             filter: (node) => {
                 const element = node as HTMLElement;
                 return !(element.tagName && element.hasAttribute && element.hasAttribute('data-html2canvas-ignore'));
             }
         });
-        
         const link = document.createElement('a');
         const fileName = `ticket-${restaurant.name.replace(/\s+/g, '-').toLowerCase()}.png`;
         link.download = fileName;
@@ -134,18 +124,16 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }
   };
 
-  // --- FONCTION PARTAGER TICKET (Offrir) ---
   const handleShareTicket = async () => {
     const shareData = {
         title: `J'ai gagné chez ${restaurant.name} !`,
         text: `J'ai gagné un(e) ${winner.label} ! Tente ta chance ici :`,
-        url: window.location.href, // Partage l'URL actuelle du jeu
+        url: window.location.href,
     };
     try {
         if (navigator.share) {
             await navigator.share(shareData);
         } else {
-            // Fallback si le partage natif n'est pas supporté
             await navigator.clipboard.writeText(shareData.url);
             alert("Lien du jeu copié dans le presse-papier !");
         }
@@ -260,18 +248,17 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         </defs>
       </svg>
 
-      {/* ⚠️ CORRECTION MAJEURE ICI : flex flex-col pour empiler Logo puis Texte */}
       <div className="w-full max-w-md mx-auto relative z-10 flex flex-col items-center">
         
-        {/* LOGO : Plus d'absolute ! Il prend sa place naturelle. */}
         {restaurant.logo_url && (
-           <div className="w-full flex justify-center mt-12 mb-6 z-20">
+           // CORRECTION : On réduit la marge du bas pour coller le texte
+           <div className="w-full flex justify-center mt-12 mb-4 z-20">
               <img src={restaurant.logo_url} alt="Logo" className="h-48 w-auto max-w-[400px] object-contain drop-shadow-lg" />
            </div>
         )}
         
-        {/* TITRE : Il vient naturellement SOUS le logo. */}
         {step !== 'TICKET' && (
+            // CORRECTION : Suppression totale de la marge 'mt-64'
             <div className="text-center mb-10 relative z-10">
                 <GameTitle />
             </div>
@@ -397,55 +384,43 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         {/* 6. TICKET FINAL (Avec Enregistrer et Offrir) */}
         {step === 'TICKET' && winner && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300">
-             {/* La référence ticketRef est placée ici pour capturer toute cette div */}
              <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
                  
-                 {/* HEADER DU TICKET : Flexbox pour aligner Logo à gauche et Texte à droite */}
                  <div className="bg-gray-900 p-6 border-b border-dashed border-gray-700 relative flex items-center gap-4 text-left pb-10">
-                     {/* Encoches (Notches) */}
                      <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
                      <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
                      
-                     {/* Logo à gauche (Taille XXL : w-48 h-48) */}
                      {restaurant.logo_url && (
                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-48 h-48 object-contain bg-white/5 rounded-lg p-1" />
                      )}
                      
-                     {/* Texte à droite */}
                      <div>
                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">À présenter chez</p>
                          <h2 className="text-xl font-black text-white leading-tight">{restaurant.name}</h2>
                      </div>
                  </div>
 
-                 {/* Lot Gagné (Centré et chevauche légèrement le header) */}
                  <div className="bg-gray-900 p-4 text-center relative z-20 -mt-8">
                      <div className="bg-green-100 text-green-800 px-6 py-3 rounded-xl inline-block border border-green-200 shadow-sm">
                          <p className="text-lg font-black">{winner.label}</p>
                      </div>
                  </div>
 
-                 {/* Corps du Ticket */}
                  <div className="p-8 flex flex-col items-center bg-black">
-                     {/* QR Code sur fond blanc */}
                      <div className="bg-white p-3 rounded-xl mb-6 shadow-lg">
                         {dbWinnerId ? <QRCode value={dbWinnerId} size={150} bgColor="#ffffff" fgColor="#000000" /> : <div className="w-[150px] h-[150px] bg-gray-800 animate-pulse rounded"></div>}
                      </div>
                      <p className="text-xs font-bold text-gray-400 mb-6 uppercase tracking-wider">Code Unique</p>
                      
-                     {/* Détails */}
                      <div className="w-full text-left bg-gray-900 p-4 rounded-xl border border-gray-800 mb-6">
                         <div className="flex justify-between mb-2"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
                         <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
                      </div>
                      
-                     {/* BOUTONS D'ACTION (Enregistrer et Offrir) */}
-                     {/* data-html2canvas-ignore sera détecté par notre filtre manuel dans toPng */}
                      <div className="grid grid-cols-2 gap-3 w-full" data-html2canvas-ignore="true">
                          <button onClick={handleDownloadTicket} className="flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors">
                              <Download size={16}/> Enregistrer
                          </button>
-                         {/* Bouton connecté à la couleur */}
                          <button onClick={handleShareTicket} className="flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl text-sm hover:opacity-90 transition-opacity" style={{ backgroundColor: primaryColor }}>
                              <Share2 size={16}/> Offrir
                          </button>
