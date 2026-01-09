@@ -229,20 +229,8 @@ export default function NewGamePage() {
                                     <p className="text-xs text-slate-400 mt-2 ml-1">
                                         Conseil : Utilisez un format PNG transparent pour un meilleur rendu.
                                     </p>
-
-                                    {/* AJOUT: CHAMP URL DIRECTE */}
-                                    <div className="mt-4">
-                                        <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">
-                                            ou lien url du logo
-                                        </label>
-                                        <input 
-                                            type="url" 
-                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-300"
-                                            value={designData.logo_url} 
-                                            onChange={e => setDesignData({...designData, logo_url: e.target.value})}
-                                            placeholder="https://mon-site.com/mon-logo.png"
-                                        />
-                                    </div>
+                                    
+                                    {/* L'ancien champ URL directe a été supprimé ici */}
                                 </div>
 
                                 <div className="w-full h-px bg-slate-200"></div>
@@ -283,9 +271,8 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
-                        {/* 2. THEME AU CHOIX (Ex Apparence des Cartes) */}
+                        {/* 2. THEME AU CHOIX */}
                         <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            {/* TITRE MODIFIÉ */}
                             <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
                                 <Sun className="text-orange-500" size={24}/> Thème au choix
                             </h3>

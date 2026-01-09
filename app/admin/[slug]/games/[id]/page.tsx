@@ -270,28 +270,23 @@ export default function EditGamePage() {
                             </h3>
                             
                             <div className="space-y-8">
-                                {/* SECTION LOGO (AVEC CHAMP URL) */}
+                                {/* SECTION LOGO */}
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
                                         Logo du commerce
                                     </label>
                                     <div className="bg-white p-1 rounded-xl border border-slate-200">
+                                        {/* Ici, on utilise le composant LogoUploader.
+                                            Si tu as mis à jour LogoUploader avec mon code précédent, 
+                                            il n'y aura plus l'onglet "Lien URL" dedans. */}
                                         <LogoUploader 
                                             currentUrl={designData.logo_url} 
                                             onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
                                         />
                                     </div>
                                     
-                                    {/* NOUVEAU : Champ pour URL directe */}
-                                    <div className="mt-3">
-                                        <input 
-                                            type="text" 
-                                            placeholder="Ou collez un lien URL direct vers votre logo..." 
-                                            className="w-full p-3 text-sm border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-400"
-                                            value={designData.logo_url}
-                                            onChange={(e) => setDesignData({...designData, logo_url: e.target.value})}
-                                        />
-                                    </div>
+                                    {/* MODIFICATION ICI : J'ai supprimé l'input texte "Lien URL direct" qui était ici 
+                                        pour ne garder que la zone de glisser-déposer ci-dessus */}
 
                                     <p className="text-xs text-slate-400 mt-2 ml-1">
                                         Conseil : Utilisez un format PNG transparent pour un meilleur rendu.
