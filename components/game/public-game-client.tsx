@@ -304,22 +304,31 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS - MODIFIE ICI */}
+            {/* 2. INSTRUCTIONS - MISE À JOUR DESIGN ET DIMENSIONS */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
-                    <div className="mb-6 flex justify-center"><div className={`p-4 rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}><PenTool className="w-8 h-8 text-blue-400" /></div></div>
-                    <h2 className={`text-xl font-bold mb-4 ${cardTextClass}`}>Dernière étape !</h2>
-                    <p className={`text-sm mb-6 leading-relaxed px-2 ${subTextClass}`}>Une fois l'action effectuée, utilisez les onglets pour revenir ici.</p>
+                    <div className="mb-6 flex justify-center">
+                        <div className={`p-4 rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}>
+                            <PenTool className="w-8 h-8 text-blue-500" />
+                        </div>
+                    </div>
+                    <h2 className={`text-xl font-bold mb-3 ${cardTextClass}`}>Dernière étape !</h2>
+                    <p className={`text-sm mb-6 leading-relaxed px-4 ${subTextClass}`}>
+                        Une fois l'action effectuée, utilisez les onglets pour revenir ici et lancer la roue !
+                    </p>
                     
-                    {/* 🔥 INTEGRATION DE L'IMAGE TUTO-SAFARI */}
-                    <div className={`mb-8 w-full p-2 rounded-xl border border-dashed flex flex-col items-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
+                    {/* ZONE IMAGE AVEC HAUTEUR LIMITÉE */}
+                    <div className={`mb-8 w-full p-3 rounded-2xl border border-dashed flex flex-col items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
                         <img 
                             src="/tuto-safari.png" 
                             alt="Instruction onglets iPhone" 
-                            className="w-full max-w-[280px] h-auto object-contain rounded-lg shadow-sm"
+                            className="w-full h-auto max-h-[80px] object-contain rounded-lg shadow-sm"
                         />
-                        <span className={`text-[10px] mt-2 font-medium ${subTextClass}`}>Cliquez sur l'icône encerclée pour revenir</span>
+                        <div className="flex items-center gap-2 mt-3">
+                            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${subTextClass}`}>Cliquez sur l'icône encerclée</span>
+                        </div>
                     </div>
 
                     <button onClick={handleInstructionValidate} className="w-full py-4 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95 text-lg" style={{ backgroundColor: primaryColor }}>
