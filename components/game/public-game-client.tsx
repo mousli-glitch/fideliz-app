@@ -260,17 +260,19 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         </defs>
       </svg>
 
-      <div className="w-full max-w-md mx-auto relative z-10">
+      {/* ⚠️ CORRECTION MAJEURE ICI : flex flex-col pour empiler Logo puis Texte */}
+      <div className="w-full max-w-md mx-auto relative z-10 flex flex-col items-center">
         
+        {/* LOGO : Plus d'absolute ! Il prend sa place naturelle. */}
         {restaurant.logo_url && (
-           <div className="absolute top-4 left-1/2 -translate-x-1/2 mb-8 z-20">
-              {/* LOGO HEADER : Taille DOUBLÉE (h-48 et max-w-400px) */}
+           <div className="w-full flex justify-center mt-12 mb-6 z-20">
               <img src={restaurant.logo_url} alt="Logo" className="h-48 w-auto max-w-[400px] object-contain drop-shadow-lg" />
            </div>
         )}
         
+        {/* TITRE : Il vient naturellement SOUS le logo. */}
         {step !== 'TICKET' && (
-            <div className="text-center mt-32 mb-10">
+            <div className="text-center mb-10 relative z-10">
                 <GameTitle />
             </div>
         )}
@@ -279,7 +281,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             
             {/* 1. LANDING */}
             {step === 'LANDING' && (
-            <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideIn}>
+            <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={blackCardClass}>
                     <div className="mb-4 flex justify-center"><PlatformIcon /></div>
                     <h2 className="text-xl font-bold mb-2 text-white">{game.active_action === 'GOOGLE_REVIEW' ? "Laissez un avis Google" : `Abonnez-vous à ${game.active_action}`}</h2>
@@ -293,7 +295,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
             {/* 2. INSTRUCTIONS */}
             {step === 'INSTRUCTIONS' && (
-            <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn}>
+            <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={blackCardClass}>
                     <div className="mb-6 flex justify-center"><div className="p-4 rounded-full bg-white/10"><PenTool className="w-8 h-8 text-blue-400" /></div></div>
                     <h2 className="text-xl font-bold mb-4 text-white">Instructions</h2>
@@ -310,7 +312,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
             {/* 3. VERIFICATION */}
             {step === 'VERIFYING' && (
-            <motion.div key="verifying" initial="hidden" animate="visible" exit="exit" variants={fadeIn}>
+            <motion.div key="verifying" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="w-full">
                 <div className={blackCardClass}>
                     <h2 className="text-2xl font-black mb-4 text-white">Pas encore fait ?</h2>
                     <button onClick={() => window.open(game.action_url, '_blank')} className="font-bold py-3 px-6 rounded-full mb-8 inline-flex items-center gap-2 shadow-lg bg-white text-black hover:bg-gray-200">
@@ -330,7 +332,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             
             {/* 4. ROUE */}
             {step === 'WHEEL' && (
-            <motion.div key="wheel" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="flex flex-col items-center relative z-10">
+            <motion.div key="wheel" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="flex flex-col items-center relative z-10 w-full">
                 <div className="relative w-[350px] h-[350px] mb-10">
                     <div className="absolute inset-0 z-0 rounded-full shadow-2xl" style={{ background: casinoConfig.blackBorder }}>
                          <svg viewBox="-1.1 -1.1 2.2 2.2" className="w-full h-full absolute top-0 left-0">
