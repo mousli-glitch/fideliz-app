@@ -105,12 +105,19 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     .eq('game_id', game.id)
     .order('weight', { ascending: false })
 
-  // 4. On lance le jeu
+  // 🔥 4. CORRECTION ICI : Fusion des données
+  // On injecte le design du jeu (qui contient le choix Dark/Light) dans l'objet restaurant
+  const restaurantWithDesign = {
+    ...restaurant,
+    design: game.design // C'est ici que la magie opère
+  }
+
+  // 5. On lance le jeu avec l'objet fusionné
   return (
     <PublicGameClient 
       game={game} 
       prizes={prizes || []} 
-      restaurant={restaurant} 
+      restaurant={restaurantWithDesign} 
     />
   )
 }
