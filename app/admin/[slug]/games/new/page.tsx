@@ -3,10 +3,10 @@
 import { useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createGameAction } from "@/app/actions/create-game"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Plus, Rocket, Sun, Moon } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Sun, Moon, Rocket, Trash2, Plus } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
-import LogoUploader from "@/components/LogoUploader" // <--- 1. Import du LogoUploader
+import LogoUploader from "@/components/LogoUploader" 
 
 // --- CONSTANTES ---
 const BACKGROUNDS = [
@@ -204,56 +204,173 @@ export default function NewGamePage() {
                     </div>
                 )}
 
-                {/* --- TAB 2: DESIGN --- */}
+                {/* --- TAB 2: DESIGN (MODIFIÉ) --- */}
                 {activeTab === 'DESIGN' && (
-                    <div className="space-y-6">
-                        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-4">
-                            <h3 className="font-bold text-lg text-slate-900 mb-4">Identité Visuelle</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                
-                                {/* --- 2. LE LOGO UPLOADER (Nouveau) --- */}
+                    <div className="space-y-8 animate-in fade-in duration-300">
+                        
+                        {/* 1. IDENTITÉ VISUELLE */}
+                        <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
+                                <Palette className="text-blue-600" size={24}/> Identité Visuelle
+                            </h3>
+                            
+                            <div className="space-y-8">
+                                {/* SECTION LOGO */}
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-2">Logo du commerce</label>
-                                    <LogoUploader 
-                                        currentUrl={designData.logo_url} 
-                                        onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
-                                    />
+                                    <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
+                                        Logo du commerce
+                                    </label>
+                                    <div className="bg-white p-1 rounded-xl border border-slate-200">
+                                        <LogoUploader 
+                                            currentUrl={designData.logo_url} 
+                                            onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
+                                        />
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-2 ml-1">
+                                        Conseil : Utilisez un format PNG transparent pour un meilleur rendu.
+                                    </p>
+
+                                    {/* AJOUT: CHAMP URL DIRECTE */}
+                                    <div className="mt-4">
+                                        <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                                            ou lien url du logo
+                                        </label>
+                                        <input 
+                                            type="url" 
+                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-300"
+                                            value={designData.logo_url} 
+                                            onChange={e => setDesignData({...designData, logo_url: e.target.value})}
+                                            placeholder="https://mon-site.com/mon-logo.png"
+                                        />
+                                    </div>
                                 </div>
 
-                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Couleur Boutons (Action)</label><div className="flex gap-2"><input type="color" className="h-12 w-16 rounded cursor-pointer border shadow-sm" value={designData.primary_color} onChange={e => setDesignData({...designData, primary_color: e.target.value})}/><input type="text" className="flex-1 p-3 border rounded-xl bg-white text-sm font-mono" value={designData.primary_color} readOnly/></div></div>
+                                <div className="w-full h-px bg-slate-200"></div>
+
+                                {/* SECTION COULEUR */}
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
+                                        Couleur Principale
+                                    </label>
+                                    <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm w-full md:w-fit">
+                                        <div className="relative group cursor-pointer">
+                                            <input 
+                                                type="color" 
+                                                className="absolute inset-0 w-12 h-12 opacity-0 cursor-pointer z-10"
+                                                value={designData.primary_color} 
+                                                onChange={e => setDesignData({...designData, primary_color: e.target.value})}
+                                            />
+                                            <div 
+                                                className="w-12 h-12 rounded-lg shadow-inner border border-slate-200 ring-2 ring-transparent group-hover:ring-blue-200 transition-all" 
+                                                style={{ backgroundColor: designData.primary_color }}
+                                            ></div>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Code HEX</span>
+                                            <input 
+                                                type="text" 
+                                                className="font-mono font-bold text-slate-800 outline-none uppercase w-24 bg-transparent text-lg" 
+                                                value={designData.primary_color} 
+                                                readOnly
+                                            />
+                                        </div>
+                                        <div className="h-8 w-px bg-slate-200 mx-2"></div>
+                                        <div className="text-xs text-slate-500 font-medium">
+                                            Couleur des boutons<br/>et actions.
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        {/* CONTRASTE */}
-                        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                            <h3 className="font-bold text-lg text-slate-900 mb-4">Contraste des Cartes (Sombre / Clair)</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-6 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-3 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-white shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                                    <Sun size={32} className={designData.card_style !== 'dark' ? "text-blue-600" : "text-slate-400"} />
-                                    <div className="bg-white border border-slate-200 px-4 py-2 rounded-lg shadow-sm"><span className="text-slate-900 font-bold text-sm">Texte Noir</span></div>
-                                    <p className="text-xs font-bold text-slate-500">Mode Clair (Standard)</p>
+                        {/* 2. THEME AU CHOIX (Ex Apparence des Cartes) */}
+                        <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            {/* TITRE MODIFIÉ */}
+                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
+                                <Sun className="text-orange-500" size={24}/> Thème au choix
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                
+                                {/* MODE CLAIR */}
+                                <div className="flex flex-col gap-3">
+                                    <h4 className="font-bold text-center text-slate-700 text-lg">Mode Clair</h4>
+                                    <div 
+                                        onClick={() => setDesignData({...designData, card_style: 'light'})} 
+                                        className={`cursor-pointer p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 h-full ${designData.card_style !== 'dark' ? 'border-blue-600 bg-blue-50/50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="bg-white border border-slate-200 px-6 py-3 rounded-xl shadow-sm">
+                                            <span className="text-slate-900 font-bold">Texte Noir</span>
+                                        </div>
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-xs text-slate-400">Recommandé (Standard)</span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div onClick={() => setDesignData({...designData, card_style: 'dark'})} className={`cursor-pointer p-6 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center gap-3 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-slate-900 hover:border-slate-500'}`}>
-                                    <Moon size={32} className={designData.card_style === 'dark' ? "text-blue-400" : "text-slate-600"} />
-                                    <div className="bg-slate-800 border border-slate-700 px-4 py-2 rounded-lg shadow-sm"><span className="text-white font-bold text-sm">Texte Blanc</span></div>
-                                    <p className="text-xs font-bold text-slate-400">Mode Sombre</p>
+                                
+                                {/* MODE SOMBRE */}
+                                <div className="flex flex-col gap-3">
+                                    <h4 className="font-bold text-center text-slate-700 text-lg">Mode Sombre</h4>
+                                    <div 
+                                        onClick={() => setDesignData({...designData, card_style: 'dark'})} 
+                                        className={`cursor-pointer p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 h-full ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-800 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="bg-slate-900 border border-slate-700 px-6 py-3 rounded-xl shadow-sm">
+                                            <span className="text-white font-bold">Texte Blanc</span>
+                                        </div>
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-xs text-slate-400">Élégant & Moderne</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* STYLE TITRE */}
-                        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                            <h3 className="font-bold text-lg text-slate-900 mb-4">Style du Titre</h3>
+                        {/* 3. STYLE DU TITRE */}
+                        <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 className="font-black text-xl text-slate-900 mb-6">Style du Titre</h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {TITLE_STYLES.map((style) => (<div key={style.id} onClick={() => setDesignData({...designData, title_style: style.id})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all ${designData.title_style === style.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}><p className="font-bold text-sm mb-2 text-slate-700">{style.label}</p><div className="text-xs bg-slate-900 text-white p-2 rounded font-black italic">{style.preview}</div></div>))}
+                                {TITLE_STYLES.map((style) => (
+                                    <div key={style.id} onClick={() => setDesignData({...designData, title_style: style.id})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all ${designData.title_style === style.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                                        <p className="font-bold text-sm mb-3 text-slate-700">{style.label}</p>
+                                        <div className="text-xs bg-slate-900 text-white p-3 rounded-lg font-black italic shadow-inner tracking-wide">
+                                            {style.preview}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
-                        {/* FOND D'ECRAN */}
-                        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                            <h3 className="font-bold text-lg text-slate-900 mb-4">Fond d'écran</h3>
-                            <div className="mb-6"><label className="block text-sm font-bold text-slate-700 mb-3">Choisir un thème :</label><div className="grid grid-cols-2 md:grid-cols-5 gap-3">{BACKGROUNDS.map((bg, index) => (<div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 ring-2 ring-blue-200 scale-105 shadow-md' : 'border-transparent opacity-70 hover:opacity-100'}`}><img src={bg} className="w-full h-full object-cover" alt="Fond" />{(!designData.bg_image_url && designData.bg_choice === index) && (<div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center"><div className="bg-white rounded-full p-1 shadow-sm"><div className="w-2 h-2 bg-blue-600 rounded-full"></div></div></div>)}</div>))}</div></div>
-                            <div className="pt-4 border-t border-slate-200"><label className="block text-sm font-bold text-slate-700 mb-2">Ou fond personnalisé (URL) :</label><input type="url" className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" value={designData.bg_image_url || ''} onChange={e => setDesignData({...designData, bg_image_url: e.target.value})} placeholder="https://..." /><p className="text-xs text-slate-400 mt-2">Remplace le thème si rempli.</p></div>
+                        {/* 4. FOND D'ECRAN */}
+                        <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 className="font-black text-xl text-slate-900 mb-6">Fond d'écran</h3>
+                            <div className="mb-6">
+                                <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Thèmes prédéfinis</label>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                    {BACKGROUNDS.map((bg, index) => (
+                                        <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-70 hover:opacity-100 hover:scale-105'}`}>
+                                            <img src={bg} className="w-full h-full object-cover" alt="Fond" />
+                                            {(!designData.bg_image_url && designData.bg_choice === index) && (
+                                                <div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center">
+                                                    <div className="bg-white rounded-full p-1.5 shadow-md">
+                                                        <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="pt-6 border-t border-slate-200">
+                                <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Ou image personnalisée</label>
+                                <input 
+                                    type="url" 
+                                    className="w-full p-4 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-300" 
+                                    value={designData.bg_image_url || ''} 
+                                    onChange={e => setDesignData({...designData, bg_image_url: e.target.value})} 
+                                    placeholder="https://mon-site.com/mon-fond.jpg" 
+                                />
+                                <p className="text-xs text-slate-400 mt-2 ml-1">L'URL personnalisée remplacera le thème choisi ci-dessus.</p>
+                            </div>
                         </div>
                     </div>
                 )}

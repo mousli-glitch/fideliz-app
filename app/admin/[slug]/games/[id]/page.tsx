@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-// J'ai bien ajouté Trash2 et Plus ici aussi !
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Moon, Plus, Rocket } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
@@ -55,6 +54,7 @@ export default function EditGamePage() {
 
   const [prizes, setPrizes] = useState<any[]>([])
 
+  // --- 1. CHARGEMENT DES DONNÉES EXISTANTES ---
   useEffect(() => {
     const loadGame = async () => {
         const idToLoad = params?.id
@@ -91,7 +91,11 @@ export default function EditGamePage() {
                 card_style: isDark ? 'dark' : 'light'
             })
 
-            const { data: prizesData } = await (supabase.from('prizes') as any).select('*').eq('game_id', game.id).order('weight', {ascending: false})
+            const { data: prizesData } = await (supabase.from('prizes') as any)
+                .select('*')
+                .eq('game_id', game.id)
+                .order('weight', {ascending: false})
+            
             setPrizes(prizesData || [])
         }
         setLoading(false)
@@ -100,6 +104,7 @@ export default function EditGamePage() {
   }, [params])
 
 
+  // --- 2. MISE À JOUR (UPDATE) ---
   const handleUpdate = async () => {
     if (!formData.name) return alert("Veuillez donner un Nom au Jeu.")
     
@@ -135,12 +140,14 @@ export default function EditGamePage() {
         }
 
         await (supabase.from('prizes') as any).delete().eq('game_id', gameId)
+        
         const prizesToInsert = prizes.map(p => ({
             game_id: gameId,
             label: p.label,
             color: p.color,
             weight: Number(p.weight)
         }))
+        
         if (prizesToInsert.length > 0) {
             await (supabase.from('prizes') as any).insert(prizesToInsert)
         }
@@ -162,6 +169,7 @@ export default function EditGamePage() {
     <div className="min-h-screen bg-slate-50 p-6 pb-20">
       <div className="max-w-4xl mx-auto">
         
+        {/* HEADER */}
         <div className="flex items-center justify-between mb-8">
             <div>
                 <Link href={`/admin/${params.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Retour</Link>
@@ -177,6 +185,7 @@ export default function EditGamePage() {
             </button>
         </div>
 
+        {/* ONGLETS */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="flex border-b border-slate-200 bg-slate-50">
                 <button onClick={() => setActiveTab('INFOS')} className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'INFOS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Layout size={18}/> Infos Jeu</button>
@@ -185,6 +194,8 @@ export default function EditGamePage() {
             </div>
 
             <div className="p-8">
+                
+                {/* --- TAB 1: INFOS --- */}
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -248,7 +259,7 @@ export default function EditGamePage() {
                     </div>
                 )}
 
-                {/* --- TAB 2: DESIGN (REFAIT AU PROPRE POUR MATCHING AVEC NEW/PAGE) --- */}
+                {/* --- TAB 2: DESIGN --- */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
@@ -259,7 +270,7 @@ export default function EditGamePage() {
                             </h3>
                             
                             <div className="space-y-8">
-                                {/* SECTION LOGO */}
+                                {/* SECTION LOGO (AVEC CHAMP URL) */}
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
                                         Logo du commerce
@@ -270,6 +281,18 @@ export default function EditGamePage() {
                                             onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
                                         />
                                     </div>
+                                    
+                                    {/* NOUVEAU : Champ pour URL directe */}
+                                    <div className="mt-3">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Ou collez un lien URL direct vers votre logo..." 
+                                            className="w-full p-3 text-sm border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-400"
+                                            value={designData.logo_url}
+                                            onChange={(e) => setDesignData({...designData, logo_url: e.target.value})}
+                                        />
+                                    </div>
+
                                     <p className="text-xs text-slate-400 mt-2 ml-1">
                                         Conseil : Utilisez un format PNG transparent pour un meilleur rendu.
                                     </p>
@@ -304,46 +327,46 @@ export default function EditGamePage() {
                                                 readOnly
                                             />
                                         </div>
-                                        <div className="h-8 w-px bg-slate-200 mx-2"></div>
-                                        <div className="text-xs text-slate-500 font-medium">
-                                            Couleur des boutons<br/>et actions.
-                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* 2. CONTRASTE DES CARTES */}
+                        {/* 2. THÈME (AVEC TITRES AU-DESSUS) */}
                         <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
                             <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
-                                <Sun className="text-orange-500" size={24}/> Apparence des Cartes
+                                <Sun className="text-orange-500" size={24}/> Thème au choix
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div 
-                                    onClick={() => setDesignData({...designData, card_style: 'light'})} 
-                                    className={`cursor-pointer p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-blue-50/50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
-                                >
-                                    <div className="bg-white border border-slate-200 px-6 py-3 rounded-xl shadow-sm">
-                                        <span className="text-slate-900 font-bold">Texte Noir</span>
-                                    </div>
-                                    <div className="flex flex-col items-center">
-                                        <span className={`font-bold ${designData.card_style !== 'dark' ? 'text-blue-700' : 'text-slate-600'}`}>Mode Clair</span>
+                                
+                                {/* Colonne Mode Clair */}
+                                <div className="flex flex-col gap-3">
+                                    <span className="text-center font-bold text-slate-700">Mode Clair</span>
+                                    <div 
+                                        onClick={() => setDesignData({...designData, card_style: 'light'})} 
+                                        className={`cursor-pointer p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-blue-50/50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="bg-white border border-slate-200 px-6 py-3 rounded-xl shadow-sm">
+                                            <span className="text-slate-900 font-bold">Texte Noir</span>
+                                        </div>
                                         <span className="text-xs text-slate-400">Recommandé (Standard)</span>
                                     </div>
                                 </div>
                                 
-                                <div 
-                                    onClick={() => setDesignData({...designData, card_style: 'dark'})} 
-                                    className={`cursor-pointer p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-800 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
-                                >
-                                    <div className="bg-slate-900 border border-slate-700 px-6 py-3 rounded-xl shadow-sm">
-                                        <span className="text-white font-bold">Texte Blanc</span>
-                                    </div>
-                                    <div className="flex flex-col items-center">
-                                        <span className={`font-bold ${designData.card_style === 'dark' ? 'text-blue-400' : 'text-slate-600'}`}>Mode Sombre</span>
+                                {/* Colonne Mode Sombre */}
+                                <div className="flex flex-col gap-3">
+                                    <span className="text-center font-bold text-slate-700">Mode Sombre</span>
+                                    <div 
+                                        onClick={() => setDesignData({...designData, card_style: 'dark'})} 
+                                        className={`cursor-pointer p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-800 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="bg-slate-900 border border-slate-700 px-6 py-3 rounded-xl shadow-sm">
+                                            <span className="text-white font-bold">Texte Blanc</span>
+                                        </div>
                                         <span className="text-xs text-slate-400">Élégant & Moderne</span>
                                     </div>
                                 </div>
+
                             </div>
                         </div>
 
@@ -397,6 +420,7 @@ export default function EditGamePage() {
                     </div>
                 )}
 
+                {/* --- TAB 3: LOTS --- */}
                 {activeTab === 'LOTS' && (
                     <div className="space-y-6">
                         <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-xl text-sm mb-4 flex items-center gap-3"><Gift size={20}/> <span>Plus le <strong>"Poids"</strong> est élevé, plus le lot sort souvent.</span></div>
