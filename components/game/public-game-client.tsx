@@ -56,6 +56,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [wheelRotation, setWheelRotation] = useState(0)
   const [formData, setFormData] = useState({ firstName: '', email: '', phone: '', optIn: false })
+  
+  // NOUVEAU STATE : Pour savoir si le logo est large (rectangle) ou non
+  const [isWideLogo, setIsWideLogo] = useState(false) 
 
   const ticketRef = useRef<HTMLDivElement>(null)
 
@@ -234,6 +237,17 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const slideIn: Variants = { hidden: { x: '100%', opacity: 0 }, visible: { x: 0, opacity: 1, transition: { duration: 0.3 } }, exit: { x: '-100%', opacity: 0, transition: { duration: 0.3 } } };
   const fadeIn: Variants = { hidden: { opacity: 0, scale: 0.95 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.4 } } }
 
+  // --- NOUVELLE FONCTION : DÉTECTION FORMAT DU LOGO ---
+  const handleLogoLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth, naturalHeight } = e.currentTarget;
+    // Si la largeur est 1.3 fois plus grande que la hauteur, on considère que c'est un rectangle (Large)
+    if (naturalWidth / naturalHeight > 1.3) {
+        setIsWideLogo(true)
+    } else {
+        setIsWideLogo(false) // C'est un rond ou un carré
+    }
+  }
+
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 overflow-hidden relative" 
          style={{ backgroundImage: `url(${currentBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
@@ -251,16 +265,15 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       <div className="w-full max-w-md mx-auto relative z-10 flex flex-col items-center">
         
         {restaurant.logo_url && (
-           // ✅ CORRECTION ADAPTATIVE :
-           // - px-6 : Marge sur les côtés pour ne pas coller aux bords de l'écran
-           // - max-h-48 : Hauteur max 192px (assez grand mais pas géant)
-           // - max-w-full : Ne dépasse pas la largeur du parent
-           // - w-auto h-auto : Garde les proportions naturelles !
            <div className="w-full flex justify-center mt-12 mb-4 z-20 px-6">
+              {/* --- IMAGE ADAPTATIVE --- */}
               <img 
                 src={restaurant.logo_url} 
                 alt="Logo" 
-                className="max-h-48 max-w-full w-auto h-auto object-contain drop-shadow-lg" 
+                onLoad={handleLogoLoad}
+                // Si c'est LARGE (rectangle) -> Hauteur 48 (192px)
+                // Si c'est CARRÉ/ROND -> Hauteur 32 (128px) seulement pour ne pas être trop gros
+                className={`${isWideLogo ? 'h-48' : 'h-32'} w-auto max-w-full object-contain drop-shadow-lg transition-all duration-500`} 
               />
            </div>
         )}
@@ -271,7 +284,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </div>
         )}
 
-        {/* Le reste du code ne change pas... */}
         <AnimatePresence mode="wait">
             
             {/* 1. LANDING */}
