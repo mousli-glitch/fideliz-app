@@ -4,29 +4,40 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 export async function deleteGameAction(gameId: string, slug: string) {
-  // ✅ CORRECTION MAJEURE ICI : 'await' a été ajouté
-  // Sans cela, le serveur plante (Erreur 500) car il essaie d'utiliser une Promesse
+  // 1. Connexion Supabase
   const supabase = await createClient()
 
-  // 1. Suppression dans Supabase avec vérification du nombre (count)
+  // 🔍 DEBUG : Qui essaie de supprimer ?
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  
+  if (authError || !user) {
+    console.error("❌ ERREUR AUTH : Utilisateur non connecté ou session invalide.")
+    throw new Error("Vous n'êtes pas connecté.")
+  }
+  console.log("👤 User ID connecté :", user.id)
+  console.log("🗑 Tentative suppression du jeu ID :", gameId)
+
+  // 2. Suppression dans Supabase
   const { error, count } = await supabase
     .from('games') 
-    .delete({ count: 'exact' }) // On demande à Supabase combien de lignes ont été supprimées
+    .delete({ count: 'exact' }) 
     .eq('id', gameId)
 
-  // Gestion des erreurs techniques (ex: base de données hors ligne)
+  // 3. Analyse du résultat
   if (error) {
-    console.error('Erreur suppression Supabase:', error)
-    throw new Error('Erreur technique lors de la suppression')
+    console.error('❌ ERREUR TECHNIQUE SUPABASE :', error)
+    throw new Error(`Erreur technique: ${error.message}`)
   }
 
-  // 2. Gestion des droits (RLS)
-  // Si count vaut 0, c'est que la suppression n'a pas eu lieu (souvent à cause des droits)
+  // Si count est 0, c'est que la RLS a bloqué silencieusement
   if (count === 0) {
-    console.error('Aucune ligne supprimée. Problème de droits RLS ou ID incorrect.')
-    throw new Error('Impossible de supprimer : Vous n\'avez pas les droits ou le jeu n\'existe pas.')
+    console.error('⛔️ ACCÈS REFUSÉ (RLS) : Supabase a dit "succès" mais a supprimé 0 ligne.')
+    console.error('👉 Vérifie que ce jeu appartient bien à un restaurant qui appartient à cet User ID.')
+    throw new Error('Impossible de supprimer : Vous n\'avez pas les droits sur ce jeu.')
   }
 
-  // 3. Rafraîchir le cache pour mettre à jour l'interface
+  console.log("✅ SUCCÈS : Jeu supprimé !")
+
+  // 4. Rafraîchir le cache
   revalidatePath(`/admin/${slug}/games`)
 }
