@@ -251,19 +251,27 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       <div className="w-full max-w-md mx-auto relative z-10 flex flex-col items-center">
         
         {restaurant.logo_url && (
-           // CORRECTION : On réduit la marge du bas pour coller le texte
-           <div className="w-full flex justify-center mt-12 mb-4 z-20">
-              <img src={restaurant.logo_url} alt="Logo" className="h-48 w-auto max-w-[400px] object-contain drop-shadow-lg" />
+           // ✅ CORRECTION ADAPTATIVE :
+           // - px-6 : Marge sur les côtés pour ne pas coller aux bords de l'écran
+           // - max-h-48 : Hauteur max 192px (assez grand mais pas géant)
+           // - max-w-full : Ne dépasse pas la largeur du parent
+           // - w-auto h-auto : Garde les proportions naturelles !
+           <div className="w-full flex justify-center mt-12 mb-4 z-20 px-6">
+              <img 
+                src={restaurant.logo_url} 
+                alt="Logo" 
+                className="max-h-48 max-w-full w-auto h-auto object-contain drop-shadow-lg" 
+              />
            </div>
         )}
         
         {step !== 'TICKET' && (
-            // CORRECTION : Suppression totale de la marge 'mt-64'
             <div className="text-center mb-10 relative z-10">
                 <GameTitle />
             </div>
         )}
 
+        {/* Le reste du code ne change pas... */}
         <AnimatePresence mode="wait">
             
             {/* 1. LANDING */}
