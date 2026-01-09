@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight, Loader2 } from "lucide-react"
+import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight, Loader2, Play } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { useParams } from "next/navigation"
+
+// 🔥 AJOUT : On importe l'action serveur que tu viens de créer
+import { deleteGameAction } from "@/app/actions/deleteGameAction"
 
 export default function GamesListPage() {
   // On force le type en tableau <any[]> pour éviter les erreurs TypeScript
@@ -48,19 +51,22 @@ export default function GamesListPage() {
     fetchData()
   }, [slug])
 
-  // 2. Fonction de Suppression
+  // 2. Fonction de Suppression (MODIFIÉE)
   const handleDelete = async (gameId: string) => {
-    if (confirm("Êtes-vous sûr de vouloir supprimer ce jeu ?")) {
-      const { error } = await supabase
-        .from("games")
-        .delete()
-        .eq("id", gameId)
+    if (confirm("Êtes-vous sûr de vouloir supprimer ce jeu définitivement ?")) {
+      try {
+        // A. On appelle l'action serveur pour supprimer en BDD
+        await deleteGameAction(gameId, slug)
 
-      if (!error) {
-        // Mise à jour visuelle
-        setGames(games.filter((g) => g.id !== gameId))
-      } else {
-        alert("Erreur lors de la suppression.")
+        // B. Si ça réussit, on met à jour l'affichage localement tout de suite
+        setGames((currentGames) => currentGames.filter((g) => g.id !== gameId))
+        
+        // Optionnel : un petit console log pour debug
+        console.log("Jeu supprimé avec succès")
+
+      } catch (error) {
+        console.error("Erreur lors de la suppression:", error)
+        alert("Une erreur est survenue lors de la suppression.")
       }
     }
   }
@@ -142,6 +148,16 @@ export default function GamesListPage() {
                     <Edit size={16} />
                     Modifier
                   </Link>
+
+                  {/* 🔥 NOUVEAU BOUTON : JOUER (Lien direct) */}
+                  <a
+                    href={`/play/${game.id}`}
+                    target="_blank"
+                    className="w-11 h-11 flex items-center justify-center bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors border border-purple-100 cursor-pointer"
+                    title="Tester le jeu"
+                  >
+                    <Play size={20} className="ml-1" /> {/* ml-1 pour centrer visuellement le triangle */}
+                  </a>
 
                   {/* QR Code */}
                   <Link
