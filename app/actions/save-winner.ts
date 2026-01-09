@@ -29,7 +29,22 @@ export async function saveWinner(data: {
       return { success: false, error: "Jeu introuvable" }
     }
 
-    // 2. Insérer le gagnant et RÉCUPÉRER L'ID
+    // --- 🔥 DÉBUT AJOUT CRM (SÉCURISÉ) ---
+    try {
+        await supabase.from('contacts').upsert({
+            restaurant_id: gameRow.restaurant_id,
+            email: data.email,
+            first_name: data.firstName || "",
+            phone: data.phone || null,
+            marketing_optin: true, // Ici tu forçais à true dans ton code d'origine
+            source_game_id: gameRow.id
+        }, { onConflict: 'restaurant_id, email' })
+    } catch (crmError) {
+        console.error("⚠️ Erreur sauvegarde CRM (non bloquant):", crmError)
+    }
+    // --- FIN AJOUT CRM ---
+
+    // 2. Insérer le gagnant et RÉCUPÉRER L'ID (Code d'origine)
     const { data: insertedWinner, error } = await supabase
       .from('winners')
       .insert({
@@ -43,7 +58,7 @@ export async function saveWinner(data: {
         marketing_optin: true, 
         status: 'available'
       })
-      .select('id') // Important : on récupère l'ID
+      .select('id') 
       .single()
 
     if (error) {
@@ -51,7 +66,6 @@ export async function saveWinner(data: {
       return { success: false, error: error.message }
     }
 
-    // 3. On renvoie l'ID au client pour générer le lien QR
     return { success: true, winnerId: insertedWinner.id }
 
   } catch (err) {

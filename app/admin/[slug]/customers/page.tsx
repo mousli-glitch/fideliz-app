@@ -2,7 +2,7 @@ import { createClient } from "@/utils/supabase/server"
 import { notFound } from "next/navigation"
 import { Mail, MessageSquare } from "lucide-react"
 import CsvExportButton from "@/components/admin/csv-export-button"
-import { CustomersTable } from "@/components/admin/customers-table" // 👈 On importe notre nouveau tableau intelligent
+import { CustomersTable } from "@/components/admin/customers-table"
 
 // --- TYPES LOCAUX ---
 interface Restaurant {
@@ -19,7 +19,7 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
   const { slug } = await params
   const supabase = await createClient()
 
-  // 1. DÉTECTION DU RESTAURANT
+  // 1. DÉTECTION DU RESTAURANT (Code inchangé)
   let query = supabase.from("restaurants").select("id, name")
   
   if (isUUID(slug)) {
@@ -38,16 +38,15 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
   // On force TypeScript à accepter que c'est bien un Restaurant.
   const restaurant = rawRestaurant as unknown as Restaurant;
 
-  // 2. RÉCUPÉRATION DES GAGNANTS (Clients)
+  // 2. RÉCUPÉRATION DES CLIENTS (MODIFIÉ : SOURCE SÉCURISÉE)/customers/page.tsx]
+  // Avant : on lisait 'winners'. Maintenant : on lit 'contacts'.
   const { data: rawCustomers } = await supabase
-    .from("winners")
+    .from("contacts") // 🔥 On cible la table permanente
     .select(`
-      id, first_name, email, phone, created_at,
-      game:games!inner(active_action), 
-      prize:prizes(label)
+      id, first_name, email, phone, created_at
     `)
     .eq("marketing_optin", true)
-    .eq("game.restaurant_id", restaurant.id)
+    .eq("restaurant_id", restaurant.id) // 🔥 Lien direct avec le resto (plus besoin de passer par 'game')
     .order("created_at", { ascending: false })
 
   // On force le typage des clients pour le composant
@@ -57,7 +56,7 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
     <div className="min-h-screen bg-slate-50 p-8">
       <div className="max-w-6xl mx-auto">
         
-        {/* EN-TÊTE (Identique à ton code) */}
+        {/* EN-TÊTE (Code inchangé) */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-black text-slate-900">Portefeuille Clients 👥</h1>
@@ -66,7 +65,7 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
             </p>
           </div>
           <div className="flex gap-3">
-            {/* BOUTON EXPORT CSV (Identique à ton code) */}
+            {/* BOUTON EXPORT CSV (Code inchangé) */}
             <CsvExportButton 
               data={customers} 
               filename={`clients-${restaurant.name}.csv`} 
@@ -74,7 +73,7 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
           </div>
         </div>
 
-        {/* ACTIONS DE CAMPAGNE (Identique à ton code) */}
+        {/* ACTIONS DE CAMPAGNE (Code inchangé) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-lg shadow-blue-200 cursor-not-allowed opacity-90">
                 <div className="flex justify-between items-start">
@@ -96,7 +95,7 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
             </div>
         </div>
 
-        {/* TABLEAU DES CLIENTS (C'est ici qu'on appelle notre version interactive) */}
+        {/* TABLEAU DES CLIENTS */}
         <CustomersTable initialCustomers={customers} />
 
       </div>

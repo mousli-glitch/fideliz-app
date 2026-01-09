@@ -2,7 +2,6 @@
 
 import { createClient } from '@supabase/supabase-js'
 
-// 👇 ON LOG LA CLÉ POUR VÉRIFIER (Regarde ton terminal VS Code après le clic)
 console.log("🔑 Vérification Clé Admin:", process.env.SUPABASE_SERVICE_ROLE_KEY ? "Présente" : "ABSENTE !")
 
 const supabaseAdmin = createClient(
@@ -15,9 +14,10 @@ export async function registerWinnerAction(data: any) {
 
   try {
     // 1. On vérifie le jeu
+    // 🔥 MODIF : J'ai ajouté 'restaurant_id' dans le select pour pouvoir l'utiliser après
     const { data: game, error: gameError } = await supabaseAdmin
       .from('games')
-      .select('validity_days, min_spend')
+      .select('validity_days, min_spend, restaurant_id') 
       .eq('id', data.game_id)
       .single()
     
@@ -28,12 +28,30 @@ export async function registerWinnerAction(data: any) {
 
     console.log("✅ Jeu trouvé, calcul expiration...")
 
-    // 2. Calcul date
+    // --- 🔥 DÉBUT AJOUT CRM (SÉCURISÉ) ---
+    // On profite qu'on a toutes les données pour sauvegarder dans le CRM
+    if (game.restaurant_id) {
+       try {
+         await supabaseAdmin.from('contacts').upsert({
+            restaurant_id: game.restaurant_id,
+            email: data.email,
+            phone: data.phone || null, // Peut être null ici
+            first_name: data.first_name,
+            marketing_optin: data.opt_in,
+            source_game_id: data.game_id
+         }, { onConflict: 'restaurant_id, email' })
+       } catch (crmError) {
+         console.error("⚠️ Erreur sauvegarde CRM (non bloquant):", crmError)
+       }
+    }
+    // --- FIN AJOUT CRM ---
+
+    // 2. Calcul date (Code d'origine)
     const days = game.validity_days || 30
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + days)
 
-    // 3. Insertion
+    // 3. Insertion (Code d'origine)
     console.log("💾 Tentative d'insertion dans 'winners'...")
     const { data: winner, error: insertError } = await supabaseAdmin
       .from('winners')
@@ -52,7 +70,6 @@ export async function registerWinnerAction(data: any) {
 
     if (insertError) {
         console.error("❌ ERREUR INSERTION SQL:", insertError)
-        // C'est souvent ici que ça bloque si les colonnes manquent
         return { success: false, error: "Erreur SQL: " + insertError.message }
     }
 
