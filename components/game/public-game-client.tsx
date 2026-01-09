@@ -42,7 +42,6 @@ type Props = {
     title_style?: string;
     bg_choice?: number;
     bg_image_url?: string;
-    // On s'assure que card_style peut être undefined, 'light' ou 'dark'
     card_style?: string; 
   }
   prizes: { id: string; label: string; color: string; weight: number }[]
@@ -57,7 +56,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [wheelRotation, setWheelRotation] = useState(0)
   const [formData, setFormData] = useState({ firstName: '', email: '', phone: '', optIn: false })
-  
   const [isWideLogo, setIsWideLogo] = useState(false) 
 
   const ticketRef = useRef<HTMLDivElement>(null)
@@ -74,17 +72,14 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
   const primaryColor = restaurant.primary_color || '#E11D48';
 
-  // 🔥 GESTION DU MODE SOMBRE / CLAIR 🔥
   const themeMode = game.card_style || restaurant.design?.card_style || 'dark';
   const isDarkMode = themeMode === 'dark';
 
-  // Classes dynamiques selon le thème
   const cardBgClass = isDarkMode ? "bg-black border-gray-800" : "bg-white border-white/50";
   const cardTextClass = isDarkMode ? "text-white" : "text-slate-900";
   const subTextClass = isDarkMode ? "text-gray-400" : "text-slate-500";
   const inputBgClass = isDarkMode ? "bg-gray-900 border-gray-700 text-white" : "bg-slate-50 border-slate-200 text-slate-900";
 
-  // La classe combinée pour les cartes
   const dynamicCardClass = `rounded-3xl p-8 shadow-2xl mx-4 text-center relative border ${cardBgClass} ${cardTextClass}`;
 
   const getActionLabel = () => {
@@ -309,19 +304,26 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS */}
+            {/* 2. INSTRUCTIONS - MODIFIE ICI */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
                     <div className="mb-6 flex justify-center"><div className={`p-4 rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}><PenTool className="w-8 h-8 text-blue-400" /></div></div>
-                    <h2 className={`text-xl font-bold mb-4 ${cardTextClass}`}>Instructions</h2>
-                    <p className={`text-sm mb-4 leading-relaxed px-2 ${subTextClass}`}>Une fois l'action effectuée, cliquez sur le bouton ci-dessous.</p>
-                    {/* Placeholder image instruction adapté */}
-                    <div className={`mb-8 w-full h-12 rounded-lg flex items-center justify-center text-xs border border-dashed ${isDarkMode ? 'bg-white/5 border-white/20 text-white/50' : 'bg-slate-50 border-slate-300 text-slate-400'}`}>
-                        [IMAGE ONGLETS IPHONE ICI]
+                    <h2 className={`text-xl font-bold mb-4 ${cardTextClass}`}>Dernière étape !</h2>
+                    <p className={`text-sm mb-6 leading-relaxed px-2 ${subTextClass}`}>Une fois l'action effectuée, utilisez les onglets pour revenir ici.</p>
+                    
+                    {/* 🔥 INTEGRATION DE L'IMAGE TUTO-SAFARI */}
+                    <div className={`mb-8 w-full p-2 rounded-xl border border-dashed flex flex-col items-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
+                        <img 
+                            src="/tuto-safari.png" 
+                            alt="Instruction onglets iPhone" 
+                            className="w-full max-w-[280px] h-auto object-contain rounded-lg shadow-sm"
+                        />
+                        <span className={`text-[10px] mt-2 font-medium ${subTextClass}`}>Cliquez sur l'icône encerclée pour revenir</span>
                     </div>
+
                     <button onClick={handleInstructionValidate} className="w-full py-4 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95 text-lg" style={{ backgroundColor: primaryColor }}>
-                        C'EST FAIT
+                        C'EST FAIT 🚀
                     </button>
                 </div>
             </motion.div>
@@ -331,7 +333,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             {step === 'VERIFYING' && (
             <motion.div key="verifying" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="w-full">
                 <div className={dynamicCardClass}>
-                    <h2 className={`text-2xl font-black mb-4 ${cardTextClass}`}>Pas encore fait ?</h2>
+                    <h2 className={`text-2xl font-black mb-4 ${cardTextClass}`}>Vérification...</h2>
                     <button onClick={() => window.open(game.action_url, '_blank')} className="font-bold py-3 px-6 rounded-full mb-8 inline-flex items-center gap-2 shadow-lg bg-white text-black hover:bg-gray-200 border border-slate-200">
                         {getActionLabel()} <ExternalLink size={16}/>
                     </button>
@@ -341,7 +343,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         ) : (
                             <div className="w-16 h-16 border-4 border-t-slate-500 rounded-full animate-spin border-slate-800"></div>
                         )}
-                        <p className={`font-bold animate-pulse text-sm ${subTextClass}`}>Nous vérifions actuellement votre action...</p>
+                        <p className={`font-bold animate-pulse text-sm ${subTextClass}`}>Nous vérifions votre participation...</p>
                     </div>
                 </div>
             </motion.div>
@@ -379,7 +381,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         {/* 5. FORMULAIRE */}
         {step === 'FORM' && winner && (
         <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300">
-            {/* On applique le style dynamique ici aussi */}
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass} ${cardTextClass}`}>
                 <div className="text-center mb-6">
                     <h2 className="text-2xl font-black mb-2">Félicitations !</h2>
@@ -400,7 +401,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                             className="mt-1 w-5 h-5 rounded accent-blue-600" 
                         />
                         <label htmlFor="optin" className={`text-xs ${subTextClass}`}>
-                            J'accepte de recevoir des offres de {restaurant.name} (Optionnel).
+                            J'accepte de recevoir des offres de {restaurant.name}.
                         </label>
                     </div>
                    
@@ -415,11 +416,8 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         {/* 6. TICKET FINAL */}
         {step === 'TICKET' && winner && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300">
-             {/* Le ticket reste en "Dark Mode" (look carte premium) même si le reste est light, pour l'élégance du screenshot */}
              <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
                   
-              {/* --- EN-TÊTE DU TICKET (MODIFIÉ) --- */}
-              {/* Ajout de 'justify-center' pour centrer le tout */}
               <div className="bg-gray-900 p-6 border-b border-dashed border-gray-700 relative flex items-center justify-center gap-4 text-left pb-10">
                   <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
                   <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
@@ -428,7 +426,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                       <img 
                         src={restaurant.logo_url} 
                         alt={restaurant.name} 
-                        // 🔥 CORRECTION ICI : w-24 h-24 (au lieu de w-48 h-48)
                         className="w-24 h-24 object-contain bg-white/5 rounded-lg p-1" 
                       />
                   )}
@@ -447,7 +444,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
               <div className="p-8 flex flex-col items-center bg-black">
                   <div className="bg-white p-3 rounded-xl mb-6 shadow-lg">
-                      {/* 🔥 C'est ICI le changement : URL Complète pour que l'appareil photo détecte le lien */}
                       {dbWinnerId ? (
                         <QRCode 
                             value={`${window.location.origin}/verify/${dbWinnerId}`} 
