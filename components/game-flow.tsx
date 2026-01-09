@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import Wheel from "@/components/game/game-wheel" 
 import { saveWinner } from "@/app/actions/save-winner"
 import { QRCodeCanvas } from "qrcode.react"
+// 🔥 AJOUT DES ICÔNES POUR L'INTERFACE
+import { ArrowRight, CheckCircle2, Instagram, Facebook, Star, ExternalLink } from "lucide-react"
 
 // TYPES
 type GameState = 'LANDING' | 'ACTION_INSTRUCTION' | 'VERIFYING' | 'GAME_WHEEL' | 'WIN_REVEAL' | 'LEAD_FORM' | 'REWARD_QR'
@@ -19,7 +21,6 @@ interface GameFlowProps {
     active_action: string
     action_url: string
     rules_text: string
-    // 🔥 AJOUT : On récupère la config design ici pour lire le card_style
     design?: {
         card_style?: 'light' | 'dark'
         primary_color?: string
@@ -49,7 +50,7 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
     setCurrentState('VERIFYING')
     setTimeout(() => {
       setCurrentState('GAME_WHEEL')
-    }, 3000)
+    }, 4000) // Un peu plus long pour laisser le temps de revenir
   }
 
   const handleSpinEnd = (prizeLabel: string) => {
@@ -87,31 +88,49 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
     setIsSaving(false)
   }
 
-  // --- TEXTES ---
-  const getActionText = () => {
-    if (restaurant.active_action === 'INSTAGRAM') return "Abonnez-vous à notre Instagram 📸"
-    if (restaurant.active_action === 'TIKTOK') return "Suivez-nous sur TikTok 🎵"
-    return "Laissez-nous un avis Google ⭐"
+  // --- HELPER TEXTES & ICONES ---
+  const getActionDetails = () => {
+    switch (restaurant.active_action) {
+        case 'INSTAGRAM':
+            return {
+                title: "Abonnez-vous sur Instagram 📸",
+                desc: "Cliquez, abonnez-vous, puis revenez sur cet onglet !",
+                icon: <Instagram className="w-10 h-10 text-pink-600 mb-2"/>
+            }
+        case 'FACEBOOK':
+            return {
+                title: "Likez notre page Facebook 👍",
+                desc: "Un like pour nous soutenir, puis revenez ici.",
+                icon: <Facebook className="w-10 h-10 text-blue-600 mb-2"/>
+            }
+        case 'TIKTOK':
+             return {
+                title: "Suivez-nous sur TikTok 🎵",
+                desc: "Rejoignez la communauté et revenez tenter votre chance.",
+                icon: <span className="text-3xl mb-2">🎵</span>
+            }
+        case 'GOOGLE_REVIEW':
+        default:
+            return {
+                title: "Laissez un avis Google ⭐",
+                desc: "Votre avis compte ! Notez-nous et revenez vite.",
+                icon: <Star className="w-10 h-10 text-yellow-400 fill-yellow-400 mb-2"/>
+            }
+    }
   }
 
-  // 🔥 LOGIQUE DU WRAPPER PRINCIPAL
-  // Si isDarkMode est true, on ajoute la classe "dark". 
-  // Tailwind va alors utiliser les variables CSS définies dans .dark (globals.css)
+  const actionInfo = getActionDetails()
+
   return (
     <div className={isDarkMode ? "dark" : ""}>
         
-        {/* 🔥 CORRECTION CSS : 
-            J'ai remplacé 'bg-slate-100' par 'bg-background' et 'text-slate-...' par 'text-foreground'.
-            Cela permet d'utiliser tes variables CSS dynamiques.
-        */}
         <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground overflow-hidden relative transition-colors duration-300">
             
-            {/* FOND : Image perso ou Dégradé par défaut (adaptatif) */}
+            {/* FOND */}
             <div className="absolute inset-0 z-0">
                 {restaurant.design?.bg_image_url ? (
                     <img src={restaurant.design.bg_image_url} alt="Background" className="w-full h-full object-cover opacity-50" />
                 ) : (
-                    // Dégradé subtil qui s'adapte au mode sombre via 'dark:from-...'
                     <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-900 dark:to-black" />
                 )}
             </div>
@@ -126,7 +145,6 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -50 }}
                     className="text-center"
                     >
-                    {/* 🔥 CORRECTION CARD : 'bg-card' au lieu de 'bg-white' */}
                     <Card className="p-8 shadow-xl border border-border bg-card/95 backdrop-blur text-card-foreground">
                         <h1 className="text-3xl font-black mb-4">{restaurant.name}</h1>
                         <p className="mb-8 opacity-80">Tournez la roue et gagnez une récompense immédiate !</p>
@@ -142,40 +160,67 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                     </motion.div>
                 )}
 
-                {/* 2. ACTION SOCIALE */}
+                {/* 2. ACTION SOCIALE (AVEC TON IMAGE) */}
                 {currentState === 'ACTION_INSTRUCTION' && (
                     <motion.div 
                     key="action"
                     initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }}
                     >
-                    <Card className="p-8 text-center shadow-xl border border-border bg-card/95 text-card-foreground">
-                        <h2 className="text-xl font-bold mb-4">Dernière étape !</h2>
-                        <p className="mb-6 opacity-80">
-                        Soutenez-nous pour lancer la roue :<br/>
-                        <span className="font-semibold text-lg">{getActionText()}</span>
+                    <Card className="p-6 text-center shadow-xl border border-border bg-card/95 text-card-foreground">
+                        
+                        {/* En-tête Icone + Titre */}
+                        <div className="flex flex-col items-center mb-4">
+                            {actionInfo.icon}
+                            <h2 className="text-xl font-bold">{actionInfo.title}</h2>
+                        </div>
+
+                        {/* 🔥 IMAGE INSTRUCTION (Transparente) */}
+                        <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 border border-slate-100 dark:border-slate-700 mb-6 shadow-inner flex flex-col items-center">
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+                                Comment revenir au jeu ?
+                            </p>
+                            
+                            {/* Ton image transparente */}
+                            <img 
+                                src="/tuto-safari.png" 
+                                alt="Cliquez sur les onglets" 
+                                className="w-full max-w-[280px] h-auto object-contain mx-auto"
+                            />
+                            
+                            <p className="text-xs text-slate-400 mt-3 italic">
+                                Cliquez sur l'icône encerclée pour revenir.
+                            </p>
+                        </div>
+
+                        <p className="mb-6 opacity-80 text-sm">
+                            {actionInfo.desc}
                         </p>
-                        <Button 
-                        onClick={startVerification}
-                        className="w-full py-6 font-bold text-white shadow-md"
-                        style={{ backgroundColor: restaurant.brand_color }}
-                        >
-                        C'EST PARTI 🚀
-                        </Button>
+
+                        <div className="space-y-3">
+                            <Button 
+                                onClick={startVerification}
+                                className="w-full py-6 font-bold text-white shadow-md text-lg animate-pulse"
+                                style={{ backgroundColor: restaurant.brand_color }}
+                            >
+                                C'EST PARTI <ExternalLink size={20} className="ml-2"/>
+                            </Button>
+                        </div>
                     </Card>
                     </motion.div>
                 )}
 
-                {/* 3. VERIFICATION (FAKE) */}
+                {/* 3. VERIFICATION */}
                 {currentState === 'VERIFYING' && (
                     <motion.div 
                     key="verifying"
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     className="text-center"
                     >
-                    <Card className="p-12 shadow-xl border border-border bg-card/95 text-card-foreground">
-                        <div className="animate-spin h-12 w-12 border-4 border-slate-200 rounded-full mx-auto mb-6"
+                    <Card className="p-12 shadow-xl border border-border bg-card/95 text-card-foreground flex flex-col items-center">
+                        <div className="animate-spin h-12 w-12 border-4 border-slate-200 rounded-full mb-6"
                             style={{ borderTopColor: restaurant.brand_color }} />
-                        <h3 className="font-bold text-lg">Vérification...</h3>
+                        <h3 className="font-bold text-lg mb-2">Vérification...</h3>
+                        <p className="text-sm opacity-60">Nous validons votre action.</p>
                     </Card>
                     </motion.div>
                 )}
@@ -205,7 +250,7 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                     initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1.1, opacity: 1 }} exit={{ opacity: 0 }}
                     className="text-center py-20"
                     >
-                    <div className="text-7xl mb-4">🎉</div>
+                    <div className="text-7xl mb-4 animate-bounce">🎉</div>
                     <h2 className="text-4xl font-black text-foreground drop-shadow-sm">BRAVO !</h2>
                     <p className="text-2xl font-bold mt-4" style={{ color: restaurant.brand_color }}>
                         {wonPrize?.label}
@@ -224,7 +269,6 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                         <form onSubmit={handleFormSubmit} className="space-y-4">
                         <div className="space-y-1">
                             <label className="text-xs font-semibold opacity-70 ml-1">Prénom</label>
-                            {/* Input stylisé pour supporter le dark mode */}
                             <input name="firstName" placeholder="Votre prénom" className="w-full p-3 border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-blue-500 outline-none border-input" required />
                         </div>
                         <div className="space-y-1">
@@ -253,10 +297,10 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                     initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                     className="text-center"
                     >
-                    {/* Pour le ticket gagnant, on garde souvent un fond blanc pour la lisibilité du QR, 
-                        mais ici j'adapte pour que ce soit cohérent */}
                     <Card className="p-8 shadow-xl border-4 border-slate-100 dark:border-slate-800 bg-card text-card-foreground relative overflow-hidden">
-                        <h2 className="text-xl font-black mb-2">C'EST GAGNÉ !</h2>
+                         <div className="absolute top-0 left-0 w-full h-2" style={{ backgroundColor: restaurant.brand_color }}></div>
+                         
+                        <h2 className="text-xl font-black mb-2 mt-2">C'EST GAGNÉ !</h2>
                         <div className="text-2xl font-bold mb-6" style={{ color: restaurant.brand_color }}>
                             {wonPrize?.label}
                         </div>
@@ -270,8 +314,13 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                             />
                         </div>
                         </div>
-                        <p className="text-sm font-medium opacity-80 mb-1">Présentez ce code au serveur</p>
-                        <p className="text-xs opacity-50">Valable uniquement aujourd'hui</p>
+                        
+                        <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg flex items-center justify-center gap-2 mb-2">
+                             <CheckCircle2 size={16} className="text-green-500"/>
+                             <span className="text-sm font-bold opacity-80">Lot validé</span>
+                        </div>
+
+                        <p className="text-xs opacity-50">Présentez ce code au serveur</p>
                     </Card>
                     </motion.div>
                 )}
