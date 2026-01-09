@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card"
 import Wheel from "@/components/game/game-wheel" 
 import { saveWinner } from "@/app/actions/save-winner"
 import { QRCodeCanvas } from "qrcode.react"
-// 🔥 AJOUT DES ICÔNES POUR L'INTERFACE
+// 🔥 AJOUT DES ICÔNES
 import { ArrowRight, CheckCircle2, Instagram, Facebook, Star, ExternalLink } from "lucide-react"
 
 // TYPES
@@ -36,11 +36,10 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
   const [winnerId, setWinnerId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
-  // 🔥 DÉTECTION DU THÈME
+  // DÉTECTION DU THÈME
   const isDarkMode = restaurant.design?.card_style === 'dark'
 
   // --- NAVIGATION ---
-
   const goToInstructions = () => setCurrentState('ACTION_INSTRUCTION')
   
   const startVerification = () => {
@@ -50,7 +49,7 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
     setCurrentState('VERIFYING')
     setTimeout(() => {
       setCurrentState('GAME_WHEEL')
-    }, 4000) // Un peu plus long pour laisser le temps de revenir
+    }, 4000) 
   }
 
   const handleSpinEnd = (prizeLabel: string) => {
@@ -88,19 +87,19 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
     setIsSaving(false)
   }
 
-  // --- HELPER TEXTES & ICONES ---
+  // --- TEXTES DYNAMIQUES ---
   const getActionDetails = () => {
     switch (restaurant.active_action) {
         case 'INSTAGRAM':
             return {
                 title: "Abonnez-vous sur Instagram 📸",
-                desc: "Cliquez, abonnez-vous, puis revenez sur cet onglet !",
+                desc: "Cliquez ci-dessous, abonnez-vous, puis revenez ici !",
                 icon: <Instagram className="w-10 h-10 text-pink-600 mb-2"/>
             }
         case 'FACEBOOK':
             return {
                 title: "Likez notre page Facebook 👍",
-                desc: "Un like pour nous soutenir, puis revenez ici.",
+                desc: "Un like pour nous soutenir, puis revenez tourner la roue.",
                 icon: <Facebook className="w-10 h-10 text-blue-600 mb-2"/>
             }
         case 'TIKTOK':
@@ -123,10 +122,9 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
 
   return (
     <div className={isDarkMode ? "dark" : ""}>
-        
         <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground overflow-hidden relative transition-colors duration-300">
             
-            {/* FOND */}
+            {/* FOND D'ÉCRAN */}
             <div className="absolute inset-0 z-0">
                 {restaurant.design?.bg_image_url ? (
                     <img src={restaurant.design.bg_image_url} alt="Background" className="w-full h-full object-cover opacity-50" />
@@ -168,26 +166,25 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                     >
                     <Card className="p-6 text-center shadow-xl border border-border bg-card/95 text-card-foreground">
                         
-                        {/* En-tête Icone + Titre */}
                         <div className="flex flex-col items-center mb-4">
                             {actionInfo.icon}
                             <h2 className="text-xl font-bold">{actionInfo.title}</h2>
                         </div>
 
-                        {/* 🔥 IMAGE INSTRUCTION (Transparente) */}
+                        {/* 🔥 IMAGE INSTRUCTION (Mise à jour pour .png) */}
                         <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 border border-slate-100 dark:border-slate-700 mb-6 shadow-inner flex flex-col items-center">
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
                                 Comment revenir au jeu ?
                             </p>
                             
-                            {/* Ton image transparente */}
+                            {/* C'est ici que l'image s'affiche ! */}
                             <img 
                                 src="/tuto-safari.png" 
                                 alt="Cliquez sur les onglets" 
                                 className="w-full max-w-[280px] h-auto object-contain mx-auto"
                             />
                             
-                            <p className="text-xs text-slate-400 mt-3 italic">
+                            <p className="text-[10px] text-slate-400 mt-3 italic">
                                 Cliquez sur l'icône encerclée pour revenir.
                             </p>
                         </div>
@@ -290,7 +287,7 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                     </motion.div>
                 )}
 
-                {/* 7. LE TICKET GAGNANT (QR LINK) */}
+                {/* 7. LE TICKET GAGNANT */}
                 {currentState === 'REWARD_QR' && (
                     <motion.div 
                     key="reward"
