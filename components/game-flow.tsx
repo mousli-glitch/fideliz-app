@@ -158,7 +158,7 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                     </motion.div>
                 )}
 
-                {/* 2. ACTION SOCIALE (AVEC TON IMAGE) */}
+                {/* 2. ACTION SOCIALE (AVEC IMAGE CORRIGÉE) */}
                 {currentState === 'ACTION_INSTRUCTION' && (
                     <motion.div 
                     key="action"
@@ -171,17 +171,18 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                             <h2 className="text-xl font-bold">{actionInfo.title}</h2>
                         </div>
 
-                        {/* 🔥 IMAGE INSTRUCTION (Mise à jour pour .png) */}
+                        {/* 🔥 IMAGE INSTRUCTION */}
                         <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 border border-slate-100 dark:border-slate-700 mb-6 shadow-inner flex flex-col items-center">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
                                 Comment revenir au jeu ?
                             </p>
                             
-                            {/* C'est ici que l'image s'affiche ! */}
+                            {/* 🔥 MODIF : ajout de ?v=2 pour casser le cache et style pour forcer l'affichage */}
                             <img 
-                                src="/tuto-safari.png" 
+                                src="/tuto-safari.png?v=2" 
                                 alt="Cliquez sur les onglets" 
                                 className="w-full max-w-[280px] h-auto object-contain mx-auto"
+                                style={{ display: 'block', minHeight: '50px' }}
                             />
                             
                             <p className="text-[10px] text-slate-400 mt-3 italic">
