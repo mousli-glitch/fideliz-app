@@ -265,15 +265,15 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       <div className="w-full max-w-md mx-auto relative z-10 flex flex-col items-center">
         
         {restaurant.logo_url && (
-           <div className="w-full flex justify-center mt-12 mb-4 z-20 px-6">
+           // ✅ CORRECTION : Réduction de la marge du bas (mb-4 -> mb-2)
+           <div className="w-full flex justify-center mt-12 mb-2 z-20 px-6">
               {/* --- IMAGE ADAPTATIVE --- */}
               <img 
                 src={restaurant.logo_url} 
                 alt="Logo" 
                 onLoad={handleLogoLoad}
-                // Si c'est LARGE (rectangle) -> Hauteur 48 (192px)
-                // Si c'est CARRÉ/ROND -> Hauteur 32 (128px) seulement pour ne pas être trop gros
-                className={`${isWideLogo ? 'h-48' : 'h-32'} w-auto max-w-full object-contain drop-shadow-lg transition-all duration-500`} 
+                // ✅ CORRECTION : Si c'est LARGE -> h-64 (plus grand) sinon h-32
+                className={`${isWideLogo ? 'h-64' : 'h-32'} w-auto max-w-full object-contain drop-shadow-lg transition-all duration-500`} 
               />
            </div>
         )}
@@ -284,6 +284,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </div>
         )}
 
+        {/* Le reste du code ne change pas... */}
         <AnimatePresence mode="wait">
             
             {/* 1. LANDING */}
