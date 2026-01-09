@@ -5,10 +5,10 @@ import QrCard from "@/components/QrCard"
 export default async function QRPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   
-  // 1. Récupération de l'ID du jeu depuis l'URL
+  // 1. Récupération de l'ID du jeu
   const { id } = await params
 
-  // 2. On récupère le jeu ET le restaurant lié pour avoir le slug
+  // 2. On récupère le jeu ET le restaurant
   const { data: game } = await supabase
     .from('games')
     .select(`
@@ -22,19 +22,20 @@ export default async function QRPage({ params }: { params: Promise<{ id: string 
 
   if (!game) return notFound()
 
-  // 🔥 CORRECTION ICI : On caste 'game' en 'any' pour éviter l'erreur "never"
+  // On récupère le slug du restaurant
   const restaurantSlug = (game as any).restaurants?.slug
 
   if (!restaurantSlug) {
     return <div className="p-10 text-center">Erreur : Ce jeu n'est pas lié à un restaurant avec un slug valide.</div>
   }
 
-  // 3. On définit l'URL de base pour pointer vers le SCAN
+  // 3. On construit l'URL INTELLIGENTE
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://fideliz-app-fawn.vercel.app"
   
-  // On construit l'URL du scan : .../scan/nom-du-resto
-  const scanBaseUrl = `${appUrl}/scan`
+  // 🔥 C'est ici qu'on retire le "/play/" qui posait problème
+  // L'URL sera : https://.../scan/pointb
+  const smartUrl = `${appUrl}/scan/${restaurantSlug}`
 
-  // On délègue l'affichage au client
-  return <QrCard slug={restaurantSlug} baseUrl={scanBaseUrl} />
+  // On passe 'url' explicitement à QrCard
+  return <QrCard url={smartUrl} slug={restaurantSlug} />
 }

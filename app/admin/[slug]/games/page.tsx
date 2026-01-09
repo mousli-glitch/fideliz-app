@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight, Loader2, Play, Power } from "lucide-react" // 🔥 J'ai ajouté 'Power'
+import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight, Loader2, Play, Power, ScanLine } from "lucide-react" // 🔥 J'ai ajouté 'ScanLine'
 import { createClient } from "@/utils/supabase/client"
 import { useParams } from "next/navigation"
 
 // Import des actions serveur
 import { deleteGameAction } from "@/app/actions/deleteGameAction"
-import { activateGameAction } from "@/app/actions/activateGameAction" // 🔥 Nouvelle action
+import { activateGameAction } from "@/app/actions/activateGameAction"
 
 export default function GamesListPage() {
   const [games, setGames] = useState<any[]>([]) 
@@ -48,7 +48,7 @@ export default function GamesListPage() {
     fetchData()
   }, [slug])
 
-  // Fonction de Suppression (Déjà existante)
+  // Fonction de Suppression
   const handleDelete = async (gameId: string) => {
     if (confirm("Êtes-vous sûr de vouloir supprimer ce jeu définitivement ?")) {
       try {
@@ -60,22 +60,19 @@ export default function GamesListPage() {
     }
   }
 
-  // 🔥 NOUVELLE Fonction d'Activation
+  // Fonction d'Activation
   const handleActivate = async (gameId: string) => {
-    // Optimistic Update : On met à jour l'affichage tout de suite pour que ce soit rapide
     const newGamesState = games.map(g => ({
       ...g,
-      status: g.id === gameId ? 'active' : 'archived' // Celui cliqué devient active, les autres archived
+      status: g.id === gameId ? 'active' : 'archived'
     }))
-    setGames(newGamesState) // Mise à jour visuelle immédiate
+    setGames(newGamesState)
 
     try {
-      // Appel au serveur
       await activateGameAction(gameId, restaurant.id, slug)
     } catch (error) {
       console.error(error)
       alert("Erreur lors de l'activation")
-      // Si erreur, on rechargerait idéalement les données, mais ici le revalidatePath fera le travail au prochain refresh
     }
   }
 
@@ -132,7 +129,6 @@ export default function GamesListPage() {
                       {game.name || "Jeu sans nom"}
                     </h2>
                     
-                    {/* Badge de statut dynamique */}
                     {isActive ? (
                       <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-green-200">
                         <span className="w-1.5 h-1.5 bg-green-600 rounded-full animate-pulse"></span>
@@ -165,7 +161,7 @@ export default function GamesListPage() {
                 {/* BOUTONS D'ACTION */}
                 <div className="flex items-center gap-2 w-full md:w-auto pt-4 md:pt-0 border-t md:border-t-0 border-slate-100">
                   
-                  {/* 🔥 BOUTON D'ACTIVATION (POWER) */}
+                  {/* BOUTON D'ACTIVATION */}
                   <button
                     onClick={() => !isActive && handleActivate(game.id)}
                     disabled={isActive}
@@ -182,6 +178,16 @@ export default function GamesListPage() {
 
                   <div className="w-px h-8 bg-slate-200 mx-1 hidden md:block"></div>
 
+                  {/* 🔥 BOUTON TEST DU SCAN (SMART LINK) */}
+                  <a
+                    href={`/scan/${slug}`} // Lien direct vers le scan
+                    target="_blank"
+                    className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-100 cursor-pointer"
+                    title="Tester le Lien Magique (Scan)"
+                  >
+                    <ScanLine size={18} />
+                  </a>
+
                   {/* Modifier */}
                   <Link
                     href={`/admin/${slug}/games/${game.id}`}
@@ -191,12 +197,12 @@ export default function GamesListPage() {
                     <Edit size={16} />
                   </Link>
 
-                  {/* Play / Test */}
+                  {/* Play / Test (Lien direct vers le jeu, pour debug) */}
                   <a
                     href={`/play/${game.id}`}
                     target="_blank"
                     className="w-10 h-10 flex items-center justify-center bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors border border-purple-100 cursor-pointer"
-                    title="Tester le jeu"
+                    title="Voir le jeu (ID direct)"
                   >
                     <Play size={18} className="ml-0.5" />
                   </a>
@@ -206,7 +212,7 @@ export default function GamesListPage() {
                     href={`/qr/${game.id}`}
                     target="_blank"
                     className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-100 cursor-pointer"
-                    title="Voir le QR Code"
+                    title="Imprimer le QR Code"
                   >
                     <QrCode size={18} />
                   </Link>

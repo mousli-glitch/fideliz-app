@@ -5,21 +5,26 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 
 interface QrCardProps {
-  slug: string
-  baseUrl: string
+  slug?: string
+  baseUrl?: string
+  url?: string // 🔥 NOUVEAU : On accepte l'URL complète
 }
 
-export default function QrCard({ slug, baseUrl }: QrCardProps) {
-  // Construction dynamique de l'URL cible
-  const targetUrl = `${baseUrl}/play/${slug}`
+export default function QrCard({ slug, baseUrl, url }: QrCardProps) {
+  // 🔥 LOGIQUE CORRIGÉE :
+  // Si on fournit 'url', on l'utilise telle quelle.
+  // Sinon, on garde l'ancienne méthode (baseUrl + /play/ + slug) pour la rétrocompatibilité.
+  const targetUrl = url 
+    ? url 
+    : `${baseUrl}/play/${slug}`
 
   return (
     <div className="min-h-screen bg-zinc-100 flex flex-col items-center justify-center p-4 print:p-0 print:bg-white">
       
       {/* ZONE DE CONTRÔLE (Masquée à l'impression) */}
       <div className="mb-8 text-center space-y-4 print:hidden">
-        <h1 className="text-2xl font-bold">QR Code : {slug}</h1>
-        <p className="text-zinc-500">
+        <h1 className="text-2xl font-bold">QR Code : {slug || 'Restaurant'}</h1>
+        <p className="text-zinc-500 break-all max-w-md mx-auto">
           Cible : <span className="text-blue-600 font-mono text-xs">{targetUrl}</span>
         </p>
         <Button onClick={() => window.print()} className="bg-black text-white hover:bg-zinc-800">
@@ -51,7 +56,7 @@ export default function QrCard({ slug, baseUrl }: QrCardProps) {
         </p>
 
         <div className="mt-auto pt-4 text-[10px] text-zinc-400 uppercase tracking-widest">
-          Offert par Restaurant {slug}
+          Offert par {slug ? `Restaurant ${slug}` : 'la Maison'}
         </div>
       </Card>
     </div>
