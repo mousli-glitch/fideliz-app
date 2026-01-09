@@ -75,8 +75,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const primaryColor = restaurant.primary_color || '#E11D48';
 
   // 🔥 GESTION DU MODE SOMBRE / CLAIR 🔥
-  // Si game.card_style n'est pas défini, on regarde dans restaurant.design (cas de la fusion faite dans PlayPage)
-  // Par défaut, on met 'dark' pour ne pas casser l'existant.
   const themeMode = game.card_style || restaurant.design?.card_style || 'dark';
   const isDarkMode = themeMode === 'dark';
 
@@ -238,7 +236,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   }
 
   const GameTitle = () => {
-      // Pour le titre, on garde le blanc avec ombre car il est sur l'image de fond, pas dans la carte
       const textShadowClass = "drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]";
       const highlightShadow = "drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]";
 
@@ -450,7 +447,17 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
               <div className="p-8 flex flex-col items-center bg-black">
                   <div className="bg-white p-3 rounded-xl mb-6 shadow-lg">
-                      {dbWinnerId ? <QRCode value={dbWinnerId} size={150} bgColor="#ffffff" fgColor="#000000" /> : <div className="w-[150px] h-[150px] bg-gray-800 animate-pulse rounded"></div>}
+                      {/* 🔥 C'est ICI le changement : URL Complète pour que l'appareil photo détecte le lien */}
+                      {dbWinnerId ? (
+                        <QRCode 
+                            value={`${window.location.origin}/verify/${dbWinnerId}`} 
+                            size={150} 
+                            bgColor="#ffffff" 
+                            fgColor="#000000" 
+                        />
+                      ) : (
+                        <div className="w-[150px] h-[150px] bg-gray-800 animate-pulse rounded"></div>
+                      )}
                   </div>
                   <p className="text-xs font-bold text-gray-400 mb-6 uppercase tracking-wider">Code Unique</p>
                    
