@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight, Loader2, Play, Power, ScanLine } from "lucide-react" // 🔥 J'ai ajouté 'ScanLine'
+import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight, Loader2, Play, Power } from "lucide-react" // 🔥 J'ai retiré 'ScanLine'
 import { createClient } from "@/utils/supabase/client"
 import { useParams } from "next/navigation"
 
@@ -178,15 +178,7 @@ export default function GamesListPage() {
 
                   <div className="w-px h-8 bg-slate-200 mx-1 hidden md:block"></div>
 
-                  {/* 🔥 BOUTON TEST DU SCAN (SMART LINK) */}
-                  <a
-                    href={`/scan/${slug}`} // Lien direct vers le scan
-                    target="_blank"
-                    className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-100 cursor-pointer"
-                    title="Tester le Lien Magique (Scan)"
-                  >
-                    <ScanLine size={18} />
-                  </a>
+                  {/* ❌ J'AI SUPPRIMÉ LE BOUTON SCAN ICI ❌ */}
 
                   {/* Modifier */}
                   <Link
