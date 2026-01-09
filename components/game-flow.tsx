@@ -158,7 +158,7 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                     </motion.div>
                 )}
 
-                {/* 2. ACTION SOCIALE (AVEC IMAGE CORRIGÉE) */}
+                {/* 2. ACTION SOCIALE (AVEC IMAGE CORRIGÉE : safari-guide.png) */}
                 {currentState === 'ACTION_INSTRUCTION' && (
                     <motion.div 
                     key="action"
@@ -177,9 +177,9 @@ export default function GameFlow({ restaurant, prizes }: GameFlowProps) {
                                 Comment revenir au jeu ?
                             </p>
                             
-                            {/* 🔥 MODIF : ajout de ?v=2 pour casser le cache et style pour forcer l'affichage */}
+                            {/* 🔥 MODIF : on pointe vers le nouveau nom 'safari-guide.png' */}
                             <img 
-                                src="/tuto-safari.png?v=2" 
+                                src="/safari-guide.png" 
                                 alt="Cliquez sur les onglets" 
                                 className="w-full max-w-[280px] h-auto object-contain mx-auto"
                                 style={{ display: 'block', minHeight: '50px' }}
