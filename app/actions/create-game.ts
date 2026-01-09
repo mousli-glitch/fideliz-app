@@ -9,7 +9,7 @@ const supabaseAdmin = createClient(
 )
 
 export async function createGameAction(data: any) {
-  console.log("🚀 ACTION SERVEUR DÉCLENCHÉE !") // Ceci apparaîtra dans ton terminal VS Code
+  console.log("🚀 ACTION SERVEUR DÉCLENCHÉE !") 
 
   try {
     // 1. Vérification de sécurité
@@ -34,13 +34,12 @@ export async function createGameAction(data: any) {
     
     const restaurantId = restaurant.id
 
-    // 3. Mettre à jour le design
+    // 3. Mettre à jour le design global du resto (Logo/Couleur)
     await supabaseAdmin.from("restaurants").update({
-      brand_color: data.design.brand_color,
-      text_color: data.design.text_color,
+      brand_color: data.design.brand_color, // Si tu utilises brand_color ailleurs
       primary_color: data.design.primary_color,
       logo_url: data.design.logo_url,
-      bg_image_url: data.design.bg_image_url
+      // On retire bg_image_url d'ici car c'est spécifique au jeu maintenant
     }).eq("id", restaurantId)
 
     // 4. Archiver les anciens jeux
@@ -50,7 +49,7 @@ export async function createGameAction(data: any) {
         .eq("restaurant_id", restaurantId)
         .eq("status", "active")
 
-    // 5. Créer le jeu
+    // 5. Créer le jeu (AVEC LE DESIGN)
     const { data: game, error: gameError } = await supabaseAdmin.from("games").insert({
       restaurant_id: restaurantId,
       name: data.form.name,
@@ -58,7 +57,12 @@ export async function createGameAction(data: any) {
       active_action: data.form.active_action,
       action_url: data.form.action_url,
       validity_days: data.form.validity_days,
-      min_spend: data.form.min_spend
+      min_spend: data.form.min_spend,
+      // 🔥 AJOUTS IMPORTANTS POUR LE DESIGN 🔥
+      bg_image_url: data.design.bg_image_url,
+      bg_choice: data.design.bg_choice,
+      title_style: data.design.title_style,
+      card_style: data.design.card_style || 'light' // On sauvegarde enfin le choix !
     }).select().single()
 
     if (gameError) throw new Error(gameError.message)

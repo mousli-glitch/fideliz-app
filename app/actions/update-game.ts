@@ -11,7 +11,7 @@ export async function updateGameAction(gameId: string, data: any) {
   try {
     // 1. IMPORTANT : On sauvegarde la couleur et le logo dans la table RESTAURANTS
     const { error: restoError } = await supabaseAdmin.from("restaurants").update({
-      primary_color: data.design.primary_color, // <--- C'est ça qui change la couleur des boutons
+      primary_color: data.design.primary_color, 
       logo_url: data.design.logo_url,
     }).eq("id", data.restaurant_id)
 
@@ -27,7 +27,8 @@ export async function updateGameAction(gameId: string, data: any) {
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
-      card_style: 'DARK' // On force le mode sombre
+      // 🔥 CORRECTION ICI : On ne force plus 'DARK', on prend la valeur du formulaire
+      card_style: data.design.card_style 
     }).eq("id", gameId)
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)
