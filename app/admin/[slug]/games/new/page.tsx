@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createGameAction } from "@/app/actions/create-game"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Sun, Moon, Rocket, Trash2, Plus } from "lucide-react"
+// 🔥 AJOUT : Import des icônes pour les messages
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Sun, Moon, Rocket, Trash2, Plus, AlertCircle, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
@@ -28,11 +29,16 @@ export default function NewGamePage() {
   const router = useRouter()
   
   const [saving, setSaving] = useState(false)
+  
+  // 🔥 AJOUT : États pour gérer les messages d'erreur et de succès
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
   const [activeTab, setActiveTab] = useState<'INFOS' | 'DESIGN' | 'LOTS'>('INFOS')
 
   const [formData, setFormData] = useState({
     name: "",
-    active_action: "GOOGLE_REVIEW", // Par défaut
+    active_action: "GOOGLE_REVIEW",
     action_url: "",
     validity_days: 30, 
     min_spend: 0,
@@ -54,16 +60,33 @@ export default function NewGamePage() {
     { label: "Dessert Offert", color: "#f59e0b", weight: 20 }
   ])
 
-  // --- FONCTION DE CRÉATION ---
+  // --- FONCTION DE CRÉATION MODIFIÉE ---
   const handleCreate = async () => {
-    if (!formData.name) return alert("❌ Veuillez donner un Nom au Jeu.")
-    
-    // Vérification du lien selon le type
-    if (formData.active_action === 'GOOGLE_REVIEW' && !formData.action_url.includes('google.com')) {
-        return alert("❌ Veuillez sélectionner un établissement Google valide via la recherche.")
+    // Reset des messages
+    setErrorMsg(null)
+    setSuccessMsg(null)
+
+    // 1. Validation Frontend (Affiche un bandeau rouge)
+    if (!formData.name) {
+        setActiveTab('INFOS') // On remet l'onglet infos pour montrer l'erreur
+        setErrorMsg("Le nom du jeu est obligatoire.")
+        // On scroll en haut pour voir l'erreur
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
     }
+    
+    if (formData.active_action === 'GOOGLE_REVIEW' && !formData.action_url.includes('google.com')) {
+        setActiveTab('INFOS')
+        setErrorMsg("Veuillez sélectionner un établissement Google valide via la recherche.")
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+    }
+
     if (formData.active_action !== 'GOOGLE_REVIEW' && !formData.action_url) {
-        return alert("❌ Veuillez coller le lien de votre page (Instagram, Facebook...).")
+        setActiveTab('INFOS')
+        setErrorMsg("Veuillez coller le lien de votre page (Instagram, Facebook...).")
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
     }
 
     setSaving(true)
@@ -79,16 +102,38 @@ export default function NewGamePage() {
         }
 
         const res = await createGameAction(cleanData)
+        
+        // Si le serveur renvoie une erreur
         if (!res.success) throw new Error(res.error)
         
-        router.push(`/admin/${params.slug}/games`)
-        router.refresh()
+        // ✅ SUCCÈS : On affiche le message vert et on redirige
+        setSuccessMsg("Le jeu a bien été créé ! Redirection...")
+        
+        // On attend 1.5 seconde pour que l'utilisateur lise le message
+        setTimeout(() => {
+            router.push(`/admin/${params.slug}/games`)
+            router.refresh()
+        }, 1500)
 
     } catch (e: any) {
-        alert("Erreur lors de la création : " + e.message)
-    } finally {
-        setSaving(false)
+        setErrorMsg("Erreur lors de la création : " + e.message)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        setSaving(false) // On arrête le chargement seulement si erreur
     }
+  }
+
+  // 🔥 ECRAN DE SUCCÈS (OVERLAY) 🔥
+  if (successMsg) {
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-green-50 animate-in fade-in zoom-in duration-300 p-6 text-center">
+            <div className="bg-white p-4 rounded-full shadow-lg mb-6">
+                <CheckCircle size={64} className="text-green-500" />
+            </div>
+            <h1 className="text-3xl font-black text-slate-900 mb-2">Félicitations ! 🎉</h1>
+            <p className="text-xl text-green-700 font-medium">{successMsg}</p>
+            <p className="text-slate-400 mt-8 text-sm animate-pulse">Redirection vers vos jeux...</p>
+        </div>
+    )
   }
 
   return (
@@ -104,12 +149,20 @@ export default function NewGamePage() {
             <button 
                 onClick={handleCreate} 
                 disabled={saving} 
-                className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 shadow-lg active:scale-95 transition-all"
+                className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 shadow-lg active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {saving ? <Loader2 className="animate-spin"/> : <Save size={20}/>} 
                 Créer le jeu
             </button>
         </div>
+
+        {/* 🔥 BANDEAU D'ERREUR ROUGE (Si erreur) */}
+        {errorMsg && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 flex items-center gap-3 animate-in slide-in-from-top-2">
+                <AlertCircle size={20} className="shrink-0" />
+                <span className="font-bold">{errorMsg}</span>
+            </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             {/* ONGLETS */}
@@ -125,11 +178,11 @@ export default function NewGamePage() {
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Nom du Jeu</label>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Nom du Jeu <span className="text-red-500">*</span></label>
                                 <input 
                                     type="text" 
                                     placeholder="Ex: Roue de Noël 2024" 
-                                    className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" 
+                                    className={`w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 ${errorMsg && !formData.name ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : ''}`} 
                                     value={formData.name} 
                                     onChange={e => setFormData({...formData, name: e.target.value})}
                                 />
@@ -151,9 +204,9 @@ export default function NewGamePage() {
                         </div>
 
                         {/* SECTION GOOGLE / MANUEL */}
-                        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 transition-all">
+                        <div className={`bg-slate-50 p-6 rounded-xl border transition-all ${errorMsg && !formData.action_url ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}>
                             <label className="block text-sm font-bold text-slate-700 mb-2">
-                                {formData.active_action === 'GOOGLE_REVIEW' ? 'Rechercher votre établissement :' : 'Lien URL de votre page :'}
+                                {formData.active_action === 'GOOGLE_REVIEW' ? 'Rechercher votre établissement * :' : 'Lien URL de votre page * :'}
                             </label>
 
                             {formData.active_action === 'GOOGLE_REVIEW' ? (
@@ -204,7 +257,7 @@ export default function NewGamePage() {
                     </div>
                 )}
 
-                {/* --- TAB 2: DESIGN (MODIFIÉ) --- */}
+                {/* --- TAB 2: DESIGN (INCHANGÉ) --- */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
@@ -229,8 +282,6 @@ export default function NewGamePage() {
                                     <p className="text-xs text-slate-400 mt-2 ml-1">
                                         Conseil : Utilisez un format PNG transparent pour un meilleur rendu.
                                     </p>
-                                    
-                                    {/* L'ancien champ URL directe a été supprimé ici */}
                                 </div>
 
                                 <div className="w-full h-px bg-slate-200"></div>
