@@ -421,12 +421,19 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
              {/* Le ticket reste en "Dark Mode" (look carte premium) même si le reste est light, pour l'élégance du screenshot */}
              <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
                   
-              <div className="bg-gray-900 p-6 border-b border-dashed border-gray-700 relative flex items-center gap-4 text-left pb-10">
+              {/* --- EN-TÊTE DU TICKET (MODIFIÉ) --- */}
+              {/* Ajout de 'justify-center' pour centrer le tout */}
+              <div className="bg-gray-900 p-6 border-b border-dashed border-gray-700 relative flex items-center justify-center gap-4 text-left pb-10">
                   <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
                   <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
                    
                   {restaurant.logo_url && (
-                      <img src={restaurant.logo_url} alt={restaurant.name} className="w-48 h-48 object-contain bg-white/5 rounded-lg p-1" />
+                      <img 
+                        src={restaurant.logo_url} 
+                        alt={restaurant.name} 
+                        // 🔥 CORRECTION ICI : w-24 h-24 (au lieu de w-48 h-48)
+                        className="w-24 h-24 object-contain bg-white/5 rounded-lg p-1" 
+                      />
                   )}
                    
                   <div>
