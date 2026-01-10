@@ -304,7 +304,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS - MODIFIÉ SELON TES DEMANDES */}
+            {/* 2. INSTRUCTIONS - VERSION ALLÉGÉE SANS EFFET PAVÉ */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -314,29 +314,34 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         </div>
                     </div>
                     
-                    <h2 className={`text-xl font-bold mb-4`}>Instructions</h2>
+                    <h2 className={`text-xl font-bold mb-5`}>Instructions</h2>
                     
-                    <div className={`text-left text-sm mb-8 space-y-4 px-2 ${subTextClass}`}>
-                        <p>1) Appuyez sur <b>« J’ai compris »</b> pour ouvrir la page de l’avis Google.</p>
-                        <p>2) Après avoir publié votre avis, revenez ici pour lancer la roue : appuyez sur l’icône <b>Onglets</b> en bas de votre écran, puis sélectionnez l’onglet du jeu.</p>
+                    <div className={`text-left text-sm mb-8 space-y-5 px-1 leading-relaxed ${subTextClass}`}>
+                        <p>Appuyez sur <b>« J’ai compris »</b> pour ouvrir l’avis Google.</p>
+                        
+                        <div className="flex gap-3 items-start">
+                            <span className="text-lg">⚠️</span>
+                            <p className="font-medium">
+                                <b>Le jeu ne revient pas automatiquement</b> : après votre avis, appuyez sur <b>Onglets</b> puis revenez sur <b>l’onglet du jeu</b> pour lancer la roue.
+                            </p>
+                        </div>
                     </div>
                     
-                    {/* ZONE IMAGE SAFARI ALLÉGÉE */}
+                    {/* ZONE IMAGE SAFARI AVEC MICRO-TEXTE SOUS LE CADRE */}
                     <div className="mb-8 w-full flex flex-col items-center gap-3">
                         <div className={`w-full p-2 rounded-2xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
                             <img 
                                 src="/tuto-safari.png?v=2" 
                                 alt="Instruction onglets iPhone" 
-                                className="w-full h-auto max-h-[80px] object-contain rounded-lg shadow-sm"
+                                className="w-full h-auto max-h-[80px] object-contain rounded-lg"
                                 onError={(e) => {
                                     e.currentTarget.src = "https://placehold.co/600x150?text=Utilisez+vos+onglets";
                                 }}
                             />
                         </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                            <span className={`text-[11px] font-bold uppercase tracking-wider ${subTextClass}`}>Appuyez sur l’icône encerclée (Onglets)</span>
-                        </div>
+                        <p className={`text-[11px] font-bold uppercase tracking-wider text-center ${subTextClass}`}>
+                            Touchez l’icône <b>Onglets</b> (encerclée) pour revenir au jeu.
+                        </p>
                     </div>
 
                     <button onClick={handleInstructionValidate} className="w-full py-4 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95 text-lg" style={{ backgroundColor: primaryColor }}>
