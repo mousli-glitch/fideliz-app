@@ -28,7 +28,7 @@ const casinoConfig = {
 
 const TikTokIcon = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" height="1em" width="1em" className="w-12 h-12">
-    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
+    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
   </svg>
 )
 
@@ -304,7 +304,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS - VERSION OPTIMISÉE */}
+            {/* 2. INSTRUCTIONS - VERSION OPTIMISÉE SANS RECTANGLE JAUNE ET HAUTEUR RÉDUITE */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -316,25 +316,30 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     
                     <h2 className={`text-xl font-bold mb-5`}>Instructions</h2>
                     
-                    <div className={`text-center mb-8 px-1 flex flex-col gap-2`}>
+                    <div className={`text-center space-y-3 mb-8 px-1`}>
                         {/* Ligne 1 : Taille réduite pour tenir sur une ligne */}
-                        <p className={`text-[12.5px] font-medium leading-none ${subTextClass}`}>
+                        <p className={`text-[12px] font-medium leading-none ${subTextClass}`}>
                           Appuyez sur « J’ai compris » pour ouvrir l’avis Google.
                         </p>
                         
-                        {/* Ligne 2 : Warning en blanc (poids normal/gras) avec emoji */}
-                        <p className="text-[11.5px] leading-tight text-white">
-                            ⚠️ <b>Pas de retour automatique</b> : <b>Onglets</b> → <b>retournez au jeu</b>.
-                        </p>
+                        {/* Lignes Warning : Texte blanc avec retour forcé et ligne 2 plus grande */}
+                        <div className="flex flex-col gap-1 items-center">
+                            <p className="text-[12.5px] font-bold text-white leading-tight">
+                                ⚠️ <b>Pas de retour automatique :</b>
+                            </p>
+                            <p className="text-[14.5px] font-bold text-white leading-tight">
+                                <b>Onglets → Retournez au jeu</b>
+                            </p>
+                        </div>
                     </div>
                     
                     {/* ZONE IMAGE SAFARI - HAUTEUR RÉDUITE ET CADRE COMPACT */}
                     <div className="mb-8 w-full flex flex-col items-center">
-                        <div className={`w-full p-1 rounded-2xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
+                        <div className={`w-full p-0.5 rounded-xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
                             <img 
                                 src="/tuto-safari.png?v=2" 
                                 alt="Instruction onglets iPhone" 
-                                className="w-full h-auto max-h-[65px] object-contain rounded-lg"
+                                className="w-full h-auto max-h-[55px] object-contain rounded-lg"
                                 onError={(e) => {
                                     e.currentTarget.src = "https://placehold.co/600x150?text=Utilisez+vos+onglets";
                                 }}
