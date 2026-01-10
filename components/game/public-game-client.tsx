@@ -73,11 +73,11 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const primaryColor = restaurant.primary_color || '#E11D48';
 
   // 🔥 GESTION DU THÈME DYNAMIQUE RÉPARÉE 🔥
-  const isDarkMode = game?.card_style === 'dark';
+  const isDarkMode = game?.card_style === 'dark' || restaurant?.design?.card_style === 'dark';
 
   const cardBgClass = isDarkMode 
     ? "bg-black/90 border-gray-800 text-white" 
-    : "bg-white border-white/50 text-slate-900";
+    : "bg-white/95 border-white/50 text-slate-900";
     
   const subTextClass = isDarkMode ? "text-gray-400" : "text-slate-500";
   
@@ -397,7 +397,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         {/* 5. FORMULAIRE */}
         {step === 'FORM' && winner && (
         <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass} ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                 <div className="text-center mb-6">
                     <h2 className="text-2xl font-black mb-2">Félicitations !</h2>
                     <p className={subTextClass}>Vous avez gagné :</p>
