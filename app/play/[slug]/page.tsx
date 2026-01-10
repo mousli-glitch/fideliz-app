@@ -23,7 +23,6 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
   // SCÉNARIO 1 : C'est un ID de JEU (Cas du QR Code)
   // ---------------------------------------------------------
   if (isUUID) {
-    // On essaie de trouver le JEU directement avec cet ID
     const { data: foundGame } = await (supabase.from('games') as any)
       .select('*')
       .eq('id', slug)
@@ -31,7 +30,6 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
 
     if (foundGame) {
       game = foundGame
-      // Si on a le jeu, on récupère le restaurant associé
       const { data: foundResto } = await (supabase.from('restaurants') as any)
         .select('*')
         .eq('id', foundGame.restaurant_id)
@@ -42,23 +40,19 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
 
   // ---------------------------------------------------------
   // SCÉNARIO 2 : C'est un SLUG de RESTAURANT (Cas du lien manuel)
-  // Ou si le Scénario 1 n'a rien donné
   // ---------------------------------------------------------
   if (!restaurant) {
     let query = (supabase.from('restaurants') as any).select('*')
     
-    // Si c'est un UUID mais pas un jeu, c'est peut-être l'ID du resto
     if (isUUID) { 
         query = query.eq('id', slug) 
     } else { 
-        // Sinon c'est le slug texte (ex: "testmicroo")
         query = query.eq('slug', slug) 
     }
 
     const { data: foundResto } = await query.single()
     restaurant = foundResto
 
-    // Si on a trouvé le resto, on cherche son jeu actif
     if (restaurant) {
         const { data: activeGame } = await (supabase.from('games') as any)
             .select('*')
@@ -72,8 +66,6 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
   // ---------------------------------------------------------
   // VERDICT FINAL
   // ---------------------------------------------------------
-  
-  // 1. Si le restaurant n'existe pas
   if (!restaurant) {
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-10 font-sans">
@@ -86,7 +78,6 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     )
   }
 
-  // 2. Si le restaurant existe mais n'a pas de jeu actif
   if (!game) {
      return (
         <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white font-sans">
@@ -99,27 +90,25 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
      )
   }
 
-  // 3. Tout est bon, on charge les lots
   const { data: prizes } = await (supabase.from('prizes') as any)
     .select('*')
     .eq('game_id', game.id)
     .order('weight', { ascending: false })
 
-  // 🔥 CORRECTION : Extraction du style depuis l'objet JSON design
-  const gameWithDesign = {
+  // 🔥 MODIFICATION ICI : On extrait card_style depuis game.design pour le mettre à la racine
+  const gameWithMappedDesign = {
     ...game,
-    card_style: game.design?.card_style || 'dark' 
+    card_style: game.design?.card_style || 'dark'
   }
 
   const restaurantWithDesign = {
     ...restaurant,
-    design: game.design 
+    design: game.design
   }
 
-  // 5. On lance le jeu avec l'objet fusionné
   return (
     <PublicGameClient 
-      game={gameWithDesign} 
+      game={gameWithMappedDesign} 
       prizes={prizes || []} 
       restaurant={restaurantWithDesign} 
     />

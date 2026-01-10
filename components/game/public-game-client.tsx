@@ -72,12 +72,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
   const primaryColor = restaurant.primary_color || '#E11D48';
 
-  // 🔥 GESTION DU THÈME DYNAMIQUE (FIXED) 🔥
+  // 🔥 GESTION DU THÈME DYNAMIQUE RÉPARÉE 🔥
   const isDarkMode = game?.card_style === 'dark';
 
   const cardBgClass = isDarkMode 
     ? "bg-black/90 border-gray-800 text-white" 
-    : "bg-white/95 border-white/50 text-slate-900";
+    : "bg-white border-white/50 text-slate-900";
     
   const subTextClass = isDarkMode ? "text-gray-400" : "text-slate-500";
   
@@ -85,7 +85,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     ? "bg-gray-900 border-gray-700 text-white" 
     : "bg-slate-50 border-slate-200 text-slate-900";
 
-  const dynamicCardClass = `rounded-3xl p-8 shadow-2xl mx-4 text-center relative border backdrop-blur-md transition-colors duration-500 ${cardBgClass}`;
+  const dynamicCardClass = `rounded-3xl p-8 shadow-2xl mx-4 text-center relative border backdrop-blur-sm transition-all duration-300 ${cardBgClass}`;
 
   const getActionLabel = () => {
     switch(game.active_action) {
