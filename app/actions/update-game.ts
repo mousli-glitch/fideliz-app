@@ -18,6 +18,7 @@ export async function updateGameAction(gameId: string, data: any) {
     if (restoError) throw new Error("Erreur sauvegarde couleur: " + restoError.message)
 
     // 2. On sauvegarde les réglages du JEU
+    // 🔥 CORRECTION : On utilise uniquement les colonnes physiques existantes pour éviter l'erreur de schéma
     const { error: gameError } = await supabaseAdmin.from("games").update({
       name: data.form.name,
       active_action: data.form.active_action,
@@ -27,12 +28,7 @@ export async function updateGameAction(gameId: string, data: any) {
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
-      // 🔥 SYNCHRONISATION : On écrit le style partout pour la lecture front-end
-      card_style: data.design.card_style,
-      design: {
-        ...data.design,
-        card_style: data.design.card_style
-      }
+      card_style: data.design.card_style // Utilisation de la colonne confirmée par capture
     }).eq("id", gameId)
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)

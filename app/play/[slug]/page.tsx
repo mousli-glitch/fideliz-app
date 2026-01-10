@@ -105,16 +105,17 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     .eq('game_id', game.id)
     .order('weight', { ascending: false })
 
-  // 🔥 4. FUSION DES DONNÉES SÉCURISÉE 🔥
+  // 🔥 4. CORRECTION : Synchronisation sur card_style physique
   const gameWithDesign = {
     ...game,
-    // On force la priorité sur ce qui est dans l'objet design JSON
-    card_style: game.design?.card_style || game.card_style || 'dark'
+    card_style: game.card_style || 'dark'
   }
 
   const restaurantWithDesign = {
     ...restaurant,
-    design: game.design 
+    design: {
+        card_style: game.card_style || 'dark'
+    }
   }
 
   // 5. On lance le jeu avec l'objet fusionné
