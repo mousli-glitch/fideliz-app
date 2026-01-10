@@ -304,7 +304,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS - MISE À JOUR DESIGN ET DIMENSIONS */}
+            {/* 2. INSTRUCTIONS - MODIFIÉ SELON TES DEMANDES */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -313,29 +313,34 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                             <Ruler className="w-8 h-8 text-blue-500 rotate-45" />
                         </div>
                     </div>
-                    <h2 className={`text-xl font-bold mb-3`}>Comment valider ?</h2>
-                    <p className={`text-sm mb-6 leading-relaxed px-4 ${subTextClass}`}>
-                        Une fois l'action effectuée, cliquez sur l'icône <b>onglets</b> en bas de votre écran pour revenir ici et lancer la roue !
-                    </p>
                     
-                    {/* ZONE IMAGE AVEC HAUTEUR LIMITÉE */}
-                    <div className={`mb-8 w-full p-3 rounded-2xl border border-dashed flex flex-col items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
-                        <img 
-                            src="/tuto-safari.png?v=2" 
-                            alt="Instruction onglets iPhone" 
-                            className="w-full h-auto max-h-[80px] object-contain rounded-lg shadow-sm"
-                            onError={(e) => {
-                                e.currentTarget.src = "https://placehold.co/600x150?text=Utilisez+vos+onglets";
-                            }}
-                        />
-                        <div className="flex items-center gap-2 mt-3">
+                    <h2 className={`text-xl font-bold mb-4`}>Instructions</h2>
+                    
+                    <div className={`text-left text-sm mb-8 space-y-4 px-2 ${subTextClass}`}>
+                        <p>1) Appuyez sur <b>« J’ai compris »</b> pour ouvrir la page de l’avis Google.</p>
+                        <p>2) Après avoir publié votre avis, revenez ici pour lancer la roue : appuyez sur l’icône <b>Onglets</b> en bas de votre écran, puis sélectionnez l’onglet du jeu.</p>
+                    </div>
+                    
+                    {/* ZONE IMAGE SAFARI ALLÉGÉE */}
+                    <div className="mb-8 w-full flex flex-col items-center gap-3">
+                        <div className={`w-full p-2 rounded-2xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
+                            <img 
+                                src="/tuto-safari.png?v=2" 
+                                alt="Instruction onglets iPhone" 
+                                className="w-full h-auto max-h-[80px] object-contain rounded-lg shadow-sm"
+                                onError={(e) => {
+                                    e.currentTarget.src = "https://placehold.co/600x150?text=Utilisez+vos+onglets";
+                                }}
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${subTextClass}`}>Cliquez sur l'icône encerclée</span>
+                            <span className={`text-[11px] font-bold uppercase tracking-wider ${subTextClass}`}>Appuyez sur l’icône encerclée (Onglets)</span>
                         </div>
                     </div>
 
                     <button onClick={handleInstructionValidate} className="w-full py-4 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95 text-lg" style={{ backgroundColor: primaryColor }}>
-                        C'EST FAIT 🚀
+                        J’AI COMPRIS ✅
                     </button>
                 </div>
             </motion.div>
