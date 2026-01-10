@@ -27,8 +27,13 @@ export async function updateGameAction(gameId: string, data: any) {
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
-      // 🔥 CORRECTION ICI : On ne force plus 'DARK', on prend la valeur du formulaire
-      card_style: data.design.card_style 
+      // On garde l'enregistrement à la racine pour la structure de table
+      card_style: data.design.card_style,
+      // 🔥 MODIFICATION : On enregistre aussi dans l'objet design pour la lecture front-end
+      design: {
+        ...data.design,
+        card_style: data.design.card_style
+      }
     }).eq("id", gameId)
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)
