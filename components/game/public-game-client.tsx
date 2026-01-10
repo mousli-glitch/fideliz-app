@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { registerWinnerAction } from "@/app/actions/register-winner"
-import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook } from "lucide-react"
+import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler } from "lucide-react"
 import confetti from "canvas-confetti"
 import { motion, AnimatePresence, Variants } from "framer-motion"
 import QRCode from "react-qr-code"
@@ -310,20 +310,23 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                 <div className={dynamicCardClass}>
                     <div className="mb-6 flex justify-center">
                         <div className={`p-4 rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}>
-                            <PenTool className="w-8 h-8 text-blue-500" />
+                            <Ruler className="w-8 h-8 text-blue-500" />
                         </div>
                     </div>
-                    <h2 className={`text-xl font-bold mb-3 ${cardTextClass}`}>Dernière étape !</h2>
+                    <h2 className={`text-xl font-bold mb-3 ${cardTextClass}`}>Comment valider ?</h2>
                     <p className={`text-sm mb-6 leading-relaxed px-4 ${subTextClass}`}>
-                        Une fois l'action effectuée, utilisez les onglets pour revenir ici et lancer la roue !
+                        Une fois l'action effectuée, cliquez sur l'icône <b>onglets</b> en bas de votre écran pour revenir ici et lancer la roue !
                     </p>
                     
-                    {/* ZONE IMAGE AVEC HAUTEUR LIMITÉE */}
+                    {/* ZONE IMAGE AVEC VERSIONING POUR FORCER LE CHARGEMENT */}
                     <div className={`mb-8 w-full p-3 rounded-2xl border border-dashed flex flex-col items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
                         <img 
-                            src="/tuto-safari.png" 
+                            src="/tuto-safari.png?v=1" 
                             alt="Instruction onglets iPhone" 
                             className="w-full h-auto max-h-[80px] object-contain rounded-lg shadow-sm"
+                            onError={(e) => {
+                                e.currentTarget.src = "https://placehold.co/600x150?text=Utilisez+vos+onglets";
+                            }}
                         />
                         <div className="flex items-center gap-2 mt-3">
                             <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
