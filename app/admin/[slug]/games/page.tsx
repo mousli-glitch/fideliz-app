@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight, Loader2, Play, Power } from "lucide-react" // 🔥 J'ai retiré 'ScanLine'
+import { Gamepad2, Plus, Edit, QrCode, Trash2, ExternalLink, ArrowRight, Loader2, Play, Power } from "lucide-react" 
 import { createClient } from "@/utils/supabase/client"
 import { useParams } from "next/navigation"
 
@@ -19,7 +19,7 @@ export default function GamesListPage() {
   const supabase = createClient()
   const slug = params?.slug as string
 
-  // 1. Charger les données
+  // 1. Charger les données (Logique originale préservée)
   useEffect(() => {
     const fetchData = async () => {
       if (!slug) return
@@ -48,7 +48,7 @@ export default function GamesListPage() {
     fetchData()
   }, [slug])
 
-  // Fonction de Suppression
+  // Fonction de Suppression (Logique originale préservée)
   const handleDelete = async (gameId: string) => {
     if (confirm("Êtes-vous sûr de vouloir supprimer ce jeu définitivement ?")) {
       try {
@@ -60,7 +60,7 @@ export default function GamesListPage() {
     }
   }
 
-  // Fonction d'Activation
+  // Fonction d'Activation (Logique originale préservée)
   const handleActivate = async (gameId: string) => {
     const newGamesState = games.map(g => ({
       ...g,
@@ -81,20 +81,20 @@ export default function GamesListPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-8 pb-20">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 pb-24">
+      <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
         
-        {/* EN-TÊTE */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* EN-TÊTE RESPONSIVE : S'empile sur mobile, côte à côte sur PC */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div>
-            <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 flex items-center gap-3">
               <Gamepad2 className="text-purple-600" size={32} />
               Mes Jeux
             </h1>
-            <p className="text-slate-500 font-medium mt-1">
+            <p className="text-slate-500 font-medium mt-1 text-sm md:text-base">
               Gérez vos campagnes pour <span className="text-slate-900 font-bold">{restaurant?.name}</span>.
               <br/>
-              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded mt-1 inline-block">
+              <span className="text-[10px] md:text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded mt-1 inline-block">
                 ℹ️ Un seul jeu peut être actif à la fois.
               </span>
             </p>
@@ -102,7 +102,7 @@ export default function GamesListPage() {
 
           <Link
             href={`/admin/${slug}/games/new`}
-            className="bg-slate-900 text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 shadow-lg shadow-slate-900/20 active:scale-95 transition-all"
+            className="bg-slate-900 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 shadow-lg active:scale-95 transition-all text-sm md:text-base"
           >
             <Plus size={20} />
             Nouveau Jeu
@@ -110,7 +110,7 @@ export default function GamesListPage() {
         </div>
 
         {/* LISTE DES JEUX */}
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4">
           {games.length > 0 ? (
             games.map((game) => {
               const isActive = game.status === 'active';
@@ -118,39 +118,38 @@ export default function GamesListPage() {
               return (
               <div
                 key={game.id}
-                className={`group bg-white rounded-2xl p-6 shadow-sm border flex flex-col md:flex-row items-start md:items-center justify-between gap-6 transition-all ${
-                  isActive ? 'border-green-500 ring-1 ring-green-500 shadow-green-100' : 'border-slate-200 hover:border-blue-200'
+                className={`group bg-white rounded-2xl p-4 md:p-6 shadow-sm border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-6 transition-all ${
+                  isActive ? 'border-green-500 ring-1 ring-green-500 shadow-green-50' : 'border-slate-200 hover:border-blue-200'
                 }`}
               >
                 {/* INFO DU JEU */}
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-bold text-slate-900">
+                <div className="flex-1 space-y-2 w-full">
+                  <div className="flex items-center justify-between md:justify-start gap-3">
+                    <h2 className="text-lg md:text-xl font-bold text-slate-900 truncate">
                       {game.name || "Jeu sans nom"}
                     </h2>
                     
                     {isActive ? (
-                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-green-200">
+                      <span className="bg-green-100 text-green-700 px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-green-200 shrink-0">
                         <span className="w-1.5 h-1.5 bg-green-600 rounded-full animate-pulse"></span>
-                        En ligne (Actif)
+                        Actif
                       </span>
                     ) : (
-                      <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border border-slate-200">
+                      <span className="bg-slate-100 text-slate-500 px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wider border border-slate-200 shrink-0">
                         Inactif
                       </span>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 font-medium">
-                    <span className="bg-slate-100 px-2 py-1 rounded-lg text-slate-600 font-mono text-[10px] uppercase border border-slate-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-xs md:text-sm text-slate-500 font-medium">
+                    <span className="bg-slate-100 px-2 py-1 rounded-lg text-slate-600 font-mono text-[9px] md:text-[10px] uppercase border border-slate-200 w-fit">
                       {game.active_action || "JEU"}
                     </span>
-                    <span className="hidden md:inline text-slate-300">•</span>
                     <a
                       href={game.action_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="hover:text-blue-600 flex items-center gap-1 truncate max-w-[200px] hover:underline"
+                      className="hover:text-blue-600 flex items-center gap-1 truncate max-w-full sm:max-w-[200px] hover:underline"
                     >
                       {game.action_url}
                       <ExternalLink size={10} />
@@ -158,53 +157,51 @@ export default function GamesListPage() {
                   </div>
                 </div>
 
-                {/* BOUTONS D'ACTION */}
-                <div className="flex items-center gap-2 w-full md:w-auto pt-4 md:pt-0 border-t md:border-t-0 border-slate-100">
+                {/* BOUTONS D'ACTION RESPONSIVE : Grille sur mobile pour éviter les débordements */}
+                <div className="grid grid-cols-4 sm:flex items-center gap-2 w-full md:w-auto pt-4 md:pt-0 border-t md:border-t-0 border-slate-100">
                   
                   {/* BOUTON D'ACTIVATION */}
                   <button
                     onClick={() => !isActive && handleActivate(game.id)}
                     disabled={isActive}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all text-sm border ${
+                    className={`col-span-4 sm:col-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all text-sm border ${
                       isActive 
                         ? "bg-green-50 text-green-700 border-green-200 cursor-default" 
                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900"
                     }`}
-                    title={isActive ? "Ce jeu est actuellement visible par les clients" : "Activer ce jeu (désactivera les autres)"}
+                    title={isActive ? "Ce jeu est actuellement visible" : "Activer ce jeu"}
                   >
                     <Power size={16} className={isActive ? "fill-green-700" : ""} />
                     {isActive ? "Activé" : "Activer"}
                   </button>
 
-                  <div className="w-px h-8 bg-slate-200 mx-1 hidden md:block"></div>
-
-                  {/* ❌ J'AI SUPPRIMÉ LE BOUTON SCAN ICI ❌ */}
+                  <div className="hidden sm:block w-px h-8 bg-slate-200 mx-1"></div>
 
                   {/* Modifier */}
                   <Link
                     href={`/admin/${slug}/games/${game.id}`}
-                    className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-all"
+                    className="w-full sm:w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-all"
                     title="Modifier"
                   >
                     <Edit size={16} />
                   </Link>
 
-                  {/* Play / Test (Lien direct vers le jeu, pour debug) */}
+                  {/* Play / Test */}
                   <a
                     href={`/play/${game.id}`}
                     target="_blank"
-                    className="w-10 h-10 flex items-center justify-center bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors border border-purple-100 cursor-pointer"
-                    title="Voir le jeu (ID direct)"
+                    className="w-full sm:w-10 h-10 flex items-center justify-center bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors border border-purple-100 cursor-pointer"
+                    title="Tester"
                   >
-                    <Play size={18} className="ml-0.5" />
+                    <Play size={18} />
                   </a>
 
                   {/* QR Code */}
                   <Link
                     href={`/qr/${game.id}`}
                     target="_blank"
-                    className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-100 cursor-pointer"
-                    title="Imprimer le QR Code"
+                    className="w-full sm:w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-100 cursor-pointer"
+                    title="QR Code"
                   >
                     <QrCode size={18} />
                   </Link>
@@ -212,7 +209,7 @@ export default function GamesListPage() {
                   {/* Supprimer */}
                   <button 
                     onClick={() => handleDelete(game.id)}
-                    className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors border border-red-100 opacity-60 hover:opacity-100"
+                    className="w-full sm:w-10 h-10 flex items-center justify-center bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors border border-red-100 opacity-60 hover:opacity-100"
                     title="Supprimer"
                   >
                     <Trash2 size={18} />
@@ -222,17 +219,17 @@ export default function GamesListPage() {
             )})
           ) : (
             // EMPTY STATE
-            <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-slate-300 text-center">
-              <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 text-slate-300">
+            <div className="flex flex-col items-center justify-center py-12 md:py-20 bg-white rounded-3xl border border-dashed border-slate-300 text-center px-4">
+              <div className="w-16 h-16 md:w-20 md:h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 text-slate-300">
                 <Gamepad2 size={40} />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Aucun jeu créé</h3>
-              <p className="text-slate-500 max-w-sm mb-8">
+              <h3 className="text-lg md:text-xl font-bold text-slate-900 mb-2">Aucun jeu créé</h3>
+              <p className="text-slate-500 text-sm md:text-base max-w-sm mb-8">
                 Créez votre premier jeu pour commencer à fidéliser vos clients.
               </p>
               <Link
                 href={`/admin/${slug}/games/new`}
-                className="bg-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-700 shadow-xl shadow-blue-200 transition-all flex items-center gap-2"
+                className="bg-blue-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-bold hover:bg-blue-700 shadow-xl shadow-blue-200 transition-all flex items-center gap-2"
               >
                 Créer mon premier jeu <ArrowRight size={20}/>
               </Link>
