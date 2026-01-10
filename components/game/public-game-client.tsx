@@ -304,7 +304,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS - VERSION ULTRA-ALLÉGÉE */}
+            {/* 2. INSTRUCTIONS - VERSION ÉPURÉE SANS RECTANGLE JAUNE */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -316,25 +316,26 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     
                     <h2 className={`text-xl font-bold mb-5`}>Instructions</h2>
                     
-                    <div className={`text-left text-sm mb-8 space-y-4 px-1 leading-snug ${subTextClass}`}>
-                        <p>Appuyez sur <b>« J’ai compris »</b> pour ouvrir l’avis Google.</p>
+                    <div className={`text-center space-y-3 mb-8 px-1`}>
+                        {/* Réduction légère de la taille (text-[13px]) pour tenir sur une ligne */}
+                        <p className={`text-[13px] font-medium leading-tight ${subTextClass}`}>
+                          Appuyez sur <b>« J’ai compris »</b> pour ouvrir l’avis Google.
+                        </p>
                         
-                        <div className="flex gap-2 items-start bg-yellow-500/10 p-3 rounded-xl border border-yellow-500/20">
-                            <span>⚠️</span>
-                            <p className="font-medium text-xs">
-                                <b>Le jeu ne revient pas seul</b> : <br/>
-                                <span className="text-blue-500">Onglets</span> → <span className="text-blue-500">onglet du jeu</span>.
-                            </p>
-                        </div>
+                        {/* Warning écrit directement en jaune sans rectangle de fond */}
+                        <p className="text-[13px] font-bold text-yellow-500 leading-tight">
+                            ⚠️ Le jeu ne revient pas seul : <br/>
+                            Onglets → onglet du jeu.
+                        </p>
                     </div>
                     
-                    {/* ZONE IMAGE SAFARI SIMPLE SANS TEXTE */}
+                    {/* ZONE IMAGE SAFARI - HAUTEUR RÉDUITE (p-1 et max-h-[70px]) */}
                     <div className="mb-8 w-full flex flex-col items-center">
-                        <div className={`w-full p-2 rounded-2xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
+                        <div className={`w-full p-1 rounded-2xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
                             <img 
                                 src="/tuto-safari.png?v=2" 
                                 alt="Instruction onglets iPhone" 
-                                className="w-full h-auto max-h-[80px] object-contain rounded-lg"
+                                className="w-full h-auto max-h-[70px] object-contain rounded-lg"
                                 onError={(e) => {
                                     e.currentTarget.src = "https://placehold.co/600x150?text=Utilisez+vos+onglets";
                                 }}
