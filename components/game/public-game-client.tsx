@@ -304,7 +304,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS - VERSION OPTIMISÉE SANS RECTANGLE JAUNE ET HAUTEUR RÉDUITE */}
+            {/* 2. INSTRUCTIONS - VERSION OPTIMISÉE PAR USER 🔥 */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -316,24 +316,24 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     
                     <h2 className={`text-xl font-bold mb-5`}>Instructions</h2>
                     
-                    <div className={`text-center space-y-3 mb-8 px-1`}>
-                        {/* Ligne 1 : Taille réduite pour tenir sur une ligne */}
-                        <p className={`text-[12px] font-medium leading-none ${subTextClass}`}>
+                    <div className={`text-center mb-8 px-1 flex flex-col gap-3`}>
+                        {/* Phrase principale inchangée */}
+                        <p className={`text-[12.5px] font-medium leading-tight ${subTextClass}`}>
                           Appuyez sur « J’ai compris » pour ouvrir l’avis Google.
                         </p>
                         
-                        {/* Lignes Warning : Texte blanc avec retour forcé et ligne 2 plus grande */}
+                        {/* Bloc Warning en 2 lignes fixes (Blanc) */}
                         <div className="flex flex-col gap-1 items-center">
-                            <p className="text-[12.5px] font-bold text-white leading-tight">
+                            <p className={`text-[12.5px] leading-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                                 ⚠️ <b>Pas de retour automatique :</b>
                             </p>
-                            <p className="text-[14.5px] font-bold text-white leading-tight">
-                                <b>Onglets → Retournez au jeu</b>
+                            <p className={`text-[14.5px] leading-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                                <b>Onglets → Onglet du jeu</b>
                             </p>
                         </div>
                     </div>
                     
-                    {/* ZONE IMAGE SAFARI - HAUTEUR RÉDUITE ET CADRE COMPACT */}
+                    {/* ZONE IMAGE SAFARI - HAUTEUR RÉDUITE */}
                     <div className="mb-8 w-full flex flex-col items-center">
                         <div className={`w-full p-0.5 rounded-xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
                             <img 
