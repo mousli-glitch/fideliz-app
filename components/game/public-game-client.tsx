@@ -154,6 +154,8 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const handleSpin = async () => {
     if (spinning) return
     setSpinning(true)
+
+    // 1. DÉTERMINATION DU GAGNANT EN AMONT
     const totalWeight = prizes.reduce((sum, p) => sum + p.weight, 0)
     let random = Math.random() * totalWeight
     let selectedPrizeIndex = 0
@@ -163,15 +165,19 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }
     const selectedPrize = prizes[selectedPrizeIndex]
     
+    // 2. CALCUL DE LA ROTATION SYNCHRONISÉE
     const numSegments = prizes.length
     const segmentAngle = 360 / numSegments
+    // Calcul de l'angle pour centrer le segment gagnant sous le curseur (-90° compensation)
     const winningSegmentCenterAngle = (selectedPrizeIndex * segmentAngle) + (segmentAngle / 2)
+    // On fait tourner la roue de 5 tours (1800°) + le complément pour arriver au bon segment
     const finalRotation = 1800 + (360 - winningSegmentCenterAngle) - 90
     
     setWheelRotation(finalRotation)
 
+    // 3. AFFICHAGE DU RÉSULTAT APRÈS L'ARRÊT
     setTimeout(() => {
-      setWinner(selectedPrize)
+      setWinner(selectedPrize) // On utilise le même objet sélectionné au début
       confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
       setStep('FORM')
       setSpinning(false)
