@@ -105,23 +105,21 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     .eq('game_id', game.id)
     .order('weight', { ascending: false })
 
-  // 🔥 4. CORRECTION ICI : Fusion des données
-  // On injecte le design du jeu (qui contient le choix Dark/Light) dans l'objet restaurant
-  const restaurantWithDesign = {
-    ...restaurant,
-    design: game.design // C'est ici que la magie opère
-  }
-
-  // On injecte aussi card_style directement dans game pour PublicGameClient
-  const gameWithDesign = {
+  // 🔥 4. CORRECTION ICI : Fusion des données pour le thème
+  const gameWithTheme = {
     ...game,
     card_style: game.design?.card_style || 'dark'
   }
 
-  // 5. On lance le jeu avec l'objet fusionné
+  const restaurantWithDesign = {
+    ...restaurant,
+    design: game.design 
+  }
+
+  // 5. On lance le jeu avec les objets d'origine intacts
   return (
     <PublicGameClient 
-      game={gameWithDesign} 
+      game={gameWithTheme} 
       prizes={prizes || []} 
       restaurant={restaurantWithDesign} 
     />
