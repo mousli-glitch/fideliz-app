@@ -9,7 +9,7 @@ const supabaseAdmin = createClient(
 
 export async function updateGameAction(gameId: string, data: any) {
   try {
-    // 1. Sauvegarde dans la table RESTAURANTS (Colonnes confirmées par capture)
+    // 1. Sauvegarde dans la table RESTAURANTS
     const { error: restoError } = await supabaseAdmin.from("restaurants").update({
       primary_color: data.design.primary_color, 
       logo_url: data.design.logo_url,
@@ -17,8 +17,7 @@ export async function updateGameAction(gameId: string, data: any) {
 
     if (restoError) throw new Error("Erreur sauvegarde resto: " + restoError.message)
 
-    // 2. Sauvegarde dans la table GAMES (Colonnes confirmées par capture)
-    // 🔥 CORRECTION : Suppression de la colonne 'design' inexistante pour éviter l'erreur schema cache
+    // 2. Sauvegarde dans la table GAMES
     const { error: gameError } = await supabaseAdmin.from("games").update({
       name: data.form.name,
       active_action: data.form.active_action,
@@ -28,22 +27,25 @@ export async function updateGameAction(gameId: string, data: any) {
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
-      card_style: data.design.card_style // On utilise la vraie colonne card_style
+      card_style: data.design.card_style,
+      wheel_palette: data.design.wheel_palette // 🔥 AJOUT DE LA PALETTE
     }).eq("id", gameId)
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)
 
-    // 3. Gestion des lots
+    // 3. Gestion des lots (Suppression de la couleur individuelle)
     await supabaseAdmin.from("prizes").delete().eq("game_id", gameId)
     
     const prizesToInsert = data.prizes.map((p: any) => ({
       game_id: gameId,
       label: p.label,
-      color: p.color,
-      weight: p.weight
+      color: "#000000", // 🔥 Neutre, car la palette gère le visuel maintenant
+      weight: Number(p.weight)
     }))
     
-    await supabaseAdmin.from("prizes").insert(prizesToInsert)
+    if (prizesToInsert.length > 0) {
+        await (supabaseAdmin.from('prizes') as any).insert(prizesToInsert)
+    }
 
     return { success: true }
   } catch (error: any) {

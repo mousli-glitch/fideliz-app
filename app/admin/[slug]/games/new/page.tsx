@@ -3,8 +3,7 @@
 import { useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createGameAction } from "@/app/actions/create-game"
-// 🔥 AJOUT : Import des icônes pour les messages
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Sun, Moon, Rocket, Trash2, Plus, AlertCircle, CheckCircle } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Sun, Moon, Rocket, Trash2, Plus, AlertCircle, CheckCircle, Check } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
@@ -18,6 +17,13 @@ const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=1000&auto=format&fit=crop",
 ]
 
+// 🔥 NOUVELLE CONSTANTE : PALETTES LUXE
+const PALETTES = [
+    { id: 'MONACO', label: 'Monaco', c1: '#8B0000', c2: '#0F0F0F' },
+    { id: 'GATSBY', label: 'Gatsby', c1: '#1E3A8A', c2: '#0F0F0F' },
+    { id: 'EMERALD', label: 'Emerald', c1: '#064E3B', c2: '#0F0F0F' },
+]
+
 const TITLE_STYLES = [
   { id: 'STYLE_1', label: 'Tentez votre / CHANCE (Néon)', preview: 'CHANCE !' },
   { id: 'STYLE_2', label: 'Jouez / POUR GAGNER', preview: 'POUR GAGNER' },
@@ -29,8 +35,6 @@ export default function NewGamePage() {
   const router = useRouter()
   
   const [saving, setSaving] = useState(false)
-  
-  // 🔥 AJOUT : États pour gérer les messages d'erreur et de succès
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
@@ -51,26 +55,23 @@ export default function NewGamePage() {
       bg_choice: 0,
       title_style: 'STYLE_1',
       bg_image_url: "",
-      card_style: 'light' 
+      card_style: 'light',
+      wheel_palette: 'MONACO' // 🔥 AJOUT INITIALISATION PALETTE
   })
 
   const [prizes, setPrizes] = useState([
-    { label: "1 Café Offert", color: "#3b82f6", weight: 50 },
-    { label: "-10% addition", color: "#10b981", weight: 30 },
-    { label: "Dessert Offert", color: "#f59e0b", weight: 20 }
+    { label: "1 Café Offert", weight: 50 },
+    { label: "-10% addition", weight: 30 },
+    { label: "Dessert Offert", weight: 20 }
   ])
 
-  // --- FONCTION DE CRÉATION MODIFIÉE ---
   const handleCreate = async () => {
-    // Reset des messages
     setErrorMsg(null)
     setSuccessMsg(null)
 
-    // 1. Validation Frontend (Affiche un bandeau rouge)
     if (!formData.name) {
-        setActiveTab('INFOS') // On remet l'onglet infos pour montrer l'erreur
+        setActiveTab('INFOS')
         setErrorMsg("Le nom du jeu est obligatoire.")
-        // On scroll en haut pour voir l'erreur
         window.scrollTo({ top: 0, behavior: 'smooth' })
         return
     }
@@ -98,18 +99,15 @@ export default function NewGamePage() {
             slug: params.slug,
             form: { ...formData, min_spend: formData.has_min_spend ? formData.min_spend : 0 },
             design: { ...designData, text_color: finalTextColor },
-            prizes: prizes.map(p => ({ label: p.label, color: p.color, weight: Number(p.weight) }))
+            prizes: prizes.map(p => ({ label: p.label, color: "#000000", weight: Number(p.weight) }))
         }
 
         const res = await createGameAction(cleanData)
         
-        // Si le serveur renvoie une erreur
         if (!res.success) throw new Error(res.error)
         
-        // ✅ SUCCÈS : On affiche le message vert et on redirige
         setSuccessMsg("Le jeu a bien été créé ! Redirection...")
         
-        // On attend 1.5 seconde pour que l'utilisateur lise le message
         setTimeout(() => {
             router.push(`/admin/${params.slug}/games`)
             router.refresh()
@@ -118,11 +116,10 @@ export default function NewGamePage() {
     } catch (e: any) {
         setErrorMsg("Erreur lors de la création : " + e.message)
         window.scrollTo({ top: 0, behavior: 'smooth' })
-        setSaving(false) // On arrête le chargement seulement si erreur
+        setSaving(false)
     }
   }
 
-  // 🔥 ECRAN DE SUCCÈS (OVERLAY) 🔥
   if (successMsg) {
     return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-green-50 animate-in fade-in zoom-in duration-300 p-6 text-center">
@@ -156,7 +153,6 @@ export default function NewGamePage() {
             </button>
         </div>
 
-        {/* 🔥 BANDEAU D'ERREUR ROUGE (Si erreur) */}
         {errorMsg && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 flex items-center gap-3 animate-in slide-in-from-top-2">
                 <AlertCircle size={20} className="shrink-0" />
@@ -173,7 +169,6 @@ export default function NewGamePage() {
             </div>
 
             <div className="p-8">
-                {/* --- TAB 1: INFOS --- */}
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -203,7 +198,6 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
-                        {/* SECTION GOOGLE / MANUEL */}
                         <div className={`bg-slate-50 p-6 rounded-xl border transition-all ${errorMsg && !formData.action_url ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}>
                             <label className="block text-sm font-bold text-slate-700 mb-2">
                                 {formData.active_action === 'GOOGLE_REVIEW' ? 'Rechercher votre établissement * :' : 'Lien URL de votre page * :'}
@@ -257,10 +251,35 @@ export default function NewGamePage() {
                     </div>
                 )}
 
-                {/* --- TAB 2: DESIGN (INCHANGÉ) --- */}
+                {/* --- TAB 2: DESIGN --- */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
+                        {/* 🔥 NOUVEAU BLOC : PALETTE DE LA ROUE LUXE */}
+                        <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
+                                <Palette className="text-blue-600" size={24}/> Palette de la Roue Luxe
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {PALETTES.map((p) => (
+                                    <div 
+                                        key={p.id} 
+                                        onClick={() => setDesignData({...designData, wheel_palette: p.id})} 
+                                        className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3 ${designData.wheel_palette === p.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                                    >
+                                        <div className="flex w-full h-10 rounded-lg overflow-hidden border border-slate-200 shadow-inner">
+                                            <div className="flex-1" style={{ backgroundColor: p.c1 }}></div>
+                                            <div className="flex-1" style={{ backgroundColor: p.c2 }}></div>
+                                        </div>
+                                        <span className="font-bold text-sm flex items-center gap-2">
+                                            {p.label} 
+                                            {designData.wheel_palette === p.id && <Check size={16} className="text-blue-600"/>}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
                         {/* 1. IDENTITÉ VISUELLE */}
                         <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
                             <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
@@ -413,12 +432,31 @@ export default function NewGamePage() {
                     </div>
                 )}
 
-                {/* --- TAB 3: LOTS (INCHANGÉ) --- */}
+                {/* --- TAB 3: LOTS --- */}
                 {activeTab === 'LOTS' && (
                     <div className="space-y-6">
                         <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-xl text-sm mb-4 flex items-center gap-3"><Gift size={20}/> <span>Plus le <strong>"Poids"</strong> est élevé, plus le lot sort souvent.</span></div>
-                        <div className="space-y-3">{prizes.map((prize, index) => (<div key={index} className="flex flex-col md:flex-row gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm items-center group hover:border-blue-300 transition-all"><div className="flex-1 w-full"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nom</label><input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/></div><div className="w-full md:w-auto"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Couleur</label><div className="flex gap-2 mt-1 items-center"><input type="color" value={prize.color} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].color = e.target.value; setPrizes(newPrizes); }} className="h-9 w-14 rounded cursor-pointer border shadow-sm"/></div></div><div className="w-full md:w-24"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Poids</label><input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center"/></div><button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center"><Trash2 size={20}/></button></div>))}</div>
-                        <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", color: "#3b82f6", weight: 10 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2"><Plus size={20}/> Ajouter un lot</button>
+                        <div className="space-y-3">
+                            {prizes.map((prize, index) => (
+                                <div key={index} className="flex flex-col md:flex-row gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm items-center group hover:border-blue-300 transition-all">
+                                    <div className="flex-1 w-full">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nom du lot</label>
+                                        <input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/>
+                                    </div>
+                                    {/* 🔥 COULEUR INDIVIDUELLE SUPPRIMÉE ICI 🔥 */}
+                                    <div className="w-full md:w-24">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center block">Poids</label>
+                                        <input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center"/>
+                                    </div>
+                                    <button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center">
+                                        <Trash2 size={20}/>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", weight: 10 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2">
+                            <Plus size={20}/> Ajouter un lot
+                        </button>
                     </div>
                 )}
             </div>

@@ -3,10 +3,11 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, Check } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
+import { updateGameAction } from "@/app/actions/update-game"
 
 const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
@@ -14,6 +15,13 @@ const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1605806616949-1e87b487bc2a?q=80&w=1000&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?q=80&w=1000&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=1000&auto=format&fit=crop",
+]
+
+// 🔥 NOUVELLE CONSTANTE : PALETTES LUXE
+const PALETTES = [
+    { id: 'MONACO', label: 'Monaco', c1: '#8B0000', c2: '#0F0F0F' },
+    { id: 'GATSBY', label: 'Gatsby', c1: '#1E3A8A', c2: '#0F0F0F' },
+    { id: 'EMERALD', label: 'Emerald', c1: '#064E3B', c2: '#0F0F0F' },
 ]
 
 const TITLE_STYLES = [
@@ -49,7 +57,8 @@ export default function EditGamePage() {
       bg_choice: 0,
       title_style: 'STYLE_1',
       bg_image_url: "",
-      card_style: 'light' 
+      card_style: 'light',
+      wheel_palette: 'MONACO' // 🔥 AJOUT INITIALISATION PALETTE
   })
 
   const [prizes, setPrizes] = useState<any[]>([])
@@ -88,7 +97,8 @@ export default function EditGamePage() {
                 bg_choice: game.bg_choice || 0,
                 title_style: game.title_style || 'STYLE_1',
                 bg_image_url: game.bg_image_url || "",
-                card_style: game.card_style || (isDark ? 'dark' : 'light')
+                card_style: game.card_style || (isDark ? 'dark' : 'light'),
+                wheel_palette: game.wheel_palette || 'MONACO' // 🔥 CHARGEMENT DE LA PALETTE DEPUIS SUPABASE
             })
 
             const { data: prizesData } = await (supabase.from('prizes') as any)
@@ -115,44 +125,15 @@ export default function EditGamePage() {
     setSaving(true)
 
     try {
-        // 🔥 CORRECTION : On utilise uniquement les colonnes physiques confirmées par capture
-        const { error: gameError } = await (supabase.from('games') as any).update({
-            name: formData.name,
-            active_action: formData.active_action,
-            action_url: formData.action_url,
-            validity_days: formData.validity_days,
-            min_spend: formData.has_min_spend ? formData.min_spend : 0,
-            bg_choice: designData.bg_choice,
-            title_style: designData.title_style,
-            bg_image_url: designData.bg_image_url,
-            card_style: designData.card_style // On utilise la colonne card_style directement
-        }).eq('id', gameId)
+        // Appeler l'action serveur avec les nouvelles données incluant wheel_palette
+        const res = await updateGameAction(gameId, {
+            restaurant_id: restaurantId,
+            form: formData,
+            design: designData,
+            prizes: prizes
+        })
 
-        if (gameError) throw new Error("Erreur Jeu: " + gameError.message)
-
-        if (restaurantId) {
-            const finalTextColor = designData.card_style === 'dark' ? '#FFFFFF' : '#0F172A'
-            const { error: restoError } = await (supabase.from('restaurants') as any).update({
-                logo_url: designData.logo_url,
-                primary_color: designData.primary_color,
-                text_color: finalTextColor 
-            }).eq('id', restaurantId)
-
-            if (restoError) throw new Error("Erreur Restaurant: " + restoError.message)
-        }
-
-        await (supabase.from('prizes') as any).delete().eq('game_id', gameId)
-        
-        const prizesToInsert = prizes.map(p => ({
-            game_id: gameId,
-            label: p.label,
-            color: p.color,
-            weight: Number(p.weight)
-        }))
-        
-        if (prizesToInsert.length > 0) {
-            await (supabase.from('prizes') as any).insert(prizesToInsert)
-        }
+        if (!res.success) throw new Error(res.error)
 
         alert("✅ Jeu modifié avec succès !")
         router.push(`/admin/${params.slug}/games`)
@@ -265,6 +246,31 @@ export default function EditGamePage() {
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
+                        {/* 🔥 NOUVEAU BLOC : PALETTE DE LA ROUE */}
+                        <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
+                                <Palette className="text-blue-600" size={24}/> Palette de la Roue Luxe
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {PALETTES.map((p) => (
+                                    <div 
+                                        key={p.id} 
+                                        onClick={() => setDesignData({...designData, wheel_palette: p.id})} 
+                                        className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3 ${designData.wheel_palette === p.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                                    >
+                                        <div className="flex w-full h-10 rounded-lg overflow-hidden border border-slate-200 shadow-inner">
+                                            <div className="flex-1" style={{ backgroundColor: p.c1 }}></div>
+                                            <div className="flex-1" style={{ backgroundColor: p.c2 }}></div>
+                                        </div>
+                                        <span className="font-bold text-sm flex items-center gap-2">
+                                            {p.label} 
+                                            {designData.wheel_palette === p.id && <Check size={16} className="text-blue-600"/>}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
                         {/* 1. IDENTITÉ VISUELLE */}
                         <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
                             <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
@@ -415,8 +421,27 @@ export default function EditGamePage() {
                 {activeTab === 'LOTS' && (
                     <div className="space-y-6">
                         <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-xl text-sm mb-4 flex items-center gap-3"><Gift size={20}/> <span>Plus le <strong>"Poids"</strong> est élevé, plus le lot sort souvent.</span></div>
-                        <div className="space-y-3">{prizes.map((prize, index) => (<div key={index} className="flex flex-col md:flex-row gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm items-center group hover:border-blue-300 transition-all"><div className="flex-1 w-full"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nom</label><input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/></div><div className="w-full md:w-auto"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Couleur</label><div className="flex gap-2 mt-1 items-center"><input type="color" value={prize.color} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].color = e.target.value; setPrizes(newPrizes); }} className="h-9 w-14 rounded cursor-pointer border shadow-sm"/></div></div><div className="w-full md:w-24"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Poids</label><input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center"/></div><button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center"><Trash2 size={20}/></button></div>))}</div>
-                        <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", color: "#3b82f6", weight: 10 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2"><Plus size={20}/> Ajouter un lot</button>
+                        <div className="space-y-3">
+                            {prizes.map((prize, index) => (
+                                <div key={index} className="flex flex-col md:flex-row gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm items-center group hover:border-blue-300 transition-all">
+                                    <div className="flex-1 w-full">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nom du lot</label>
+                                        <input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/>
+                                    </div>
+                                    {/* 🔥 COULEUR INDIVIDUELLE SUPPRIMÉE ICI 🔥 */}
+                                    <div className="w-full md:w-24">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center block">Poids</label>
+                                        <input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center"/>
+                                    </div>
+                                    <button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center">
+                                        <Trash2 size={20}/>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", weight: 10 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2">
+                            <Plus size={20}/> Ajouter un lot
+                        </button>
                     </div>
                 )}
             </div>
