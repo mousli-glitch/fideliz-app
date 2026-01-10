@@ -105,15 +105,19 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     .eq('game_id', game.id)
     .order('weight', { ascending: false })
 
-  // 🔥 CORRECTION : Extraction du style depuis l'objet JSON design
-  const gameWithDesign = {
-    ...game,
-    card_style: game.design?.card_style || 'dark' 
-  }
+ // ... (haut du fichier inchangé)
 
+  // 🔥 4. CORRECTION ICI : Fusion des données
+  // On injecte le design du jeu (qui contient le choix Dark/Light) dans l'objet restaurant
   const restaurantWithDesign = {
     ...restaurant,
     design: game.design 
+  }
+
+  // On prépare l'objet game avec le style extrait pour le client
+  const gameWithDesign = {
+    ...game,
+    card_style: game.design?.card_style || 'dark' 
   }
 
   // 5. On lance le jeu avec l'objet fusionné
