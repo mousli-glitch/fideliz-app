@@ -237,12 +237,14 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     return prizes.map((prize, index) => {
         const startPercent = index / numSegments
         const endPercent = (index + 1) / numSegments
-        const x1 = Math.cos(2 * Math.PI * startPercent); 
-        const y1 = Math.sin(2 * Math.PI * startPercent);
-        const x2 = Math.cos(2 * Math.PI * endPercent); 
-        const y2 = Math.sin(2 * Math.PI * endPercent);
+        // 🔥 CORRECTION : Augmentation légère du rayon pour coller à la bordure
+        const r = 1.05; 
+        const x1 = Math.cos(2 * Math.PI * startPercent) * r; 
+        const y1 = Math.sin(2 * Math.PI * startPercent) * r;
+        const x2 = Math.cos(2 * Math.PI * endPercent) * r; 
+        const y2 = Math.sin(2 * Math.PI * endPercent) * r;
         const largeArcFlag = 1 / numSegments > 0.5 ? 1 : 0
-        const pathData = `M 0 0 L ${x1} ${y1} A 1 1 0 ${largeArcFlag} 1 ${x2} ${y2} Z`
+        const pathData = `M 0 0 L ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`
         
         const midAngle = (index * segmentAngle) + (segmentAngle / 2)
         const isLeft = midAngle > 90 && midAngle < 270
@@ -301,12 +303,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       const highlightShadow = "drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]";
 
       if (!game.title_style || game.title_style === 'STYLE_1') {
-          return (<h1 className={`text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TENTEZ VOTRE <br/><span className={`text-5xl text-yellow-400 ${highlightShadow}`}>CHANCE !</span></h1>)
+          return (<h1 className={`text-3xl md:text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TENTEZ VOTRE <br/><span className={`text-4xl md:text-5xl text-yellow-400 ${highlightShadow}`}>CHANCE !</span></h1>)
       }
       if (game.title_style === 'STYLE_2') {
-        return (<h1 className={`text-4xl font-black uppercase tracking-widest leading-none text-white ${textShadowClass}`}>JOUEZ <br/><span className={`text-5xl italic text-yellow-400 ${highlightShadow}`}>POUR GAGNER</span></h1>)
+        return (<h1 className={`text-3xl md:text-4xl font-black uppercase tracking-widest leading-none text-white ${textShadowClass}`}>JOUEZ <br/><span className={`text-4xl md:text-5xl italic text-yellow-400 ${highlightShadow}`}>POUR GAGNER</span></h1>)
       }
-      return (<h1 className={`text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TOURNEZ <br/><span className={`text-5xl text-yellow-400 ${highlightShadow}`}>ET GAGNEZ !</span></h1>)
+      return (<h1 className={`text-3xl md:text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TOURNEZ <br/><span className={`text-4xl md:text-5xl text-yellow-400 ${highlightShadow}`}>ET GAGNEZ !</span></h1>)
   }
 
   const slideIn: Variants = { hidden: { x: '100%', opacity: 0 }, visible: { x: 0, opacity: 1, transition: { duration: 0.3 } }, exit: { x: '-100%', opacity: 0, transition: { duration: 0.3 } } };
@@ -467,8 +469,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
                         <div className="w-10 h-10 md:w-12 md:h-12 rounded-full shadow-[0_5px_20px_rgba(0,0,0,0.9)] relative">
                             <svg className="w-full h-full" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="url(#jewelGold)" stroke="#fbe285" strokeWidth="1.5" /></svg>
-                            <div className="absolute top-[-35%] left-1/2 -translate-x-1/2 drop-shadow-md z-50">
-                              <svg width="14" height="26" style={{ width: 'auto', height: '120%' }} viewBox="0 0 16 30"><path d="M8 0 L14 26 L8 22 L2 26 Z" fill="url(#goldLinear)" stroke="#5a4510" strokeWidth="0.5" /></svg>
+                            <div className="absolute top-[-35%] left-1/2 -translate-x-1/2 drop-shadow-md z-50 flex items-center justify-center">
+                              {/* 🔥 CORRECTION TAILLE POINTEUR 🔥 */}
+                              <svg width="20" height="35" viewBox="0 0 16 30" style={{ transform: 'translateY(-5px)' }}><path d="M8 0 L14 26 L8 22 L2 26 Z" fill="url(#goldLinear)" stroke="#5a4510" strokeWidth="0.5" /></svg>
                             </div>
                         </div>
                     </div>
@@ -519,7 +522,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                       <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
                        
                       {restaurant.logo_url && (
-                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-20 h-20 object-contain bg-white/5 rounded-lg p-1" />
+                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-24 h-24 object-contain bg-white/5 rounded-lg p-1" />
                       )}
                        
                       <div>
