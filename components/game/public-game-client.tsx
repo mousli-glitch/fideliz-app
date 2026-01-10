@@ -8,7 +8,7 @@ import { motion, AnimatePresence, Variants, useAnimation } from "framer-motion"
 import QRCode from "react-qr-code"
 import { toPng } from 'html-to-image'
 
-// --- CONFIGURATION ---
+// --- CONFIGURATION LUXE ---
 const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1000&auto=format&fit=crop", 
@@ -85,7 +85,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (lightMode === 'IDLE') {
-        interval = setInterval(() => { setLightOffset((prev) => (prev === 0 ? 1 : 0)); }, 800); 
+        interval = setInterval(() => { setLightOffset((prev) => (prev === 0 ? 1 : 0)); }, 695); 
     } else if (lightMode === 'SPIN') {
         interval = setInterval(() => { setLightOffset((prev) => (prev + 1) % 12); }, 50); 
     } else if (lightMode === 'WIN') {
@@ -138,7 +138,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         link.download = `ticket-${restaurant.name.replace(/\s+/g, '-').toLowerCase()}.png`;
         link.href = dataUrl;
         link.click();
-    } catch (err) { console.error('Erreur téléchargement:', err); }
+    } catch (err) { console.error('Erreur:', err); }
   };
 
   const handleShareTicket = async () => {
@@ -187,18 +187,20 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         }
     });
 
+    // 1. Déclenchement des effets visuels (Lumières Gagnantes + Confettis)
     setLightMode('WIN')
     setWinFlash(true) 
     setTimeout(() => setWinFlash(false), 200); 
+    setWinner(selectedPrize)
+    confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
 
+    // 🔥 SUSPENSE : On attend 2.5 secondes avant de changer d'étape
     setTimeout(() => {
-      setWinner(selectedPrize)
-      confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
       setStep('FORM')
       setSpinning(false)
       setLightMode('IDLE')
       setPulseAura(true)
-    }, 1200)
+    }, 2500) 
   }
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -218,8 +220,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     } finally { setIsSubmitting(false) }
   }
 
-  // 🔥 NOMMAGE CORRIGÉ ICI 🔥
-  const renderWheelSegments = () => {
+  const renderWheelElements = () => {
     const numSegments = prizes.length
     const segmentAngle = 360 / numSegments
 
@@ -243,7 +244,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         return (
             <g key={index}>
                 <path d={pathData} fill={sliceColor} />
-                <line x1="0" y1="0" x2={x1} y2={y1} stroke="url(#goldStroke)" strokeWidth="0.025" />
+                <line x1="0" y1="0" x2={x1} y2={y1} stroke="url(#goldStroke)" strokeWidth="0.015" />
                 <text x={textTranslateX} y="0" fill="white" fontSize={numSegments > 10 ? "0.045" : "0.06"} fontWeight="900" textAnchor="middle" alignmentBaseline="middle" fontFamily="Arial Black, sans-serif" transform={`rotate(${textRotateAngle})`} style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.9)' }} dominantBaseline="central">
                     {prize.label.length > 18 ? prize.label.substring(0, 16) + '..' : prize.label}
                 </text>
@@ -262,6 +263,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         
         let isActive = false;
         let opacity = 0.3; 
+        let glowSize = "4";
 
         if (lightMode === 'IDLE') {
             const isEven = i % 2 === 0;
@@ -269,14 +271,15 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             opacity = isActive ? 1 : 0.3;
         } else if (lightMode === 'SPIN') {
             let dist = (lightOffset - i + 12) % 12;
-            isActive = dist === 0;
-            opacity = dist < 4 ? 1 - dist*0.2 : 0.1;
-        } else { isActive = true; opacity = 1; }
+            if (dist === 0) { isActive = true; opacity = 1; glowSize = "10"; }
+            else if (dist < 4) { opacity = 1 - dist*0.2; }
+            else { opacity = 0.1; }
+        } else { isActive = true; opacity = 1; glowSize = "12"; }
 
         lights.push(
           <g key={i}>
-              <circle cx={x} cy={y} r={winFlash ? "12" : "5"} fill={isActive ? "url(#bulbGlowRadial)" : "transparent"} opacity={winFlash ? 1 : opacity * 0.6} style={{ pointerEvents: 'none' }} />
-              <circle cx={x} cy={y} r="1.3" fill={isActive || winFlash ? "url(#bulbGradientOn)" : casinoConfig.bulbOff} stroke={casinoConfig.goldDark} strokeWidth="0.1" />
+              <circle cx={x} cy={y} r={winFlash ? "15" : glowSize} fill={isActive ? "url(#bulbGlowRadial)" : "transparent"} opacity={winFlash ? 1 : opacity * 0.8} />
+              <circle cx={x} cy={y} r="1.5" fill={isActive || winFlash ? "url(#bulbGradientOn)" : casinoConfig.bulbOff} stroke={casinoConfig.goldDark} strokeWidth="0.1" />
           </g>
         )
     }
@@ -362,19 +365,20 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             {step === 'WHEEL' && (
             <motion.div key="wheel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center relative z-10 w-full">
                 <div className="relative w-[340px] h-[340px] md:w-[380px] md:h-[380px] mb-12">
+                    <div className={`absolute inset-[-20px] rounded-full bg-yellow-500/10 blur-[40px] transition-all duration-1000 ${pulseAura ? 'opacity-100 scale-105' : 'opacity-50 scale-100'}`}></div>
+
                     <div className="absolute inset-0 z-20 rounded-full pointer-events-none overflow-visible">
                          <svg viewBox="0 0 100 100" className="w-full h-full absolute" style={{ overflow: 'visible' }}>
                             <circle cx="50" cy="50" r="45.3" fill="none" stroke="url(#brushedMetal)" strokeWidth="9.4" />
                             <circle cx="50" cy="50" r="49.5" fill="none" stroke="url(#goldLinear)" strokeWidth="0.5" />
-                            <circle cx="50" cy="50" r="41" fill="none" stroke="url(#goldLinear)" strokeWidth="0.5" />
+                            <circle cx="50" cy="50" r="41" fill="none" stroke="white" strokeWidth="0.5" />
                             {renderLights()}
                          </svg>
                     </div>
 
                     <div className="absolute inset-[32px] rounded-full overflow-hidden z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
                         <motion.div className="w-full h-full origin-center" animate={wheelControls}>
-                            {/* 🔥 ICI L'APPEL EST CORRIGÉ 🔥 */}
-                            <svg viewBox="-1 -1 2 2" className="w-full h-full transform -rotate-90">{renderWheelSegments()}</svg>
+                            <svg viewBox="-1 -1 2 2" className="w-full h-full transform -rotate-90">{renderWheelElements()}</svg>
                         </motion.div>
                         <div className="absolute inset-0 rounded-full shadow-[inset_0_0_15px_rgba(0,0,0,0.8)] pointer-events-none"></div>
                     </div>
@@ -406,7 +410,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                       <form onSubmit={handleFormSubmit} className="space-y-4">
                           <input required placeholder="Prénom" value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className={`w-full p-3 rounded-xl border outline-none ${inputBgClass}`}/>
                           <input required type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className={`w-full p-3 rounded-xl border outline-none ${inputBgClass}`}/>
-                          <input type="tel" placeholder="Mobile" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className={`w-full p-3 rounded-xl border outline-none ${inputBgClass}`}/>
                           <button type="submit" disabled={isSubmitting} className="w-full text-white font-bold py-4 rounded-xl shadow-md" style={{ backgroundColor: primaryColor }}>RÉCUPÉRER MON LOT</button>
                       </form>
                   </div>
