@@ -72,23 +72,20 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
   const primaryColor = restaurant.primary_color || '#E11D48';
 
-  // 🔥 GESTION DU THÈME ROBUSTE 🔥
-  // On priorise le choix du jeu (game.card_style), sinon le design resto, sinon dark.
-  const themeMode = game?.card_style || restaurant?.design?.card_style || 'dark';
-  const isDarkMode = themeMode === 'dark';
+  // 🔥 GESTION DU THÈME DYNAMIQUE (FIXED) 🔥
+  const isDarkMode = game?.card_style === 'dark';
 
-  // Classes dynamiques RE-VÉRIFIÉES
   const cardBgClass = isDarkMode 
-    ? "bg-black/90 border-gray-800" 
-    : "bg-white/95 border-white/50";
+    ? "bg-black/90 border-gray-800 text-white" 
+    : "bg-white/95 border-white/50 text-slate-900";
     
-  const cardTextClass = isDarkMode ? "text-white" : "text-slate-900";
   const subTextClass = isDarkMode ? "text-gray-400" : "text-slate-500";
+  
   const inputBgClass = isDarkMode 
     ? "bg-gray-900 border-gray-700 text-white" 
     : "bg-slate-50 border-slate-200 text-slate-900";
 
-  const dynamicCardClass = `rounded-3xl p-8 shadow-2xl mx-4 text-center relative border backdrop-blur-sm ${cardBgClass} ${cardTextClass}`;
+  const dynamicCardClass = `rounded-3xl p-8 shadow-2xl mx-4 text-center relative border backdrop-blur-md transition-colors duration-500 ${cardBgClass}`;
 
   const getActionLabel = () => {
     switch(game.active_action) {
@@ -400,7 +397,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         {/* 5. FORMULAIRE */}
         {step === 'FORM' && winner && (
         <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass} ${cardTextClass}`}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
                 <div className="text-center mb-6">
                     <h2 className="text-2xl font-black mb-2">Félicitations !</h2>
                     <p className={subTextClass}>Vous avez gagné :</p>
