@@ -61,7 +61,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const [formData, setFormData] = useState({ firstName: '', email: '', phone: '', optIn: false })
   const [isWideLogo, setIsWideLogo] = useState(false) 
 
-  // --- NOUVELLES VARIABLES DESIGN ROUE ---
+  // --- VARIABLES DESIGN ROUE ---
   const [lightOffset, setLightOffset] = useState(0);
   const [lightMode, setLightMode] = useState<'IDLE' | 'SPIN' | 'WIN'>('IDLE');
   const [winFlash, setWinFlash] = useState(false); 
@@ -189,7 +189,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     const winningSegmentCenter = (selectedPrizeIndex * segmentAngle) + (segmentAngle / 2)
     const finalRotation = 1800 - winningSegmentCenter
     
-    // Animation de rotation avec flou cinétique
     await wheelControls.start({
         rotate: finalRotation,
         filter: ["blur(0px)", "blur(12px)", "blur(8px)", "blur(2px)", "blur(0px)"], 
@@ -201,19 +200,18 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         }
     });
 
-    // Effet de victoire
     setLightMode('WIN')
     setWinFlash(true) 
     setTimeout(() => setWinFlash(false), 200); 
     setWinner(selectedPrize)
     confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
 
-    // 🔥 SUSPENSE DE 2.5 SECONDES 🔥
+    // 🔥 RETRAIT DU DÉLAI : Affichage direct
     setTimeout(() => {
       setStep('FORM')
       setSpinning(false)
       setLightMode('IDLE')
-    }, 2500)
+    }, 300)
   }
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -445,13 +443,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
             
-            {/* 4. ROUE (ESTHÉTIQUE CASINO INTÉGRÉE) */}
+            {/* 4. ROUE (DESIGN LUXE INJECTÉ) */}
             {step === 'WHEEL' && (
             <motion.div key="wheel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center relative z-10 w-full">
                 <div className="relative w-[340px] h-[340px] md:w-[380px] md:h-[380px] mb-12">
                     <div className="absolute inset-[-20px] rounded-full bg-yellow-500/10 blur-[40px]"></div>
 
-                    {/* Bordure et Lumières */}
                     <div className="absolute inset-0 z-20 rounded-full pointer-events-none overflow-visible">
                          <svg viewBox="0 0 100 100" className="w-full h-full absolute" style={{ overflow: 'visible' }}>
                             <circle cx="50" cy="50" r="45.3" fill="none" stroke="url(#brushedMetal)" strokeWidth="9.4" />
@@ -461,7 +458,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                          </svg>
                     </div>
 
-                    {/* Disque Segments */}
                     <div className="absolute inset-[32px] rounded-full overflow-hidden z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
                         <motion.div className="w-full h-full origin-center" animate={wheelControls}>
                             <svg viewBox="-1 -1 2 2" className="w-full h-full transform -rotate-90">{renderWheelElements()}</svg>
@@ -469,12 +465,10 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         <div className="absolute inset-0 rounded-full shadow-[inset_0_0_15px_rgba(0,0,0,0.8)] pointer-events-none"></div>
                     </div>
 
-                    {/* Reflet Verre */}
                     <div className="absolute inset-0 z-30 rounded-full pointer-events-none opacity-40">
                        <svg viewBox="0 0 100 100" className="w-full h-full"><path d="M 10 50 A 40 40 0 0 1 90 50 A 50 50 0 0 0 10 50" fill="white" fillOpacity="0.08" /></svg>
                     </div>
 
-                    {/* Hub Central */}
                     <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
                         <div className="w-12 h-12 rounded-full shadow-[0_5px_20px_rgba(0,0,0,0.9)] relative">
                             <svg className="w-full h-full" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="url(#jewelGold)" stroke="#fbe285" strokeWidth="1.5" /></svg>
@@ -490,89 +484,89 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                 </button>
             </motion.div>
             )}
-        </AnimatePresence>
 
-        {/* 5. FORMULAIRE (RESTAURÉ À 100%) */}
-        {step === 'FORM' && winner && (
-        <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
-                <div className="text-center mb-6">
-                    <h2 className="text-2xl font-black mb-2">Félicitations !</h2>
-                    <p className={subTextClass}>Vous avez gagné :</p>
-                    <div className="mt-3 bg-yellow-100 text-yellow-800 py-3 px-6 rounded-xl inline-block font-black text-xl border-2 border-yellow-200">{winner.label}</div>
-                </div>
-                <form onSubmit={handleFormSubmit} className="space-y-4">
-                    <input required placeholder="Prénom" value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
-                    <input required type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
-                    <input type="tel" placeholder="Mobile" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
-                   
-                    <div className="flex items-start gap-3 mt-4">
-                        <input type="checkbox" id="optin" checked={formData.optIn} onChange={(e) => setFormData({...formData, optIn: e.target.checked})} className="mt-1 w-5 h-5 rounded accent-blue-600" />
-                        <label htmlFor="optin" className={`text-xs ${subTextClass}`}>
-                            J'accepte de recevoir des offres de {restaurant.name}.
-                        </label>
+            {/* 5. FORMULAIRE (RESTAURÉ À L'IDENTIQUE) */}
+            {step === 'FORM' && winner && (
+            <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300">
+                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
+                    <div className="text-center mb-6">
+                        <h2 className="text-2xl font-black mb-2">Félicitations !</h2>
+                        <p className={subTextClass}>Vous avez gagné :</p>
+                        <div className="mt-3 bg-yellow-100 text-yellow-800 py-3 px-6 rounded-xl inline-block font-black text-xl border-2 border-yellow-200">{winner.label}</div>
                     </div>
-                   
-                    <button type="submit" disabled={isSubmitting} className="w-full text-white font-bold text-lg py-4 rounded-xl mt-4 shadow-md transition-colors" style={{ backgroundColor: primaryColor }}>
-                        {isSubmitting ? "..." : "RÉCUPÉRER MON LOT"}
-                    </button>
-                </form>
-            </motion.div>
-        </div>
-        )}
+                    <form onSubmit={handleFormSubmit} className="space-y-4">
+                        <input required placeholder="Prénom" value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
+                        <input required type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
+                        <input type="tel" placeholder="Mobile" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
+                       
+                        <div className="flex items-start gap-3 mt-4">
+                            <input type="checkbox" id="optin" checked={formData.optIn} onChange={(e) => setFormData({...formData, optIn: e.target.checked})} className="mt-1 w-5 h-5 rounded accent-blue-600" />
+                            <label htmlFor="optin" className={`text-xs ${subTextClass}`}>
+                                J'accepte de recevoir des offres de {restaurant.name}.
+                            </label>
+                        </div>
+                       
+                        <button type="submit" disabled={isSubmitting} className="w-full text-white font-bold text-lg py-4 rounded-xl mt-4 shadow-md transition-colors" style={{ backgroundColor: primaryColor }}>
+                            {isSubmitting ? "..." : "RÉCUPÉRER MON LOT"}
+                        </button>
+                    </form>
+                </motion.div>
+            </div>
+            )}
 
-        {/* 6. TICKET FINAL (RESTAURÉ À 100%) */}
-        {step === 'TICKET' && winner && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300">
-             <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
-                  
-              <div className="bg-gray-900 p-6 border-b border-dashed border-gray-700 relative flex items-center justify-center gap-4 text-left pb-10">
-                  <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
-                  <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
-                   
-                  {restaurant.logo_url && (
-                      <img src={restaurant.logo_url} alt={restaurant.name} className="w-24 h-24 object-contain bg-white/5 rounded-lg p-1" />
-                  )}
-                   
-                  <div>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">À présenter chez</p>
-                      <h2 className="text-xl font-black text-white leading-tight">{restaurant.name}</h2>
-                  </div>
-              </div>
-
-              <div className="bg-gray-900 p-4 text-center relative z-20 -mt-8">
-                  <div className="bg-green-100 text-green-800 px-6 py-3 rounded-xl inline-block border border-green-200 shadow-sm">
-                      <p className="text-lg font-black">{winner.label}</p>
-                  </div>
-              </div>
-
-              <div className="p-8 flex flex-col items-center bg-black">
-                  <div className="bg-white p-3 rounded-xl mb-6 shadow-lg">
-                      {dbWinnerId ? (
-                        <QRCode value={`${window.location.origin}/verify/${dbWinnerId}`} size={150} bgColor="#ffffff" fgColor="#000000" />
-                      ) : (
-                        <div className="w-[150px] h-[150px] bg-gray-800 animate-pulse rounded"></div>
+            {/* 6. TICKET (RESTAURÉ À L'IDENTIQUE) */}
+            {step === 'TICKET' && winner && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300">
+                 <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
+                      
+                  <div className="bg-gray-900 p-6 border-b border-dashed border-gray-700 relative flex items-center justify-center gap-4 text-left pb-10">
+                      <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
+                      <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
+                       
+                      {restaurant.logo_url && (
+                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-24 h-24 object-contain bg-white/5 rounded-lg p-1" />
                       )}
+                       
+                      <div>
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">À présenter chez</p>
+                          <h2 className="text-xl font-black text-white leading-tight">{restaurant.name}</h2>
+                      </div>
                   </div>
-                  <p className="text-xs font-bold text-gray-400 mb-6 uppercase tracking-wider">Code Unique</p>
-                   
-                  <div className="w-full text-left bg-gray-900 p-4 rounded-xl border border-gray-800 mb-6">
-                      <div className="flex justify-between mb-2"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
-                      <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
+
+                  <div className="bg-gray-900 p-4 text-center relative z-20 -mt-8">
+                      <div className="bg-green-100 text-green-800 px-6 py-3 rounded-xl inline-block border border-green-200 shadow-sm">
+                          <p className="text-lg font-black">{winner.label}</p>
+                      </div>
                   </div>
-                   
-                  <div className="grid grid-cols-2 gap-3 w-full" data-html2canvas-ignore="true">
-                      <button onClick={handleDownloadTicket} className="flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors">
-                          <Download size={16}/> Enregistrer
-                      </button>
-                      <button onClick={handleShareTicket} className="flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl text-sm hover:opacity-90 transition-opacity" style={{ backgroundColor: primaryColor }}>
-                          <Share2 size={16}/> Offrir
-                      </button>
+
+                  <div className="p-8 flex flex-col items-center bg-black">
+                      <div className="bg-white p-3 rounded-xl mb-6 shadow-lg">
+                          {dbWinnerId ? (
+                            <QRCode value={`${window.location.origin}/verify/${dbWinnerId}`} size={150} bgColor="#ffffff" fgColor="#000000" />
+                          ) : (
+                            <div className="w-[150px] h-[150px] bg-gray-800 animate-pulse rounded"></div>
+                          )}
+                      </div>
+                      <p className="text-xs font-bold text-gray-400 mb-6 uppercase tracking-wider">Code Unique</p>
+                       
+                      <div className="w-full text-left bg-gray-900 p-4 rounded-xl border border-gray-800 mb-6">
+                          <div className="flex justify-between mb-2"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
+                          <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
+                      </div>
+                       
+                      <div className="grid grid-cols-2 gap-3 w-full" data-html2canvas-ignore="true">
+                          <button onClick={handleDownloadTicket} className="flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors">
+                              <Download size={16}/> Enregistrer
+                          </button>
+                          <button onClick={handleShareTicket} className="flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl text-sm hover:opacity-90 transition-opacity" style={{ backgroundColor: primaryColor }}>
+                              <Share2 size={16}/> Offrir
+                          </button>
+                      </div>
                   </div>
-              </div>
-           </div>
-        </div>
-        )}
+               </div>
+            </div>
+            )}
+        </AnimatePresence>
       </div>
     </div>
   )
