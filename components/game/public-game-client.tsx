@@ -304,7 +304,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS - VERSION ALLÉGÉE SANS EFFET PAVÉ */}
+            {/* 2. INSTRUCTIONS - VERSION ULTRA-ALLÉGÉE */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -316,19 +316,20 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     
                     <h2 className={`text-xl font-bold mb-5`}>Instructions</h2>
                     
-                    <div className={`text-left text-sm mb-8 space-y-5 px-1 leading-relaxed ${subTextClass}`}>
+                    <div className={`text-left text-sm mb-8 space-y-4 px-1 leading-snug ${subTextClass}`}>
                         <p>Appuyez sur <b>« J’ai compris »</b> pour ouvrir l’avis Google.</p>
                         
-                        <div className="flex gap-3 items-start">
-                            <span className="text-lg">⚠️</span>
-                            <p className="font-medium">
-                                <b>Le jeu ne revient pas automatiquement</b> : après votre avis, appuyez sur <b>Onglets</b> puis revenez sur <b>l’onglet du jeu</b> pour lancer la roue.
+                        <div className="flex gap-2 items-start bg-yellow-500/10 p-3 rounded-xl border border-yellow-500/20">
+                            <span>⚠️</span>
+                            <p className="font-medium text-xs">
+                                <b>Le jeu ne revient pas seul</b> : <br/>
+                                <span className="text-blue-500">Onglets</span> → <span className="text-blue-500">onglet du jeu</span>.
                             </p>
                         </div>
                     </div>
                     
-                    {/* ZONE IMAGE SAFARI AVEC MICRO-TEXTE SOUS LE CADRE */}
-                    <div className="mb-8 w-full flex flex-col items-center gap-3">
+                    {/* ZONE IMAGE SAFARI SIMPLE SANS TEXTE */}
+                    <div className="mb-8 w-full flex flex-col items-center">
                         <div className={`w-full p-2 rounded-2xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
                             <img 
                                 src="/tuto-safari.png?v=2" 
@@ -339,9 +340,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                                 }}
                             />
                         </div>
-                        <p className={`text-[11px] font-bold uppercase tracking-wider text-center ${subTextClass}`}>
-                            Touchez l’icône <b>Onglets</b> (encerclée) pour revenir au jeu.
-                        </p>
                     </div>
 
                     <button onClick={handleInstructionValidate} className="w-full py-4 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95 text-lg" style={{ backgroundColor: primaryColor }}>
