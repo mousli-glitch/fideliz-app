@@ -72,15 +72,23 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
   const primaryColor = restaurant.primary_color || '#E11D48';
 
-  const themeMode = game.card_style || restaurant.design?.card_style || 'dark';
+  // 🔥 GESTION DU THÈME ROBUSTE 🔥
+  // On priorise le choix du jeu (game.card_style), sinon le design resto, sinon dark.
+  const themeMode = game?.card_style || restaurant?.design?.card_style || 'dark';
   const isDarkMode = themeMode === 'dark';
 
-  const cardBgClass = isDarkMode ? "bg-black border-gray-800" : "bg-white border-white/50";
+  // Classes dynamiques RE-VÉRIFIÉES
+  const cardBgClass = isDarkMode 
+    ? "bg-black/90 border-gray-800" 
+    : "bg-white/95 border-white/50";
+    
   const cardTextClass = isDarkMode ? "text-white" : "text-slate-900";
   const subTextClass = isDarkMode ? "text-gray-400" : "text-slate-500";
-  const inputBgClass = isDarkMode ? "bg-gray-900 border-gray-700 text-white" : "bg-slate-50 border-slate-200 text-slate-900";
+  const inputBgClass = isDarkMode 
+    ? "bg-gray-900 border-gray-700 text-white" 
+    : "bg-slate-50 border-slate-200 text-slate-900";
 
-  const dynamicCardClass = `rounded-3xl p-8 shadow-2xl mx-4 text-center relative border ${cardBgClass} ${cardTextClass}`;
+  const dynamicCardClass = `rounded-3xl p-8 shadow-2xl mx-4 text-center relative border backdrop-blur-sm ${cardBgClass} ${cardTextClass}`;
 
   const getActionLabel = () => {
     switch(game.active_action) {
@@ -295,7 +303,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
                     <div className="mb-4 flex justify-center"><PlatformIcon /></div>
-                    <h2 className={`text-xl font-bold mb-2 ${cardTextClass}`}>{game.active_action === 'GOOGLE_REVIEW' ? "Laissez un avis Google" : `Abonnez-vous à ${game.active_action}`}</h2>
+                    <h2 className="text-xl font-bold mb-2">{game.active_action === 'GOOGLE_REVIEW' ? "Laissez un avis Google" : `Abonnez-vous à ${game.active_action}`}</h2>
                     <p className={`text-sm mb-6 ${subTextClass}`}>Laissez-nous un avis puis revenez ici.</p>
                     <button onClick={handleActionClick} className="w-full py-4 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95 text-lg" style={{ backgroundColor: primaryColor }}>
                         {getActionLabel()}
@@ -304,7 +312,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS - MISE À JOUR DESIGN ET DIMENSIONS */}
+            {/* 2. INSTRUCTIONS */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -313,12 +321,11 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                             <Ruler className="w-8 h-8 text-blue-500" />
                         </div>
                     </div>
-                    <h2 className={`text-xl font-bold mb-3 ${cardTextClass}`}>Comment valider ?</h2>
+                    <h2 className="text-xl font-bold mb-3">Comment valider ?</h2>
                     <p className={`text-sm mb-6 leading-relaxed px-4 ${subTextClass}`}>
                         Une fois l'action effectuée, cliquez sur l'icône <b>onglets</b> en bas de votre écran pour revenir ici et lancer la roue !
                     </p>
                     
-                    {/* ZONE IMAGE AVEC VERSIONING POUR FORCER LE CHARGEMENT */}
                     <div className={`mb-8 w-full p-3 rounded-2xl border border-dashed flex flex-col items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
                         <img 
                             src="/tuto-safari.png?v=1" 
@@ -345,7 +352,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             {step === 'VERIFYING' && (
             <motion.div key="verifying" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="w-full">
                 <div className={dynamicCardClass}>
-                    <h2 className={`text-2xl font-black mb-4 ${cardTextClass}`}>Vérification...</h2>
+                    <h2 className="text-2xl font-black mb-4">Vérification...</h2>
                     <button onClick={() => window.open(game.action_url, '_blank')} className="font-bold py-3 px-6 rounded-full mb-8 inline-flex items-center gap-2 shadow-lg bg-white text-black hover:bg-gray-200 border border-slate-200">
                         {getActionLabel()} <ExternalLink size={16}/>
                     </button>
