@@ -14,7 +14,7 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
   const { slug } = await params
 
   // Vérifie si c'est un format UUID (ID compliqué) ou un texte (Slug simple)
-  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)
 
   let game = null
   let restaurant = null
@@ -105,10 +105,10 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     .eq('game_id', game.id)
     .order('weight', { ascending: false })
 
-  // 🔥 4. CORRECTION ICI : Fusion des données pour le thème
-  const gameWithTheme = {
+  // 🔥 CORRECTION : Extraction du style depuis l'objet JSON design
+  const gameWithDesign = {
     ...game,
-    card_style: game.design?.card_style || 'dark'
+    card_style: game.design?.card_style || 'dark' 
   }
 
   const restaurantWithDesign = {
@@ -116,10 +116,10 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     design: game.design 
   }
 
-  // 5. On lance le jeu avec les objets d'origine intacts
+  // 5. On lance le jeu avec l'objet fusionné
   return (
     <PublicGameClient 
-      game={gameWithTheme} 
+      game={gameWithDesign} 
       prizes={prizes || []} 
       restaurant={restaurantWithDesign} 
     />
