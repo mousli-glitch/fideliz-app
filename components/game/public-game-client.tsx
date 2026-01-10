@@ -27,7 +27,13 @@ const casinoConfig = {
   bulbOff: "#2a2105",
   bulbGlow: "rgba(255, 200, 50, 0.9)",
   royalRed: "#8B0000",
-  jetBlack: "#0F0F0F"
+  jetBlack: "#0F0F0F",
+  // 🔥 AJOUT DES PALETTES DYNAMIQUES 🔥
+  palettes: {
+    MONACO: { c1: "#8B0000", c2: "#0F0F0F" }, // Rouge / Noir
+    GATSBY: { c1: "#1E3A8A", c2: "#0F0F0F" }, // Bleu / Noir
+    EMERALD: { c1: "#064E3B", c2: "#0F0F0F" } // Vert / Noir
+  }
 }
 
 const TikTokIcon = () => (
@@ -47,6 +53,7 @@ type Props = {
     bg_choice?: number;
     bg_image_url?: string;
     card_style?: string; 
+    wheel_palette?: 'MONACO' | 'GATSBY' | 'EMERALD'; // 🔥 AJOUTÉ POUR LA LIAISON DB
   }
   prizes: { id: string; label: string; color: string; weight: number }[]
   restaurant: { name: string; logo_url?: string; primary_color?: string; design?: any }
@@ -233,6 +240,10 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const renderWheelSegments = () => {
     const numSegments = prizes.length
     const segmentAngle = 360 / numSegments
+    
+    // 🔥 RÉCUPÉRATION DE LA PALETTE DYNAMIQUE 🔥
+    // @ts-ignore
+    const currentPalette = casinoConfig.palettes[game.wheel_palette || 'MONACO'];
 
     return prizes.map((prize, index) => {
         const startPercent = index / numSegments
@@ -251,7 +262,8 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         const textRotateAngle = isLeft ? midAngle + 180 : midAngle
         const textTranslateX = isLeft ? -0.65 : 0.65
 
-        const sliceColor = index % 2 === 0 ? casinoConfig.jetBlack : casinoConfig.royalRed;
+        // 🔥 APPLICATION DES COULEURS DE LA PALETTE 🔥
+        const sliceColor = index % 2 === 0 ? currentPalette.c1 : currentPalette.c2;
 
         return (
             <g key={index}>
@@ -361,6 +373,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
         <AnimatePresence mode="wait">
             
+            {/* 1. LANDING */}
             {step === 'LANDING' && (
             <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -454,9 +467,10 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     </div>
 
                     <div className="absolute inset-[32px] rounded-full overflow-hidden z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
-                        {/* 🔥 CERCLE DE SÉCURITÉ POUR COMBLER LE VIDE 🔥 */}
+                        {/* 🔥 CERCLE DE SÉCURITÉ POUR COMBLER LE VIDE DYNAMIQUE 🔥 */}
                         <svg viewBox="-1.1 -1.1 2.2 2.2" className="absolute inset-0 w-full h-full transform -rotate-90">
-                           <circle cx="0" cy="0" r="1.1" fill={casinoConfig.jetBlack} />
+                           {/* @ts-ignore */}
+                           <circle cx="0" cy="0" r="1.1" fill={casinoConfig.palettes[game.wheel_palette || 'MONACO'].c2} />
                         </svg>
                         <motion.div className="w-full h-full origin-center" animate={wheelControls}>
                             <svg viewBox="-1.1 -1.1 2.2 2.2" className="w-full h-full transform -rotate-90">
