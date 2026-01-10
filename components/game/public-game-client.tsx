@@ -28,7 +28,7 @@ const casinoConfig = {
 
 const TikTokIcon = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" height="1em" width="1em" className="w-12 h-12">
-    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
+    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74a2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
   </svg>
 )
 
@@ -72,7 +72,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
   const primaryColor = restaurant.primary_color || '#E11D48';
 
-  // 🔥 GESTION DU THÈME DYNAMIQUE RÉPARÉE 🔥
   const isDarkMode = game?.card_style === 'dark';
 
   const cardBgClass = isDarkMode ? "bg-black/90 border-gray-800 text-white" : "bg-white/95 border-white/50 text-slate-900";
@@ -151,11 +150,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }
   };
 
+  // 🔥 MÉTHODE DE LA CIBLE ABSOLUE 🔥
   const handleSpin = async () => {
     if (spinning) return
     setSpinning(true)
 
-    // 1. DÉTERMINATION DU GAGNANT EN AMONT
+    // 1. Détermination du gagnant
     const totalWeight = prizes.reduce((sum, p) => sum + p.weight, 0)
     let random = Math.random() * totalWeight
     let selectedPrizeIndex = 0
@@ -165,24 +165,24 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }
     const selectedPrize = prizes[selectedPrizeIndex]
     
-    // 2. CALCUL DE LA ROTATION SYNCHRONISÉE
+    // 2. Calcul millimétré de la rotation
     const numSegments = prizes.length
     const segmentAngle = 360 / numSegments
     
-    // Angle au centre du segment gagnant
-    const winningSegmentCenterAngle = (selectedPrizeIndex * segmentAngle) + (segmentAngle / 2)
+    // On veut amener le CENTRE du segment choisi à 12h (0°)
+    // Position du centre du segment par rapport au début du dessin SVG
+    const winningSegmentCenter = (selectedPrizeIndex * segmentAngle) + (segmentAngle / 2)
     
-    // 🔥 CORRECTION FORMULE 🔥
-    // On fait tourner la roue (5 tours = 1800)
-    // On retire l'angle du segment pour ramener le bon lot en haut (à 0°)
-    // On ajoute 90° car le SVG commence par défaut à 3h (90°) et non à 12h (0°)
-    const finalRotation = 1800 + (360 - winningSegmentCenterAngle) + 90
+    // Le SVG de votre roue possède un transform -rotate-90
+    // Cela signifie que l'index 0 commence déjà en haut.
+    // La rotation doit être inverse (clockwise) : 1800° (tours) - angle du segment
+    const finalRotation = 1800 - winningSegmentCenter
     
     setWheelRotation(finalRotation)
 
-    // 3. AFFICHAGE DU RÉSULTAT APRÈS L'ARRÊT
+    // 3. Passage au formulaire après 4.5s
     setTimeout(() => {
-      setWinner(selectedPrize) // On utilise le même objet sélectionné au début
+      setWinner(selectedPrize)
       confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
       setStep('FORM')
       setSpinning(false)
@@ -315,7 +315,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS - VERSION OPTIMISÉE PAR USER 🔥 */}
+            {/* 2. INSTRUCTIONS */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -328,12 +328,10 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     <h2 className={`text-xl font-bold mb-5`}>Instructions</h2>
                     
                     <div className={`text-center mb-8 px-1 flex flex-col gap-3`}>
-                        {/* Phrase principale inchangée */}
                         <p className={`text-[12.5px] font-medium leading-tight ${subTextClass}`}>
                           Appuyez sur « J’ai compris » pour ouvrir l’avis Google.
                         </p>
                         
-                        {/* Bloc Warning en 2 lignes fixes (Blanc) */}
                         <div className="flex flex-col gap-1 items-center">
                             <p className={`text-[12.5px] leading-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
                                 ⚠️ <b>Pas de retour automatique :</b>
@@ -344,7 +342,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         </div>
                     </div>
                     
-                    {/* ZONE IMAGE SAFARI - HAUTEUR RÉDUITE */}
                     <div className="mb-8 w-full flex flex-col items-center">
                         <div className={`w-full p-0.5 rounded-xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
                             <img 
