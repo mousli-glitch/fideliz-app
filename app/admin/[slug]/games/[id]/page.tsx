@@ -123,7 +123,13 @@ export default function EditGamePage() {
             min_spend: formData.has_min_spend ? formData.min_spend : 0,
             bg_choice: designData.bg_choice,
             title_style: designData.title_style,
-            bg_image_url: designData.bg_image_url
+            bg_image_url: designData.bg_image_url,
+            // 🔥 MODIFICATION : On envoie le choix du thème au serveur
+            card_style: designData.card_style,
+            design: {
+                ...designData,
+                card_style: designData.card_style
+            }
         }).eq('id', gameId)
 
         if (gameError) throw new Error("Erreur Jeu: " + gameError.message)
@@ -276,18 +282,11 @@ export default function EditGamePage() {
                                         Logo du commerce
                                     </label>
                                     <div className="bg-white p-1 rounded-xl border border-slate-200">
-                                        {/* Ici, on utilise le composant LogoUploader.
-                                            Si tu as mis à jour LogoUploader avec mon code précédent, 
-                                            il n'y aura plus l'onglet "Lien URL" dedans. */}
                                         <LogoUploader 
                                             currentUrl={designData.logo_url} 
                                             onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
                                         />
                                     </div>
-                                    
-                                    {/* MODIFICATION ICI : J'ai supprimé l'input texte "Lien URL direct" qui était ici 
-                                        pour ne garder que la zone de glisser-déposer ci-dessus */}
-
                                     <p className="text-xs text-slate-400 mt-2 ml-1">
                                         Conseil : Utilisez un format PNG transparent pour un meilleur rendu.
                                     </p>
@@ -327,14 +326,13 @@ export default function EditGamePage() {
                             </div>
                         </div>
 
-                        {/* 2. THÈME (AVEC TITRES AU-DESSUS) */}
+                        {/* 2. THÈME */}
                         <div className="bg-slate-50 p-8 rounded-2xl border border-slate-200 shadow-sm">
                             <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
                                 <Sun className="text-orange-500" size={24}/> Thème au choix
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 
-                                {/* Colonne Mode Clair */}
                                 <div className="flex flex-col gap-3">
                                     <span className="text-center font-bold text-slate-700">Mode Clair</span>
                                     <div 
@@ -348,7 +346,6 @@ export default function EditGamePage() {
                                     </div>
                                 </div>
                                 
-                                {/* Colonne Mode Sombre */}
                                 <div className="flex flex-col gap-3">
                                     <span className="text-center font-bold text-slate-700">Mode Sombre</span>
                                     <div 

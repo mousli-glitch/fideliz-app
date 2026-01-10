@@ -27,9 +27,8 @@ export async function updateGameAction(gameId: string, data: any) {
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
-      // On garde l'enregistrement à la racine pour la structure de table
+      // 🔥 SYNCHRONISATION : On écrit le style partout pour la lecture front-end
       card_style: data.design.card_style,
-      // 🔥 MODIFICATION : On enregistre aussi dans l'objet design pour la lecture front-end
       design: {
         ...data.design,
         card_style: data.design.card_style
