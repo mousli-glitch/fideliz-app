@@ -61,7 +61,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const [formData, setFormData] = useState({ firstName: '', email: '', phone: '', optIn: false })
   const [isWideLogo, setIsWideLogo] = useState(false) 
 
-  // --- VARIABLES DESIGN ROUE ---
   const [lightOffset, setLightOffset] = useState(0);
   const [lightMode, setLightMode] = useState<'IDLE' | 'SPIN' | 'WIN'>('IDLE');
   const [winFlash, setWinFlash] = useState(false); 
@@ -88,7 +87,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const inputBgClass = isDarkMode ? "bg-gray-900 border-gray-700 text-white" : "bg-slate-50 border-slate-200 text-slate-900";
   const dynamicCardClass = `rounded-3xl p-8 shadow-2xl mx-4 text-center relative border backdrop-blur-md transition-all duration-300 ${cardBgClass} ${cardTextClass}`;
 
-  // --- MOTEUR LUMIÈRE CASINO ---
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (lightMode === 'IDLE') {
@@ -206,7 +204,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     setWinner(selectedPrize)
     confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
 
-    // 🔥 SUSPENSE DE 1 SECONDE 🔥
     setTimeout(() => {
       setStep('FORM')
       setSpinning(false)
@@ -233,7 +230,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }
   }
 
-  const renderWheelElements = () => {
+  const renderWheelSegments = () => {
     const numSegments = prizes.length
     const segmentAngle = 360 / numSegments
 
@@ -304,12 +301,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       const highlightShadow = "drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]";
 
       if (!game.title_style || game.title_style === 'STYLE_1') {
-          return (<h1 className={`text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TENTEZ VOTRE <br/><span className={`text-5xl text-yellow-400 ${highlightShadow}`}>CHANCE !</span></h1>)
+          return (<h1 className={`text-3xl md:text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TENTEZ VOTRE <br/><span className={`text-4xl md:text-5xl text-yellow-400 ${highlightShadow}`}>CHANCE !</span></h1>)
       }
       if (game.title_style === 'STYLE_2') {
-        return (<h1 className={`text-4xl font-black uppercase tracking-widest leading-none text-white ${textShadowClass}`}>JOUEZ <br/><span className={`text-5xl italic text-yellow-400 ${highlightShadow}`}>POUR GAGNER</span></h1>)
+        return (<h1 className={`text-3xl md:text-4xl font-black uppercase tracking-widest leading-none text-white ${textShadowClass}`}>JOUEZ <br/><span className={`text-4xl md:text-5xl italic text-yellow-400 ${highlightShadow}`}>POUR GAGNER</span></h1>)
       }
-      return (<h1 className={`text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TOURNEZ <br/><span className={`text-5xl text-yellow-400 ${highlightShadow}`}>ET GAGNEZ !</span></h1>)
+      return (<h1 className={`text-3xl md:text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TOURNEZ <br/><span className={`text-4xl md:text-5xl text-yellow-400 ${highlightShadow}`}>ET GAGNEZ !</span></h1>)
   }
 
   const slideIn: Variants = { hidden: { x: '100%', opacity: 0 }, visible: { x: 0, opacity: 1, transition: { duration: 0.3 } }, exit: { x: '-100%', opacity: 0, transition: { duration: 0.3 } } };
@@ -325,7 +322,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 overflow-hidden relative" 
+    <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 overflow-y-auto relative" 
         style={{ backgroundImage: `url(${currentBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
       
       <div className="absolute inset-0 bg-black/60 z-0"></div>
@@ -341,28 +338,27 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         </defs>
       </svg>
 
-      <div className="w-full max-w-md mx-auto relative z-10 flex flex-col items-center">
+      <div className="w-full max-w-md mx-auto relative z-10 flex flex-col items-center py-4">
         
         {restaurant.logo_url && (
-           <div className="w-full flex justify-center mt-12 mb-2 z-20 px-6">
+           <div className="w-full flex justify-center mt-4 mb-2 z-20 px-6">
               <img 
                 src={restaurant.logo_url} 
                 alt="Logo" 
                 onLoad={handleLogoLoad}
-                className={`${isWideLogo ? 'h-64' : 'h-32'} w-auto max-w-full object-contain drop-shadow-lg transition-all duration-500`} 
+                className={`${isWideLogo ? 'h-32 md:h-48' : 'h-24 md:h-32'} w-auto max-w-full object-contain drop-shadow-lg transition-all duration-500`} 
               />
            </div>
         )}
         
         {step !== 'TICKET' && (
-            <div className="text-center mb-10 relative z-10">
+            <div className="text-center mb-6 md:mb-10 relative z-10 px-4">
                 <GameTitle />
             </div>
         )}
 
         <AnimatePresence mode="wait">
             
-            {/* 1. LANDING */}
             {step === 'LANDING' && (
             <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -376,7 +372,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -423,7 +418,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 3. VERIFICATION */}
             {step === 'VERIFYING' && (
             <motion.div key="verifying" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -443,10 +437,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
             
-            {/* 4. ROUE */}
             {step === 'WHEEL' && (
-            <motion.div key="wheel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center relative z-10 w-full">
-                <div className="relative w-[340px] h-[340px] md:w-[380px] md:h-[380px] mb-12">
+            <motion.div key="wheel" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center relative z-10 w-full px-2">
+                <div className="relative w-[280px] h-[280px] sm:w-[320px] sm:h-[340px] md:w-[380px] md:h-[380px] mb-8 shrink-0">
                     <div className="absolute inset-[-20px] rounded-full bg-yellow-500/10 blur-[40px]"></div>
 
                     <div className="absolute inset-0 z-20 rounded-full pointer-events-none overflow-visible">
@@ -460,7 +453,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
                     <div className="absolute inset-[32px] rounded-full overflow-hidden z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
                         <motion.div className="w-full h-full origin-center" animate={wheelControls}>
-                            <svg viewBox="-1 -1 2 2" className="w-full h-full transform -rotate-90">{renderWheelElements()}</svg>
+                            <svg viewBox="-1 -1 2 2" className="w-full h-full transform -rotate-90">{renderWheelSegments()}</svg>
                         </motion.div>
                         <div className="absolute inset-0 rounded-full shadow-[inset_0_0_15px_rgba(0,0,0,0.8)] pointer-events-none"></div>
                     </div>
@@ -470,24 +463,23 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     </div>
 
                     <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
-                        <div className="w-12 h-12 rounded-full shadow-[0_5px_20px_rgba(0,0,0,0.9)] relative">
+                        <div className="w-10 h-10 md:w-12 md:h-12 rounded-full shadow-[0_5px_20px_rgba(0,0,0,0.9)] relative">
                             <svg className="w-full h-full" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="url(#jewelGold)" stroke="#fbe285" strokeWidth="1.5" /></svg>
-                            <div className="absolute top-[-22px] left-1/2 -translate-x-1/2 drop-shadow-md z-50">
-                              <svg width="16" height="30" viewBox="0 0 16 30"><path d="M8 0 L14 26 L8 22 L2 26 Z" fill="url(#goldLinear)" stroke="#5a4510" strokeWidth="0.5" /></svg>
+                            <div className="absolute top-[-35%] left-1/2 -translate-x-1/2 drop-shadow-md z-50">
+                              <svg width="14" height="26" viewBox="0 0 16 30"><path d="M8 0 L14 26 L8 22 L2 26 Z" fill="url(#goldLinear)" stroke="#5a4510" strokeWidth="0.5" /></svg>
                             </div>
                         </div>
                     </div>
                 </div>
               
-                <button onClick={handleSpin} disabled={spinning} className={`font-black text-xl py-4 px-12 rounded-full shadow-lg transition-all relative z-10 ${spinning ? 'bg-slate-400 text-slate-200 cursor-not-allowed' : 'bg-gradient-to-r from-yellow-400 to-yellow-600 text-slate-900 hover:scale-105 active:scale-95'}`}>
+                <button onClick={handleSpin} disabled={spinning} className={`font-black text-lg md:text-xl py-4 md:py-5 px-12 md:px-16 rounded-2xl shadow-lg transition-all relative z-10 ${spinning ? 'bg-slate-400 text-slate-200 cursor-not-allowed' : 'bg-gradient-to-r from-yellow-400 to-yellow-600 text-slate-900 hover:scale-105 active:scale-95 active:translate-y-1'}`}>
                     {spinning ? "BONNE CHANCE..." : "LANCER LA ROUE"}
                 </button>
             </motion.div>
             )}
 
-            {/* 5. FORMULAIRE */}
             {step === 'FORM' && winner && (
-            <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300">
+            <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300 overflow-y-auto">
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
                     <div className="text-center mb-6">
                         <h2 className="text-2xl font-black mb-2">Félicitations !</h2>
@@ -514,17 +506,16 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </div>
             )}
 
-            {/* 6. TICKET */}
             {step === 'TICKET' && winner && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300">
-                 <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300 overflow-y-auto">
+                 <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800 my-auto">
                       
                   <div className="bg-gray-900 p-6 border-b border-dashed border-gray-700 relative flex items-center justify-center gap-4 text-left pb-10">
                       <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
                       <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
                        
                       {restaurant.logo_url && (
-                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-24 h-24 object-contain bg-white/5 rounded-lg p-1" />
+                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-20 h-20 object-contain bg-white/5 rounded-lg p-1" />
                       )}
                        
                       <div>
