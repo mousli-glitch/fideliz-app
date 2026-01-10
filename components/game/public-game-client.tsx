@@ -28,7 +28,7 @@ const casinoConfig = {
 
 const TikTokIcon = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" height="1em" width="1em" className="w-12 h-12">
-    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
+    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z" />
   </svg>
 )
 
@@ -168,10 +168,15 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     // 2. CALCUL DE LA ROTATION SYNCHRONISÉE
     const numSegments = prizes.length
     const segmentAngle = 360 / numSegments
-    // Calcul de l'angle pour centrer le segment gagnant sous le curseur (-90° compensation)
+    
+    // Angle au centre du segment gagnant
     const winningSegmentCenterAngle = (selectedPrizeIndex * segmentAngle) + (segmentAngle / 2)
-    // On fait tourner la roue de 5 tours (1800°) + le complément pour arriver au bon segment
-    const finalRotation = 1800 + (360 - winningSegmentCenterAngle) - 90
+    
+    // 🔥 CORRECTION FORMULE 🔥
+    // On fait tourner la roue (5 tours = 1800)
+    // On retire l'angle du segment pour ramener le bon lot en haut (à 0°)
+    // On ajoute 90° car le SVG commence par défaut à 3h (90°) et non à 12h (0°)
+    const finalRotation = 1800 + (360 - winningSegmentCenterAngle) + 90
     
     setWheelRotation(finalRotation)
 
