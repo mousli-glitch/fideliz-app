@@ -88,7 +88,7 @@ export default function EditGamePage() {
                 bg_choice: game.bg_choice || 0,
                 title_style: game.title_style || 'STYLE_1',
                 bg_image_url: game.bg_image_url || "",
-                card_style: isDark ? 'dark' : 'light'
+                card_style: game.card_style || (isDark ? 'dark' : 'light')
             })
 
             const { data: prizesData } = await (supabase.from('prizes') as any)
@@ -101,7 +101,7 @@ export default function EditGamePage() {
         setLoading(false)
     }
     loadGame()
-  }, [params])
+  }, [params, supabase])
 
 
   // --- 2. MISE À JOUR (UPDATE) ---
@@ -115,6 +115,7 @@ export default function EditGamePage() {
     setSaving(true)
 
     try {
+        // 🔥 CORRECTION : On utilise uniquement les colonnes physiques confirmées par capture
         const { error: gameError } = await (supabase.from('games') as any).update({
             name: formData.name,
             active_action: formData.active_action,
@@ -124,12 +125,7 @@ export default function EditGamePage() {
             bg_choice: designData.bg_choice,
             title_style: designData.title_style,
             bg_image_url: designData.bg_image_url,
-            // 🔥 MODIFICATION : On envoie le choix du thème au serveur
-            card_style: designData.card_style,
-            design: {
-                ...designData,
-                card_style: designData.card_style
-            }
+            card_style: designData.card_style // On utilise la colonne card_style directement
         }).eq('id', gameId)
 
         if (gameError) throw new Error("Erreur Jeu: " + gameError.message)
@@ -287,6 +283,7 @@ export default function EditGamePage() {
                                             onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
                                         />
                                     </div>
+                                    
                                     <p className="text-xs text-slate-400 mt-2 ml-1">
                                         Conseil : Utilisez un format PNG transparent pour un meilleur rendu.
                                     </p>
@@ -333,6 +330,7 @@ export default function EditGamePage() {
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 
+                                {/* Colonne Mode Clair */}
                                 <div className="flex flex-col gap-3">
                                     <span className="text-center font-bold text-slate-700">Mode Clair</span>
                                     <div 
@@ -346,6 +344,7 @@ export default function EditGamePage() {
                                     </div>
                                 </div>
                                 
+                                {/* Colonne Mode Sombre */}
                                 <div className="flex flex-col gap-3">
                                     <span className="text-center font-bold text-slate-700">Mode Sombre</span>
                                     <div 

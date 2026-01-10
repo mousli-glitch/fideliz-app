@@ -9,16 +9,16 @@ const supabaseAdmin = createClient(
 
 export async function updateGameAction(gameId: string, data: any) {
   try {
-    // 1. IMPORTANT : On sauvegarde la couleur et le logo dans la table RESTAURANTS
+    // 1. Sauvegarde dans la table RESTAURANTS (Colonnes confirmées par capture)
     const { error: restoError } = await supabaseAdmin.from("restaurants").update({
       primary_color: data.design.primary_color, 
       logo_url: data.design.logo_url,
     }).eq("id", data.restaurant_id)
 
-    if (restoError) throw new Error("Erreur sauvegarde couleur: " + restoError.message)
+    if (restoError) throw new Error("Erreur sauvegarde resto: " + restoError.message)
 
-    // 2. On sauvegarde les réglages du JEU
-    // 🔥 CORRECTION : On utilise uniquement les colonnes physiques existantes pour éviter l'erreur de schéma
+    // 2. Sauvegarde dans la table GAMES (Colonnes confirmées par capture)
+    // 🔥 CORRECTION : Suppression de la colonne 'design' inexistante pour éviter l'erreur schema cache
     const { error: gameError } = await supabaseAdmin.from("games").update({
       name: data.form.name,
       active_action: data.form.active_action,
@@ -28,12 +28,12 @@ export async function updateGameAction(gameId: string, data: any) {
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
-      card_style: data.design.card_style // Utilisation de la colonne confirmée par capture
+      card_style: data.design.card_style // On utilise la vraie colonne card_style
     }).eq("id", gameId)
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)
 
-    // 3. On remet les lots
+    // 3. Gestion des lots
     await supabaseAdmin.from("prizes").delete().eq("game_id", gameId)
     
     const prizesToInsert = data.prizes.map((p: any) => ({
