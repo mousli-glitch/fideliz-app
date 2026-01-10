@@ -301,12 +301,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       const highlightShadow = "drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]";
 
       if (!game.title_style || game.title_style === 'STYLE_1') {
-          return (<h1 className={`text-3xl md:text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TENTEZ VOTRE <br/><span className={`text-4xl md:text-5xl text-yellow-400 ${highlightShadow}`}>CHANCE !</span></h1>)
+          return (<h1 className={`text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TENTEZ VOTRE <br/><span className={`text-5xl text-yellow-400 ${highlightShadow}`}>CHANCE !</span></h1>)
       }
       if (game.title_style === 'STYLE_2') {
-        return (<h1 className={`text-3xl md:text-4xl font-black uppercase tracking-widest leading-none text-white ${textShadowClass}`}>JOUEZ <br/><span className={`text-4xl md:text-5xl italic text-yellow-400 ${highlightShadow}`}>POUR GAGNER</span></h1>)
+        return (<h1 className={`text-4xl font-black uppercase tracking-widest leading-none text-white ${textShadowClass}`}>JOUEZ <br/><span className={`text-5xl italic text-yellow-400 ${highlightShadow}`}>POUR GAGNER</span></h1>)
       }
-      return (<h1 className={`text-3xl md:text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TOURNEZ <br/><span className={`text-4xl md:text-5xl text-yellow-400 ${highlightShadow}`}>ET GAGNEZ !</span></h1>)
+      return (<h1 className={`text-4xl font-black uppercase italic tracking-wider leading-tight text-white ${textShadowClass}`}>TOURNEZ <br/><span className={`text-5xl text-yellow-400 ${highlightShadow}`}>ET GAGNEZ !</span></h1>)
   }
 
   const slideIn: Variants = { hidden: { x: '100%', opacity: 0 }, visible: { x: 0, opacity: 1, transition: { duration: 0.3 } }, exit: { x: '-100%', opacity: 0, transition: { duration: 0.3 } } };
@@ -334,7 +334,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             <linearGradient id="goldStroke" gradientUnits="userSpaceOnUse" x1="-1" y1="-1" x2="1" y2="1"><stop offset="0%" stopColor="#fbe285" /><stop offset="50%" stopColor="#d4af37" /><stop offset="100%" stopColor="#8a6e24" /></linearGradient>
             <radialGradient id="jewelGold" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#fff" /><stop offset="40%" stopColor="#d4af37" /><stop offset="100%" stopColor="#3d2b05" /></radialGradient>
             <radialGradient id="bulbGradientOn"><stop offset="0%" stopColor="#fffec8" /><stop offset="100%" stopColor="#d4af37" /></radialGradient>
-            <radialGradient id="bulbGlowRadial"><stop offset="0%" stopColor="rgba(255, 230, 100, 0.6)" /><stop offset="100%" stopColor="rgba(255, 150, 0, 0)" /></radialGradient>
+            <radialGradient id="bulbGlowRadial" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="rgba(255, 230, 100, 0.6)" /><stop offset="100%" stopColor="rgba(255, 150, 0, 0)" /></radialGradient>
         </defs>
       </svg>
 
@@ -439,7 +439,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             
             {step === 'WHEEL' && (
             <motion.div key="wheel" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center relative z-10 w-full px-2">
-                <div className="relative w-[280px] h-[280px] sm:w-[320px] sm:h-[340px] md:w-[380px] md:h-[380px] mb-8 shrink-0">
+                <div className="relative w-[300px] h-[300px] sm:w-[320px] sm:h-[340px] md:w-[380px] md:h-[380px] mb-8 shrink-0">
                     <div className="absolute inset-[-20px] rounded-full bg-yellow-500/10 blur-[40px]"></div>
 
                     <div className="absolute inset-0 z-20 rounded-full pointer-events-none overflow-visible">
@@ -453,7 +453,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
                     <div className="absolute inset-[32px] rounded-full overflow-hidden z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
                         <motion.div className="w-full h-full origin-center" animate={wheelControls}>
-                            <svg viewBox="-1 -1 2 2" className="w-full h-full transform -rotate-90">{renderWheelSegments()}</svg>
+                            <svg viewBox="-1 -1 2 2" className="w-full h-full transform -rotate-90">
+                              {renderWheelSegments()}
+                            </svg>
                         </motion.div>
                         <div className="absolute inset-0 rounded-full shadow-[inset_0_0_15px_rgba(0,0,0,0.8)] pointer-events-none"></div>
                     </div>
@@ -466,7 +468,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         <div className="w-10 h-10 md:w-12 md:h-12 rounded-full shadow-[0_5px_20px_rgba(0,0,0,0.9)] relative">
                             <svg className="w-full h-full" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="url(#jewelGold)" stroke="#fbe285" strokeWidth="1.5" /></svg>
                             <div className="absolute top-[-35%] left-1/2 -translate-x-1/2 drop-shadow-md z-50">
-                              <svg width="14" height="26" viewBox="0 0 16 30"><path d="M8 0 L14 26 L8 22 L2 26 Z" fill="url(#goldLinear)" stroke="#5a4510" strokeWidth="0.5" /></svg>
+                              <svg width="14" height="26" style={{ width: 'auto', height: '120%' }} viewBox="0 0 16 30"><path d="M8 0 L14 26 L8 22 L2 26 Z" fill="url(#goldLinear)" stroke="#5a4510" strokeWidth="0.5" /></svg>
                             </div>
                         </div>
                     </div>
@@ -478,11 +480,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
+            {/* 5. FORMULAIRE */}
             {step === 'FORM' && winner && (
             <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300 overflow-y-auto">
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
                     <div className="text-center mb-6">
-                        <h2 className="text-2xl font-black mb-2">Félicitations !</h2>
+                        <h2 className="text-2xl font-black mb-2 italic uppercase">Félicitations !</h2>
                         <p className={subTextClass}>Vous avez gagné :</p>
                         <div className="mt-3 bg-yellow-100 text-yellow-800 py-3 px-6 rounded-xl inline-block font-black text-xl border-2 border-yellow-200">{winner.label}</div>
                     </div>
@@ -506,6 +509,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </div>
             )}
 
+            {/* 6. TICKET */}
             {step === 'TICKET' && winner && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300 overflow-y-auto">
                  <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800 my-auto">
