@@ -206,12 +206,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     setWinner(selectedPrize)
     confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
 
-    // 🔥 RETRAIT DU DÉLAI : Affichage direct
+    // 🔥 SUSPENSE DE 1 SECONDE 🔥
     setTimeout(() => {
       setStep('FORM')
       setSpinning(false)
       setLightMode('IDLE')
-    }, 300)
+    }, 1000)
   }
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -362,7 +362,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
         <AnimatePresence mode="wait">
             
-            {/* 1. LANDING (RESTAURÉ) */}
+            {/* 1. LANDING */}
             {step === 'LANDING' && (
             <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -376,7 +376,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 2. INSTRUCTIONS (RESTAURÉ) */}
+            {/* 2. INSTRUCTIONS */}
             {step === 'INSTRUCTIONS' && (
             <motion.div key="instructions" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -423,7 +423,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 3. VERIFICATION (RESTAURÉ) */}
+            {/* 3. VERIFICATION */}
             {step === 'VERIFYING' && (
             <motion.div key="verifying" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -443,7 +443,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
             
-            {/* 4. ROUE (DESIGN LUXE INJECTÉ) */}
+            {/* 4. ROUE */}
             {step === 'WHEEL' && (
             <motion.div key="wheel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center relative z-10 w-full">
                 <div className="relative w-[340px] h-[340px] md:w-[380px] md:h-[380px] mb-12">
@@ -485,7 +485,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </motion.div>
             )}
 
-            {/* 5. FORMULAIRE (RESTAURÉ À L'IDENTIQUE) */}
+            {/* 5. FORMULAIRE */}
             {step === 'FORM' && winner && (
             <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300">
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
@@ -514,7 +514,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             </div>
             )}
 
-            {/* 6. TICKET (RESTAURÉ À L'IDENTIQUE) */}
+            {/* 6. TICKET */}
             {step === 'TICKET' && winner && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300">
                  <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
