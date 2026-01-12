@@ -29,28 +29,42 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     query = query.eq("slug", slug)
   }
 
-  // On récupère les données brutes
   const { data: rawRestaurant, error: restoError } = await query.single()
 
   if (restoError || !rawRestaurant) {
     return notFound()
   }
 
-  // 👉 LA CORRECTION EST ICI : On force le type Restaurant
   const restaurant = rawRestaurant as unknown as Restaurant
 
-  // 3. RÉCUPÉRATION DES GAGNANTS
-  // On utilise games!inner pour filtrer par le JEU actif
-  const { data: winners } = await supabase
+  // 3. RÉCUPÉRATION DES GAGNANTS (LOGIQUE SÉCURISÉE)
+  const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
     .select(`
       *,
       games!inner(name, restaurant_id), 
       prizes(label, color)
     `)
-    // Maintenant TypeScript est content car il sait que restaurant.id existe
     .eq("games.restaurant_id", restaurant.id) 
     .order("created_at", { ascending: false })
+
+  // Diagnostic en cas de liste vide
+  if (fetchError) {
+    console.error("Erreur Supabase Winners:", fetchError)
+  }
+
+  // 🔥 FIX DES ERREURS TYPESCRIPT ET DES LOTS NULL 🔥
+  // On force winnersData en "any[]" pour éviter l'erreur "never"
+  const rawWinners = (winnersData as any[]) || []
+
+  const formattedWinners = rawWinners.map((winner) => ({
+    ...winner,
+    // Si prizes est NULL (car supprimé), on utilise le snapshot ou un texte par défaut
+    prizes: winner.prizes || { 
+        label: winner.prize_label_snapshot || "Lot archivé/modifié", 
+        color: "#64748b" 
+    }
+  }))
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -58,9 +72,16 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
         <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
       </div>
 
+      {/* Affichage d'un message d'erreur si la requête a échoué */}
+      {fetchError && (
+        <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-100 text-sm font-bold">
+          ⚠️ Erreur de récupération : {fetchError.message}
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         {/* On passe les données au tableau interactif */}
-        <AdminWinnersTable initialWinners={winners || []} />
+        <AdminWinnersTable initialWinners={formattedWinners} />
       </div>
     </div>
   )
