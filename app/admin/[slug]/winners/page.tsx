@@ -46,23 +46,17 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .eq("games.restaurant_id", restaurant.id) 
     .order("created_at", { ascending: false })
 
-  // 🔥 --- DÉBUT DIAGNOSTIQUE --- 🔥
+  // 🔥 --- DIAGNOSTIQUE SERVEUR (Pour les logs) --- 🔥
   console.log("-----------------------------------------")
   console.log("🔍 DIAGNOSTIQUE ADMIN GAGNANTS")
   console.log("📍 Slug recherché :", slug)
   console.log("🆔 Restaurant ID identifié :", restaurant.id)
-  
   if (fetchError) {
     console.error("❌ ERREUR SQL SUPABASE :", fetchError.message)
-    console.error("Détails :", fetchError.details)
   } else {
-    console.log("✅ Nombre de lignes reçues de la DB :", winnersData?.length || 0)
-    if (winnersData && winnersData.length > 0) {
-        console.log("📝 Premier gagnant trouvé (game_id) :", (winnersData[0] as any).game_id)
-    }
+    console.log("✅ Nombre de lignes reçues :", winnersData?.length || 0)
   }
   console.log("-----------------------------------------")
-  // 🔥 --- FIN DIAGNOSTIQUE --- 🔥
 
   // 3. FIX CRITIQUE DU TYPE 'NEVER'
   const winnersList = (winnersData as any) || []
@@ -81,7 +75,29 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
         <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
       </div>
 
-      {/* Affichage visuel de l'erreur si elle existe */}
+      {/* 🔥 --- NOUVEAU : BLOC DE DIAGNOSTIC VISUEL (Aide au débugage) --- 🔥 */}
+      <div className="bg-slate-900 text-green-400 p-5 rounded-2xl font-mono text-xs space-y-2 shadow-2xl border border-slate-700 animate-in fade-in zoom-in duration-300">
+        <div className="flex items-center gap-2 text-slate-400 font-bold mb-2 border-b border-slate-700 pb-2 uppercase tracking-widest">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            🛠 Console de Diagnostic (Live)
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <p><span className="text-slate-500">Slug URL:</span> {slug}</p>
+            <p><span className="text-slate-500">Base Restaurant ID:</span> {restaurant.id}</p>
+            <p className="font-bold text-white">
+                <span className="text-slate-500 font-normal">Résultats Supabase :</span> {winnersData?.length || 0} ligne(s)
+            </p>
+            <p><span className="text-slate-500">Status SQL:</span> {fetchError ? "❌ ERREUR" : "✅ OK"}</p>
+        </div>
+        {fetchError && (
+            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg">
+                <p className="font-bold">Détail erreur :</p>
+                {fetchError.message}
+            </div>
+        )}
+      </div>
+
+      {/* Affichage visuel de l'erreur d'origine */}
       {fetchError && (
         <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-xs font-mono">
             Error: {fetchError.message}
