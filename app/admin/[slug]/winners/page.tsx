@@ -36,7 +36,6 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
   const restaurant = rawRestaurant as unknown as Restaurant
 
   // 2. RÉCUPÉRATION DES GAGNANTS
-  // On retire le !inner sur prizes pour ne pas cacher les lignes dont le lot est null
   const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
     .select(`
@@ -47,17 +46,29 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .eq("games.restaurant_id", restaurant.id) 
     .order("created_at", { ascending: false })
 
+  // 🔥 --- DÉBUT DIAGNOSTIQUE --- 🔥
+  console.log("-----------------------------------------")
+  console.log("🔍 DIAGNOSTIQUE ADMIN GAGNANTS")
+  console.log("📍 Slug recherché :", slug)
+  console.log("🆔 Restaurant ID identifié :", restaurant.id)
+  
   if (fetchError) {
-    console.error("Erreur de récupération :", fetchError.message)
+    console.error("❌ ERREUR SQL SUPABASE :", fetchError.message)
+    console.error("Détails :", fetchError.details)
+  } else {
+    console.log("✅ Nombre de lignes reçues de la DB :", winnersData?.length || 0)
+    if (winnersData && winnersData.length > 0) {
+        console.log("📝 Premier gagnant trouvé (game_id) :", (winnersData[0] as any).game_id)
+    }
   }
+  console.log("-----------------------------------------")
+  // 🔥 --- FIN DIAGNOSTIQUE --- 🔥
 
-  // 3. FIX CRITIQUE DU TYPE 'NEVER' (Capture d'écran 5)
-  // On force le passage en 'any' pour que le code puisse s'exécuter malgré l'erreur VS Code
+  // 3. FIX CRITIQUE DU TYPE 'NEVER'
   const winnersList = (winnersData as any) || []
 
   const formattedWinners = winnersList.map((winner: any) => ({
     ...winner,
-    // Gestion du lot manquant : si prizes est null, on cherche le snapshot, sinon texte de secours
     prizes: winner.prizes || { 
         label: winner.prize_label_snapshot || "Lot archivé", 
         color: "#64748b" 
@@ -70,8 +81,14 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
         <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
       </div>
 
+      {/* Affichage visuel de l'erreur si elle existe */}
+      {fetchError && (
+        <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-xs font-mono">
+            Error: {fetchError.message}
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        {/* On envoie les données formatées au tableau */}
         <AdminWinnersTable initialWinners={formattedWinners} />
       </div>
     </div>
