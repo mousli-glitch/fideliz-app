@@ -2,33 +2,37 @@
 
 import { useState } from "react"
 import { validateWinAction } from "@/app/actions/validate-win"
+import { deleteWinnerAction } from "@/app/actions/delete-winner" // 🔥 Import de la nouvelle action
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
-import { Loader2, Search, CheckCircle2, Clock, Calendar } from "lucide-react"
+import { Loader2, Search, CheckCircle2, Calendar, Trash2 } from "lucide-react" // 🔥 Ajout de Trash2
 import { Button } from "@/components/ui/button"
+import { useParams } from "next/navigation" // 🔥 Pour récupérer le slug du restaurant
 
 interface AdminWinnersTableProps {
   initialWinners: any[]
 }
 
 export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
+  const params = useParams()
+  const slug = params?.slug as string
+  
   // On stocke les gagnants dans un état local pour pouvoir les modifier instantanément
   const [winners, setWinners] = useState(initialWinners)
   const [searchTerm, setSearchTerm] = useState("")
   // Pour gérer le chargement individuel de chaque bouton (éviter de bloquer toute la page)
   const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null) // 🔥 Loader spécifique suppression
 
-  // Fonction de validation "INLINE" (sans redirection)
+  // Fonction de validation "INLINE"
   const handleQuickValidate = async (winnerId: string) => {
     if (!confirm("Confirmer la remise du lot au client ?")) return
 
-    setLoadingId(winnerId) // On active le loader sur CE bouton uniquement
+    setLoadingId(winnerId)
 
-    // On appelle notre action serveur (la même que pour le QR code)
     const result = await validateWinAction(winnerId)
 
     if (result.success) {
-      // ⚡️ MAGIE : On met à jour le tableau localement immédiatement
       setWinners((prevWinners) => 
         prevWinners.map((w) => 
           w.id === winnerId 
@@ -43,13 +47,35 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
     setLoadingId(null)
   }
 
+  // 🔥 NOUVELLE FONCTION : Suppression manuelle
+  const handleDelete = async (winnerId: string) => {
+    if (!confirm("Supprimer définitivement ce gagnant de la liste ? Cette action est irréversible.")) return
+
+    setDeletingId(winnerId)
+
+    try {
+      const result = await deleteWinnerAction(winnerId, slug)
+      if (result.success) {
+        // On retire le gagnant de la liste locale immédiatement
+        setWinners((prev) => prev.filter((w) => w.id !== winnerId))
+      } else {
+        alert("Erreur lors de la suppression : " + result.error)
+      }
+    } catch (err) {
+      alert("Une erreur est survenue.")
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   // Filtrage pour la recherche
   const filteredWinners = winners.filter((w) => {
     const search = searchTerm.toLowerCase()
     const email = w.email?.toLowerCase() || ""
     const name = w.first_name?.toLowerCase() || ""
-    const prize = Array.isArray(w.prizes) ? w.prizes[0]?.label : w.prizes?.label || ""
-    return email.includes(search) || name.includes(search) || prize.toLowerCase().includes(search)
+    // Gestion du snapshot ou du lot lié
+    const prizeLabel = w.prizes?.label || w.prize_label_snapshot || ""
+    return email.includes(search) || name.includes(search) || prizeLabel.toLowerCase().includes(search)
   })
 
   return (
@@ -73,7 +99,7 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
               <th className="pb-4 font-bold pl-2">Date Gain</th>
               <th className="pb-4 font-bold">Client</th>
               <th className="pb-4 font-bold">Lot Gagné</th>
-              <th className="pb-4 font-bold text-right pr-2">Action</th>
+              <th className="pb-4 font-bold text-right pr-2">Actions</th>
             </tr>
           </thead>
           <tbody className="text-sm">
@@ -85,8 +111,7 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
               </tr>
             ) : (
               filteredWinners.map((winner) => {
-                // Gestion sécurisée du Lot (Tableau ou Objet)
-                const prizeData = Array.isArray(winner.prizes) ? winner.prizes[0] : winner.prizes
+                const prizeData = winner.prizes
                 const isRedeemed = winner.status === "redeemed" || winner.status === "consumed"
 
                 return (
@@ -111,36 +136,46 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
                       <span 
                         className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold"
                         style={{ 
-                          backgroundColor: (prizeData?.color || "#cbd5e1") + "20", // Couleur + 20% transparence
+                          backgroundColor: (prizeData?.color || "#cbd5e1") + "20",
                           color: prizeData?.color || "#64748b"
                         }}
                       >
-                        {prizeData?.label || "Lot Mystère"}
+                        {prizeData?.label || "Lot Archivé"}
                       </span>
                     </td>
 
-                    {/* BOUTON ACTION */}
+                    {/* ACTIONS : VALIDATION + SUPPRESSION */}
                     <td className="py-4 text-right pr-2">
-                      {isRedeemed ? (
-                        // ÉTAT 1 : DÉJÀ VALIDÉ
-                        <div className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-                          <CheckCircle2 size={14} />
-                          Validé le {winner.redeemed_at ? format(new Date(winner.redeemed_at), "dd/MM", { locale: fr }) : "?"}
-                        </div>
-                      ) : (
-                        // ÉTAT 2 : À VALIDER (Bouton Actif)
-                        <Button 
-                          onClick={() => handleQuickValidate(winner.id)}
-                          disabled={loadingId === winner.id}
-                          className="bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200 h-9 px-4 text-xs font-bold transition-all active:scale-95"
+                      <div className="flex items-center justify-end gap-2">
+                        {isRedeemed ? (
+                          <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200">
+                            <CheckCircle2 size={12} />
+                            Validé le {winner.redeemed_at ? format(new Date(winner.redeemed_at), "dd/MM", { locale: fr }) : "?"}
+                          </div>
+                        ) : (
+                          <Button 
+                            onClick={() => handleQuickValidate(winner.id)}
+                            disabled={loadingId === winner.id}
+                            className="bg-green-600 hover:bg-green-700 text-white shadow-md h-8 px-3 text-[10px] font-bold transition-all active:scale-95"
+                          >
+                            {loadingId === winner.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Valider"}
+                          </Button>
+                        )}
+
+                        {/* BOUTON SUPPRIMER */}
+                        <button
+                          onClick={() => handleDelete(winner.id)}
+                          disabled={deletingId === winner.id}
+                          className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Supprimer définitivement"
                         >
-                          {loadingId === winner.id ? (
+                          {deletingId === winner.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
-                            "Valider"
+                            <Trash2 size={16} />
                           )}
-                        </Button>
-                      )}
+                        </button>
+                      </div>
                     </td>
 
                   </tr>

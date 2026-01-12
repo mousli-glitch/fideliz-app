@@ -14,7 +14,6 @@ export async function registerWinnerAction(data: any) {
 
   try {
     // 1. On vérifie le jeu
-    // 🔥 MODIF : J'ai ajouté 'restaurant_id' dans le select pour pouvoir l'utiliser après
     const { data: game, error: gameError } = await supabaseAdmin
       .from('games')
       .select('validity_days, min_spend, restaurant_id') 
@@ -26,16 +25,25 @@ export async function registerWinnerAction(data: any) {
         return { success: false, error: "Jeu introuvable: " + gameError.message }
     }
 
-    console.log("✅ Jeu trouvé, calcul expiration...")
+    // 🔥 ÉTAPE 3 : RÉCUPÉRATION DU LOT POUR LE SNAPSHOT 🔥
+    // On va chercher le nom actuel du lot pour le graver dans la ligne du gagnant
+    const { data: prizeData } = await supabaseAdmin
+      .from('prizes')
+      .select('label')
+      .eq('id', data.prize_id)
+      .single()
+    
+    const labelSnapshot = prizeData?.label || "Lot inconnu"
+
+    console.log("✅ Jeu trouvé et nom du lot récupéré :", labelSnapshot)
 
     // --- 🔥 DÉBUT AJOUT CRM (SÉCURISÉ) ---
-    // On profite qu'on a toutes les données pour sauvegarder dans le CRM
     if (game.restaurant_id) {
        try {
          await supabaseAdmin.from('contacts').upsert({
             restaurant_id: game.restaurant_id,
             email: data.email,
-            phone: data.phone || null, // Peut être null ici
+            phone: data.phone || null, 
             first_name: data.first_name,
             marketing_optin: data.opt_in,
             source_game_id: data.game_id
@@ -51,13 +59,14 @@ export async function registerWinnerAction(data: any) {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + days)
 
-    // 3. Insertion (Code d'origine)
+    // 3. Insertion (MODIFIÉE POUR LE SNAPSHOT)
     console.log("💾 Tentative d'insertion dans 'winners'...")
     const { data: winner, error: insertError } = await supabaseAdmin
       .from('winners')
       .insert({
         game_id: data.game_id,
         prize_id: data.prize_id,
+        prize_label_snapshot: labelSnapshot, // 🔥 ICI ON ENREGISTRE LE NOM EN DUR
         email: data.email,
         phone: data.phone || "Non renseigné",
         first_name: data.first_name,
