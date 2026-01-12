@@ -5,13 +5,11 @@ import { notFound } from "next/navigation"
 // Force la mise à jour des données à chaque visite
 export const dynamic = "force-dynamic"
 
-// 1. DÉFINITION DU TYPE
 interface Restaurant {
   id: string;
   name: string;
 }
 
-// Fonction utilitaire
 function isUUID(str: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
 }
@@ -20,7 +18,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
   const { slug } = await params
   const supabase = await createClient()
 
-  // 2. DÉTECTION DU RESTAURANT
+  // 1. DÉTECTION DU RESTAURANT
   let query = supabase.from("restaurants").select("id, name")
   
   if (isUUID(slug)) {
@@ -37,8 +35,8 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   const restaurant = rawRestaurant as unknown as Restaurant
 
-  // 3. RÉCUPÉRATION DES GAGNANTS (LOGIQUE SÉCURISÉE)
-  // On utilise une jointure pour filtrer par restaurant
+  // 2. RÉCUPÉRATION DES GAGNANTS
+  // On retire le !inner sur prizes pour ne pas cacher les lignes dont le lot est null
   const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
     .select(`
@@ -50,18 +48,18 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .order("created_at", { ascending: false })
 
   if (fetchError) {
-    console.error("Erreur Supabase Winners:", fetchError)
+    console.error("Erreur de récupération :", fetchError.message)
   }
 
-  // 🔥 CORRECTION CRITIQUE DU TYPE "NEVER" 🔥
-  // On force winnersData en "any[]" pour que le .map() puisse s'exécuter sans erreur TS
-  const rawWinners = (winnersData as any[]) || []
+  // 3. FIX CRITIQUE DU TYPE 'NEVER' (Capture d'écran 5)
+  // On force le passage en 'any' pour que le code puisse s'exécuter malgré l'erreur VS Code
+  const winnersList = (winnersData as any) || []
 
-  const formattedWinners = rawWinners.map((winner) => ({
+  const formattedWinners = winnersList.map((winner: any) => ({
     ...winner,
-    // On gère tous les cas : lot présent, snapshot présent, ou lot supprimé
+    // Gestion du lot manquant : si prizes est null, on cherche le snapshot, sinon texte de secours
     prizes: winner.prizes || { 
-        label: winner.prize_label_snapshot || "Lot archivé/modifié", 
+        label: winner.prize_label_snapshot || "Lot archivé", 
         color: "#64748b" 
     }
   }))
@@ -72,14 +70,8 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
         <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
       </div>
 
-      {fetchError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-100 text-sm font-bold">
-          ⚠️ Erreur de base de données : {fetchError.message}
-        </div>
-      )}
-
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        {/* On passe les données formatées au tableau interactif */}
+        {/* On envoie les données formatées au tableau */}
         <AdminWinnersTable initialWinners={formattedWinners} />
       </div>
     </div>
