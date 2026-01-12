@@ -5,7 +5,7 @@ import { notFound } from "next/navigation"
 // Force la mise à jour des données à chaque visite
 export const dynamic = "force-dynamic"
 
-// 1. DÉFINITION DU TYPE (Pour calmer TypeScript)
+// 1. DÉFINITION DU TYPE
 interface Restaurant {
   id: string;
   name: string;
@@ -13,7 +13,7 @@ interface Restaurant {
 
 // Fonction utilitaire
 function isUUID(str: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
 }
 
 export default async function AdminWinnersPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -37,13 +37,13 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   const restaurant = rawRestaurant as unknown as Restaurant
 
-  // 3. RÉCUPÉRATION DES GAGNANTS (LOGIQUE SÉCURISÉE ET ASSOUPLIE)
-  // 🔥 MODIF : Retrait du !inner pour éviter de cacher les lignes si un lien est rompu
+  // 3. RÉCUPÉRATION DES GAGNANTS (LOGIQUE SÉCURISÉE)
+  // On utilise une jointure pour filtrer par restaurant
   const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
     .select(`
       *,
-      games(name, restaurant_id), 
+      games!inner(name, restaurant_id), 
       prizes(label, color)
     `)
     .eq("games.restaurant_id", restaurant.id) 
@@ -53,11 +53,13 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     console.error("Erreur Supabase Winners:", fetchError)
   }
 
-  // 🔥 FIX DES ERREURS TYPESCRIPT ET DES LOTS NULL 🔥
+  // 🔥 CORRECTION CRITIQUE DU TYPE "NEVER" 🔥
+  // On force winnersData en "any[]" pour que le .map() puisse s'exécuter sans erreur TS
   const rawWinners = (winnersData as any[]) || []
 
   const formattedWinners = rawWinners.map((winner) => ({
     ...winner,
+    // On gère tous les cas : lot présent, snapshot présent, ou lot supprimé
     prizes: winner.prizes || { 
         label: winner.prize_label_snapshot || "Lot archivé/modifié", 
         color: "#64748b" 
@@ -72,11 +74,12 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
       {fetchError && (
         <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-100 text-sm font-bold">
-          ⚠️ Problème de base de données : {fetchError.message}
+          ⚠️ Erreur de base de données : {fetchError.message}
         </div>
       )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        {/* On passe les données formatées au tableau interactif */}
         <AdminWinnersTable initialWinners={formattedWinners} />
       </div>
     </div>
