@@ -28,23 +28,24 @@ export async function updateGameAction(gameId: string, data: any) {
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
       card_style: data.design.card_style,
-      wheel_palette: data.design.wheel_palette // 🔥 AJOUT DE LA PALETTE
+      wheel_palette: data.design.wheel_palette
     }).eq("id", gameId)
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)
 
-    // 3. Gestion des lots (Suppression de la couleur individuelle)
-    await supabaseAdmin.from("prizes").delete().eq("game_id", gameId)
-    
-    const prizesToInsert = data.prizes.map((p: any) => ({
+    // 3. Gestion des lots (UTILISATION DE UPSERT POUR PRÉSERVER LES LIENS GAGNANTS)
+    // 🔥 On ne supprime plus, on met à jour par ID pour ne pas casser la table 'winners'
+    const prizesToUpsert = data.prizes.map((p: any) => ({
+      id: p.id, // Supabase utilisera cet ID pour mettre à jour la ligne existante
       game_id: gameId,
       label: p.label,
-      color: "#000000", // 🔥 Neutre, car la palette gère le visuel maintenant
+      color: "#000000", 
       weight: Number(p.weight)
     }))
     
-    if (prizesToInsert.length > 0) {
-        await (supabaseAdmin.from('prizes') as any).insert(prizesToInsert)
+    if (prizesToUpsert.length > 0) {
+        // 'onConflict' garantit que si l'ID existe déjà, on met juste à jour la ligne
+        await (supabaseAdmin.from('prizes') as any).upsert(prizesToUpsert, { onConflict: 'id' })
     }
 
     return { success: true }
