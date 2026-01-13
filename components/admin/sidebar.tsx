@@ -1,16 +1,16 @@
 "use client"
 
-import { LayoutDashboard, Gamepad2, Trophy, Settings, Users, LogOut } from "lucide-react"
+import { LayoutDashboard, Gamepad2, Trophy, Settings, Users, LogOut, X } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 
-export function Sidebar({ restaurant }: { restaurant: any }) {
+// On ajoute 'onClose' pour fermer le menu mobile quand on clique sur un lien
+export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
   
-  // Fonction pour vérifier si le lien est actif
   const isActive = (path: string) => pathname?.includes(path)
 
   const handleLogout = async () => {
@@ -20,19 +20,25 @@ export function Sidebar({ restaurant }: { restaurant: any }) {
   }
 
   return (
-    <div className="w-64 bg-slate-900 text-white flex flex-col h-screen p-4 sticky top-0">
+    <aside className={`w-64 bg-slate-900 text-white flex flex-col h-screen p-4 sticky top-0 z-50 ${onClose ? 'flex' : 'hidden md:flex'}`}>
       
-      {/* LOGO / NOM DU RESTO */}
-      <div className="px-4 py-4 mb-6">
-        <h2 className="font-black text-2xl tracking-tight text-blue-500">Fideliz Admin</h2>
-        <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">{restaurant.name}</p>
+      <div className="px-4 py-4 mb-6 flex justify-between items-center">
+        <div>
+            <h2 className="font-black text-2xl tracking-tight text-blue-500">Fideliz Admin</h2>
+            <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">{restaurant.name}</p>
+        </div>
+        {/* Bouton pour fermer sur mobile uniquement */}
+        {onClose && (
+            <button onClick={onClose} className="md:hidden p-2 text-slate-400 hover:text-white transition-colors">
+                <X size={24} />
+            </button>
+        )}
       </div>
       
       <nav className="flex-1 flex flex-col gap-2">
-        
-        {/* DASHBOARD */}
         <Link 
           href={`/admin/${restaurant.slug}`}
+          onClick={onClose} // Ferme le menu après clic sur mobile
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
             pathname === `/admin/${restaurant.slug}` ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
@@ -40,9 +46,9 @@ export function Sidebar({ restaurant }: { restaurant: any }) {
           <LayoutDashboard size={20} /> Dashboard
         </Link>
 
-        {/* MES JEUX */}
         <Link 
           href={`/admin/${restaurant.slug}/games`}
+          onClick={onClose}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
             isActive("/games") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
@@ -50,9 +56,9 @@ export function Sidebar({ restaurant }: { restaurant: any }) {
           <Gamepad2 size={20} /> Mes Jeux
         </Link>
 
-        {/* CLIENTS CRM */}
         <Link 
           href={`/admin/${restaurant.slug}/customers`}
+          onClick={onClose}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
             isActive("/customers") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
@@ -60,9 +66,9 @@ export function Sidebar({ restaurant }: { restaurant: any }) {
           <Users size={20} /> Clients CRM
         </Link>
 
-        {/* GAGNANTS */}
         <Link 
           href={`/admin/${restaurant.slug}/winners`}
+          onClick={onClose}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
             isActive("/winners") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
@@ -70,19 +76,17 @@ export function Sidebar({ restaurant }: { restaurant: any }) {
           <Trophy size={20} /> Gagnants
         </Link>
 
-        {/* PARAMÈTRES */}
         <Link 
           href={`/admin/${restaurant.slug}/settings`}
+          onClick={onClose}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
             isActive("/settings") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
         >
           <Settings size={20} /> Paramètres
         </Link>
-
       </nav>
 
-      {/* FOOTER - DÉCONNEXION (Remplacement du Scanner) */}
       <div className="mt-auto pt-4 border-t border-slate-800">
           <button 
             onClick={handleLogout}
@@ -94,6 +98,6 @@ export function Sidebar({ restaurant }: { restaurant: any }) {
             Déconnexion
           </button>
       </div>
-    </div>
+    </aside>
   )
 }
