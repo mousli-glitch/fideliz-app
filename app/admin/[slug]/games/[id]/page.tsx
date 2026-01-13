@@ -63,6 +63,11 @@ export default function EditGamePage() {
 
   const [prizes, setPrizes] = useState<any[]>([])
 
+  // 🔥 FONCTION RÉTABLIE POUR L'API GOOGLE (IDENTIQUE À NEW GAME)
+  const handleGoogleSelect = (url: string) => {
+    setFormData((prev: any) => ({ ...prev, action_url: url }))
+  }
+
   // --- 1. CHARGEMENT DES DONNÉES EXISTANTES ---
   useEffect(() => {
     const loadGame = async () => {
@@ -208,14 +213,19 @@ export default function EditGamePage() {
 
                             {formData.active_action === 'GOOGLE_REVIEW' ? (
                                 <div className="space-y-2">
+                                    {/* 🔥 FIX : Liaison avec handleGoogleSelect et affichage de la valeur par défaut */}
                                     <GooglePlaceInput 
-                                        onSelect={(url) => setFormData({...formData, action_url: url})} 
+                                        onSelect={handleGoogleSelect} 
                                         defaultValue={formData.action_url} 
                                     />
-                                    <p className="text-xs text-slate-500">
+                                    <p className="text-xs text-blue-600 font-bold">
                                         💡 Tapez le nom de votre commerce pour mettre à jour le lien.
                                     </p>
-                                    {formData.action_url && <p className="text-[10px] text-slate-400 truncate">Lien actuel : {formData.action_url}</p>}
+                                    {formData.action_url && (
+                                        <p className="text-[10px] text-green-600 truncate bg-green-50 p-1 rounded font-mono">
+                                            Lien enregistré : {formData.action_url}
+                                        </p>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="space-y-2">

@@ -68,6 +68,11 @@ export default function NewGamePage() {
     { label: "Dessert Offert", color: "#f59e0b", weight: 20 }
   ])
 
+  // 🔥 FONCTION RÉTABLIE POUR L'API GOOGLE
+  const handleGoogleSelect = (url: string) => {
+    setFormData(prev => ({ ...prev, action_url: url }))
+  }
+
   // --- FONCTION DE CRÉATION ---
   const handleCreate = async () => {
     // Reset des messages
@@ -222,11 +227,16 @@ export default function NewGamePage() {
                             {formData.active_action === 'GOOGLE_REVIEW' ? (
                                 <div className="space-y-2">
                                     <GooglePlaceInput 
-                                        onSelect={(url) => setFormData({...formData, action_url: url})} 
+                                        onSelect={handleGoogleSelect} 
                                     />
                                     <p className="text-xs text-slate-500">
                                         💡 Tapez le nom de votre commerce. Le lien d'avis sera généré automatiquement.
                                     </p>
+                                    {formData.action_url && (
+                                        <div className="mt-2 p-2 bg-green-50 text-green-700 text-[10px] rounded border border-green-100 truncate font-mono">
+                                            Lien lié : {formData.action_url}
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="space-y-2">

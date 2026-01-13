@@ -8,19 +8,23 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
   const { slug } = await params
   const PANIER_MOYEN = 15 
 
+  // Utilisation de la clé service pour outrepasser les RLS si nécessaire, 
+  // mais avec un filtrage manuel ultra-strict.
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
+  // 1. On récupère le restaurant de manière UNIQUE via son slug
   const { data: restaurant } = await supabase
      .from("restaurants")
      .select("id, name")
      .eq("slug", slug)
      .single()
   
-  if (!restaurant) return <div>Restaurant introuvable</div>
+  if (!restaurant) return <div className="p-8 text-center font-bold">Restaurant introuvable ({slug})</div>
 
+  // 2. On récupère les jeux uniquement pour CE restaurant (Liaison renforcée)
   const { data: games } = await supabase
     .from("games")
     .select("id, status")
@@ -32,9 +36,21 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
   let winnersCount = 0
   let redeemedCount = 0
 
+  // 3. Calcul des gagnants : On s'assure que si allGameIds est vide, on n'interroge pas la table
   if (allGameIds.length > 0) {
-    const { count: total } = await supabase.from("winners").select("*", { count: "exact", head: true }).in("game_id", allGameIds)
-    const { count: redeemed } = await supabase.from("winners").select("*", { count: "exact", head: true }).in("game_id", allGameIds).eq("status", "redeemed")
+    // FILTRAGE CRITIQUE : .in("game_id", allGameIds) garantit que seuls les gagnants 
+    // de ce restaurant spécifique sont comptés.
+    const { count: total } = await supabase
+        .from("winners")
+        .select("*", { count: "exact", head: true })
+        .in("game_id", allGameIds)
+
+    const { count: redeemed } = await supabase
+        .from("winners")
+        .select("*", { count: "exact", head: true })
+        .in("game_id", allGameIds)
+        .eq("status", "redeemed")
+
     winnersCount = total || 0
     redeemedCount = redeemed || 0
   }
@@ -46,7 +62,6 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
     <div className="p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-10">
         
-        {/* HEADER NETTOYÉ : LogoutButton retiré car déjà présent dans la Sidebar globale */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Dashboard</h1>
@@ -61,7 +76,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
           </div>
         </div>
 
-        {/* CARTES DE STATS (Inchangées) */}
+        {/* CARTES DE STATS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-2xl relative overflow-hidden group">
              <DollarSign className="absolute -right-4 -bottom-4 w-32 h-32 text-white/5" />
@@ -98,7 +113,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
           </div>
         </div>
 
-        {/* ACTIONS RAPIDES (Inchangées) */}
+        {/* ACTIONS RAPIDES */}
         <div className="space-y-4">
           <h3 className="text-xl font-black text-slate-800 tracking-tight">Pilotage</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
