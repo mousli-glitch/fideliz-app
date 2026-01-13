@@ -3,14 +3,13 @@
 import { createClient } from "@/utils/supabase/server"
 import { revalidatePath } from "next/cache"
 
-// Modification ici : on accepte un tableau string[]
 export async function deleteWinnerAction(winnerIds: string[], slug: string) {
   const supabase = await createClient()
   
   const { error } = await supabase
     .from("winners")
     .delete()
-    .in("id", winnerIds) // Utilisation de .in pour gérer plusieurs IDs
+    .in("id", winnerIds) // Cible uniquement la table winners
 
   if (error) {
       console.error("Erreur suppression gagnant(s):", error)
@@ -18,6 +17,5 @@ export async function deleteWinnerAction(winnerIds: string[], slug: string) {
   }
   
   revalidatePath(`/admin/${slug}/winners`)
-  
   return { success: true }
 }
