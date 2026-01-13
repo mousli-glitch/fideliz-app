@@ -3,20 +3,20 @@
 import { createClient } from "@/utils/supabase/server"
 import { revalidatePath } from "next/cache"
 
-export async function deleteContactAction(contactId: string, slug: string) {
+// Modification ici : on accepte un tableau string[]
+export async function deleteContactAction(contactIds: string[], slug: string) {
   const supabase = await createClient()
   
   const { error } = await supabase
-    .from("contacts") // On cible la table des contacts
+    .from("contacts")
     .delete()
-    .eq("id", contactId)
+    .in("id", contactIds) // Utilisation de .in pour gérer plusieurs IDs
 
   if (error) {
-      console.error("Erreur suppression contact:", error)
+      console.error("Erreur suppression contact(s):", error)
       return { success: false, error: error.message }
   }
   
-  // On rafraîchit la page des contacts pour mettre à jour la liste
   revalidatePath(`/admin/${slug}/contacts`)
   
   return { success: true }
