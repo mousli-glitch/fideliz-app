@@ -7,20 +7,15 @@ import { ArrowLeft, Store, MapPin, Globe, Loader2, Save, Mail, Lock } from 'luci
 import Link from 'next/link'
 
 export default function NewRestaurantSales() {
-  // Infos Restaurant
   const [name, setName] = useState('')
   const [city, setCity] = useState('')
   const [slug, setSlug] = useState('')
-  
-  // Infos Compte Admin (Restaurateur)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
   const router = useRouter()
 
-  // Génération automatique du lien (Slug)
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     setName(val)
@@ -31,7 +26,7 @@ export default function NewRestaurantSales() {
     e.preventDefault()
     setLoading(true)
 
-    // 1. Qui crée ce restaurant ? (Le commercial connecté)
+    // 1. Récupérer le commercial connecté
     const { data: { user: salesUser } } = await supabase.auth.getUser()
 
     if (!salesUser) {
@@ -40,14 +35,27 @@ export default function NewRestaurantSales() {
       return
     }
 
-    // --- ÉTAPE A : CRÉATION DU RESTAURANT ---
-    // (J'utilise 'as any' pour contourner les erreurs TypeScript)
+    // --- ÉTAPE A : CRÉATION DU COMPTE RESTAURATEUR (Auth) ---
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+    })
+
+    if (authError || !authData.user) {
+      alert("Erreur création compte utilisateur : " + authError?.message)
+      setLoading(false)
+      return
+    }
+
+    // --- ÉTAPE B : CRÉATION DU RESTAURANT ---
+    // On lie l'owner_id au nouveau client et created_by au commercial
     const { data: newResto, error: restoError } = await (supabase.from('restaurants') as any)
       .insert({
         name,
-        city,         // C'est cette colonne qu'on vient d'ajouter
+        city,
         slug,
-        owner_id: salesUser.id,
+        owner_id: authData.user.id, // Le client est le propriétaire
+        created_by: salesUser.id,   // Le commercial est le créateur
         is_active: true
       })
       .select()
@@ -59,34 +67,20 @@ export default function NewRestaurantSales() {
       return
     }
 
-    // --- ÉTAPE B : CRÉATION DU COMPTE RESTAURATEUR ---
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-    })
+    // --- ÉTAPE C : LIAISON DU PROFIL ADMIN ---
+    const { error: profileError } = await (supabase.from('profiles') as any)
+      .update({
+        role: 'admin',
+        restaurant_id: newResto.id,
+        is_active: true
+      })
+      .eq('id', authData.user.id)
 
-    if (authError) {
-      alert("Restaurant créé, mais erreur sur le compte utilisateur : " + authError.message)
-      setLoading(false)
-      return
-    }
-
-    // --- ÉTAPE C : LIAISON (On donne les clés au nouveau compte) ---
-    if (authData.user && newResto) {
-      const { error: profileError } = await (supabase.from('profiles') as any)
-        .update({
-          role: 'admin',
-          restaurant_id: newResto.id,
-          is_active: true
-        })
-        .eq('id', authData.user.id)
-
-      if (profileError) {
-        alert("Compte créé mais erreur de liaison : " + profileError.message)
-      } else {
-        alert("Succès ! Restaurant et Compte Admin créés. 🎉")
-        router.push('/super-admin/sales/dashboard')
-      }
+    if (profileError) {
+      alert("Compte créé mais erreur de liaison profil : " + profileError.message)
+    } else {
+      alert("Succès ! Restaurant créé et lié à votre portefeuille. 🎉")
+      router.push('/super-admin/sales/dashboard')
     }
     setLoading(false)
   }
@@ -94,7 +88,6 @@ export default function NewRestaurantSales() {
   return (
     <div className="min-h-screen bg-slate-950 text-white p-8 flex justify-center">
       <div className="w-full max-w-2xl">
-        
         <Link href="/super-admin/sales/dashboard" className="flex items-center gap-2 text-slate-500 hover:text-white mb-8 transition-colors w-fit text-xs font-bold uppercase tracking-widest">
           <ArrowLeft size={16} /> Retour Dashboard
         </Link>
@@ -111,11 +104,8 @@ export default function NewRestaurantSales() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-8">
-            
-            {/* SECTION 1 : INFOS RESTAURANT */}
             <div className="space-y-6 p-6 bg-slate-950/50 rounded-3xl border border-slate-800/50">
               <h3 className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4">Infos Restaurant</h3>
-              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
                   <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-2 block">Nom du Restaurant</label>
@@ -125,7 +115,6 @@ export default function NewRestaurantSales() {
                     placeholder="Ex: Le Kiosque"
                   />
                 </div>
-                
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-2 block">Ville</label>
                   <div className="relative">
@@ -137,7 +126,6 @@ export default function NewRestaurantSales() {
                     />
                   </div>
                 </div>
-
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-2 block">slug-url</label>
                   <div className="relative">
@@ -152,10 +140,8 @@ export default function NewRestaurantSales() {
               </div>
             </div>
 
-            {/* SECTION 2 : ACCÈS ADMIN */}
             <div className="space-y-6 p-6 bg-slate-950/50 rounded-3xl border border-slate-800/50">
               <h3 className="text-xs font-black text-blue-500 uppercase tracking-widest mb-4">Accès Administrateur</h3>
-              
               <div className="space-y-4">
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-2 block">Email du client</label>
@@ -168,7 +154,6 @@ export default function NewRestaurantSales() {
                     />
                   </div>
                 </div>
-
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-2 block">Mot de passe provisoire</label>
                   <div className="relative group">
@@ -189,7 +174,6 @@ export default function NewRestaurantSales() {
             >
               {loading ? <Loader2 className="animate-spin" /> : "CRÉER ET ENVOYER LES ACCÈS"}
             </button>
-
           </form>
         </div>
       </div>
