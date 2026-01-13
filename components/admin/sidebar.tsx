@@ -5,7 +5,6 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 
-// On ajoute 'onClose' pour fermer le menu mobile quand on clique sur un lien
 export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -20,14 +19,18 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: ()
   }
 
   return (
-    <aside className={`w-64 bg-slate-900 text-white flex flex-col h-screen p-4 sticky top-0 z-50 ${onClose ? 'flex' : 'hidden md:flex'}`}>
-      
+    <aside className={`
+      bg-slate-900 text-white flex flex-col h-screen p-4 sticky top-0 z-50
+      ${onClose 
+        ? 'w-[280px] fixed left-0' // Largeur fixe quand elle est dans le menu mobile
+        : 'w-64 hidden md:flex'     // Largeur fixe et cachée sur mobile en mode "layout"
+      }
+    `}>
       <div className="px-4 py-4 mb-6 flex justify-between items-center">
         <div>
             <h2 className="font-black text-2xl tracking-tight text-blue-500">Fideliz Admin</h2>
             <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">{restaurant.name}</p>
         </div>
-        {/* Bouton pour fermer sur mobile uniquement */}
         {onClose && (
             <button onClick={onClose} className="md:hidden p-2 text-slate-400 hover:text-white transition-colors">
                 <X size={24} />
@@ -35,10 +38,10 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: ()
         )}
       </div>
       
-      <nav className="flex-1 flex flex-col gap-2">
+      <nav className="flex-1 flex flex-col gap-2 overflow-y-auto">
         <Link 
           href={`/admin/${restaurant.slug}`}
-          onClick={onClose} // Ferme le menu après clic sur mobile
+          onClick={onClose}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition ${
             pathname === `/admin/${restaurant.slug}` ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
@@ -46,6 +49,7 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: ()
           <LayoutDashboard size={20} /> Dashboard
         </Link>
 
+        {/* ... Garde tes autres liens identiques ... */}
         <Link 
           href={`/admin/${restaurant.slug}/games`}
           onClick={onClose}

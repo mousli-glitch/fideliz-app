@@ -9,8 +9,7 @@ export function MobileHeader({ restaurant }: { restaurant: any }) {
 
   return (
     <div className="md:hidden">
-      {/* Barre visible en haut sur mobile */}
-      <div className="bg-slate-900 text-white p-4 flex justify-between items-center border-b border-slate-800">
+      <div className="bg-slate-900 text-white p-4 flex justify-between items-center border-b border-slate-800 sticky top-0 z-[60]">
         <span className="font-black text-xl text-blue-500 tracking-tight">Fideliz</span>
         <button 
           onClick={() => setIsOpen(true)} 
@@ -20,13 +19,13 @@ export function MobileHeader({ restaurant }: { restaurant: any }) {
         </button>
       </div>
 
-      {/* Menu coulissant (Sidebar mobile) */}
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex">
-          {/* Fond sombre cliquable pour fermer */}
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsOpen(false)} />
+        <div className="fixed inset-0 z-[100]">
+          {/* Overlay sombre */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsOpen(false)} />
           
-          <div className="relative animate-in slide-in-from-left duration-300 shadow-2xl">
+          {/* Conteneur de la Sidebar - MODIFICATION : On s'assure qu'il est bien calé à gauche */}
+          <div className="absolute left-0 top-0 h-full animate-in slide-in-from-left duration-300 shadow-2xl">
             <Sidebar restaurant={restaurant} onClose={() => setIsOpen(false)} />
           </div>
         </div>
