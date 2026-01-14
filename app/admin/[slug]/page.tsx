@@ -8,23 +8,22 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
   const { slug } = await params
   const PANIER_MOYEN = 15 
 
-  // Utilisation de la clé service pour outrepasser les RLS si nécessaire, 
-  // mais avec un filtrage manuel ultra-strict.
+  // Utilisation de la clé service pour garantir que l'Admin voit ses données
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // 1. On récupère le restaurant de manière UNIQUE via son slug
+  // 1. RÉCUPÉRATION UNIQUE : On s'assure de ne récupérer QUE le restaurant lié au slug
   const { data: restaurant } = await supabase
      .from("restaurants")
      .select("id, name")
      .eq("slug", slug)
      .single()
   
-  if (!restaurant) return <div className="p-8 text-center font-bold">Restaurant introuvable ({slug})</div>
+  if (!restaurant) return <div className="p-8 text-center font-bold text-slate-500">Établissement introuvable ({slug})</div>
 
-  // 2. On récupère les jeux uniquement pour CE restaurant (Liaison renforcée)
+  // 2. RÉCUPÉRATION DES JEUX : Uniquement ceux du restaurant identifié ci-dessus
   const { data: games } = await supabase
     .from("games")
     .select("id, status")
@@ -36,10 +35,9 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
   let winnersCount = 0
   let redeemedCount = 0
 
-  // 3. Calcul des gagnants : On s'assure que si allGameIds est vide, on n'interroge pas la table
+  // 3. COMPTAGE GAGNANTS : On verrouille la requête sur les IDs de jeux trouvés
   if (allGameIds.length > 0) {
-    // FILTRAGE CRITIQUE : .in("game_id", allGameIds) garantit que seuls les gagnants 
-    // de ce restaurant spécifique sont comptés.
+    // Cette clause .in("game_id", allGameIds) est le rempart contre la fuite de données
     const { count: total } = await supabase
         .from("winners")
         .select("*", { count: "exact", head: true })
@@ -113,7 +111,6 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
           </div>
         </div>
 
-        {/* ACTIONS RAPIDES */}
         <div className="space-y-4">
           <h3 className="text-xl font-black text-slate-800 tracking-tight">Pilotage</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

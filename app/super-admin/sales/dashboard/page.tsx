@@ -26,33 +26,56 @@ export default function SalesDashboard() {
         router.push('/login')
         return 
       }
+      
+      // 1. Récupération du profil
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       setProfile(profileData)
 
-      // RÉCUPÉRATION AVEC DATE DU DERNIER GAGNANT
-      const { data: restoData } = await (supabase.from('restaurants') as any)
-        .select(`
-          *,
-          winners:winners(count, created_at)
-        `)
+      // 2. Récupération des restaurants (Utilisation de as any pour le schéma dynamique)
+      const { data: restos } = await (supabase.from('restaurants') as any)
+        .select('*')
         .eq('created_by', user.id)
         .order('created_at', { ascending: false })
 
-      setRestaurants(restoData || [])
+      if (restos && restos.length > 0) {
+        // 3. Récupération des gagnants par restaurant pour les compteurs et l'inactivité
+        const restosWithWinners = await Promise.all(restos.map(async (r: any) => {
+            const { data: gameIdsData } = await (supabase.from('games') as any).select('id').eq('restaurant_id', r.id)
+            const ids = (gameIdsData as any[])?.map((g: any) => g.id) || []
+            
+            let count = 0
+            let lastDate = null
+            if (ids.length > 0) {
+                const { data: winnersData } = await (supabase.from('winners') as any)
+                    .select('created_at')
+                    .in('game_id', ids)
+                    .order('created_at', { ascending: false })
+                
+                const winnersArray = (winnersData as any[]) || []
+                count = winnersArray.length || 0
+                lastDate = winnersArray[0]?.created_at || null
+            }
+
+            return { 
+                ...r, 
+                winners: { count, last_winner_at: lastDate },
+                winners_raw: lastDate ? [{ created_at: lastDate }] : [] 
+            }
+        }))
+        setRestaurants(restosWithWinners)
+      } else {
+        setRestaurants([])
+      }
+      
       setLoading(false)
     }
     getData()
   }, [])
 
-  // FONCTION DE CALCUL D'ALERTE
   const getAtRiskStatus = (resto: any) => {
-    if (!resto.is_retention_alert_enabled || !resto.winners || resto.winners.length === 0) return false;
-    
-    // On trouve le gagnant le plus récent
-    const dates = resto.winners.map((w: any) => new Date(w.created_at).getTime());
-    const lastWinnerTime = Math.max(...dates);
+    if (!resto.is_retention_alert_enabled || !resto.winners_raw || resto.winners_raw.length === 0) return false;
+    const lastWinnerTime = new Date(resto.winners_raw[0].created_at).getTime();
     const now = new Date().getTime();
-    
     const diffDays = (now - lastWinnerTime) / (1000 * 60 * 60 * 24);
     return diffDays > (resto.alert_threshold_days || 7);
   }
@@ -77,21 +100,23 @@ export default function SalesDashboard() {
   }
 
   const handleLogout = async () => {
+    // FIX : Utilisation de auth.signOut() pour éviter l'erreur de propriété
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  const totalWinners = restaurants.reduce((acc, r) => acc + (r.winners?.[0]?.count || 0), 0)
+  // CALCULS STATS (Vérification des liaisons)
+  const totalWinners = restaurants.reduce((acc, r) => acc + (r.winners?.count || 0), 0)
   const totalGoogle = restaurants.reduce((acc, r) => acc + (r.google_clicks || 0), 0)
   const totalSocial = restaurants.reduce((acc, r) => acc + ((r.tiktok_clicks || 0) + (r.instagram_clicks || 0) + (r.facebook_clicks || 0)), 0)
   const atRiskCount = restaurants.filter(r => getAtRiskStatus(r)).length;
 
-  if (loading) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-black italic">ANALSYE DU RÉSEAU...</div>
+  if (loading) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-black italic animate-pulse">FIDELIZ ANALYSE...</div>
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8">
       
-      {/* MODAL BILAN FLASH (CONSERVÉ) */}
+      {/* MODAL BILAN FLASH */}
       {selectedBilan && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setSelectedBilan(null)} />
@@ -101,8 +126,8 @@ export default function SalesDashboard() {
               <div className="flex items-center gap-3 mb-8"><div className="bg-blue-600 p-2 rounded-lg"><Trophy size={16} /></div><span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500">Bilan Fideliz</span></div>
               <h2 className="text-3xl font-black mb-2">{selectedBilan.name}</h2>
               <div className="grid grid-cols-2 gap-4 my-10">
-                <div className="bg-white/5 p-6 rounded-3xl border border-white/5"><DollarSign className="text-green-500 mb-2" size={24}/><div className="text-2xl font-black">{(selectedBilan.winners?.length || 0) * 15}€</div><div className="text-[10px] font-bold text-slate-500 uppercase">CA Estimé</div></div>
-                <div className="bg-white/5 p-6 rounded-3xl border border-white/5"><Trophy className="text-blue-500 mb-2" size={24}/><div className="text-2xl font-black">{selectedBilan.winners?.length || 0}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Gagnants</div></div>
+                <div className="bg-white/5 p-6 rounded-3xl border border-white/5"><DollarSign className="text-green-500 mb-2" size={24}/><div className="text-2xl font-black">{(selectedBilan.winners?.count || 0) * 15}€</div><div className="text-[10px] font-bold text-slate-500 uppercase">CA Estimé</div></div>
+                <div className="bg-white/5 p-6 rounded-3xl border border-white/5"><Trophy className="text-blue-500 mb-2" size={24}/><div className="text-2xl font-black">{selectedBilan.winners?.count || 0}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Gagnants</div></div>
               </div>
               <div className="space-y-4">
                 <div className="flex justify-between p-4 bg-black/20 rounded-2xl border border-white/5"><span className="text-sm font-bold">Avis Google</span><span className="font-black">+{selectedBilan.google_clicks || 0}</span></div>
@@ -150,7 +175,6 @@ export default function SalesDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* LISTE PRINCIPALE */}
         <div className="lg:col-span-2 space-y-6">
           <Link href="/super-admin/sales/new-restaurant" className="group bg-slate-900 border-2 border-dashed border-slate-800 hover:border-blue-500 p-6 rounded-3xl transition-all flex items-center gap-4">
             <div className="bg-blue-600 p-3 rounded-2xl group-hover:scale-110 transition-transform"><PlusCircle size={24} /></div>
@@ -186,7 +210,7 @@ export default function SalesDashboard() {
                   <div className="grid grid-cols-3 gap-4 mb-6">
                     <div className="bg-black/30 p-4 rounded-2xl border border-white/5">
                       <Trophy className="text-blue-500 mb-1" size={14} />
-                      <p className="text-lg font-black">{resto.winners?.length || 0}</p>
+                      <p className="text-lg font-black">{resto.winners?.count || 0}</p>
                     </div>
                     <div className="bg-black/30 p-4 rounded-2xl border border-white/5">
                       <Star className="text-yellow-500 mb-1" size={14} />
@@ -198,7 +222,6 @@ export default function SalesDashboard() {
                     </div>
                   </div>
 
-                  {/* CRM & RÉTENTION */}
                   <div className="space-y-4 pt-4 border-t border-slate-800">
                     <div className="flex flex-col md:flex-row gap-4">
                       <div className="flex-1">
@@ -236,7 +259,6 @@ export default function SalesDashboard() {
           </div>
         </div>
 
-        {/* COLONNE DROITE : ALERTES CRITIQUES */}
         <div className="space-y-6">
           <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl sticky top-8">
             <div className="flex items-center gap-3 mb-6">
@@ -268,7 +290,7 @@ export default function SalesDashboard() {
             <div className="mt-8 p-4 bg-slate-950 border border-slate-800 rounded-2xl">
               <h4 className="text-[10px] font-black text-blue-500 uppercase mb-2">Conseil Commercial</h4>
               <p className="text-[10px] text-slate-500 leading-relaxed italic">
-                "Un client qui n'a plus de gagnant est un client qui risque de résilier. Appelle-le pour vérifier si son QR Code est bien visible !"
+                "Un client qui n'a plus de gagnant est un client qui risque de résilier. Appelle-le !"
               </p>
             </div>
           </div>
