@@ -2,7 +2,6 @@ import { createClient } from "@/utils/supabase/server"
 import { AdminWinnersTable } from "@/components/admin/winners-table"
 import { notFound } from "next/navigation"
 
-// Force la mise à jour des données à chaque visite
 export const dynamic = "force-dynamic"
 
 interface Restaurant {
@@ -35,8 +34,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   const restaurant = rawRestaurant as unknown as Restaurant
 
-  // 2. RÉCUPÉRATION DES GAGNANTS (VERSION ROBUSTE)
-  // ÉTAPE A : On récupère d'abord tous les IDs de jeux du restaurant (même archivés)
+  // 2. RÉCUPÉRATION DES JEUX
   const { data: gamesData } = await supabase
     .from("games")
     .select("id")
@@ -44,8 +42,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   const gameIds = (gamesData as any[])?.map(g => g.id) || []
 
-  // ÉTAPE B : On récupère les gagnants filtrés par ces IDs
-  // Cette méthode est plus fiable que la jointure directe qui peut être filtrée par le RLS des jeux
+  // 3. RÉCUPÉRATION DES GAGNANTS
   const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
     .select(`
@@ -56,7 +53,14 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .in("game_id", gameIds) 
     .order("created_at", { ascending: false })
 
-  // 3. FIX DU TYPE 'NEVER' ET GESTION DU SNAPSHOT
+  // --- LE MOUCHARD (DEBUG) ---
+  console.log("=== DEBUG WINNERS POINTB ===");
+  console.log("RESTAURANT ID:", restaurant.id);
+  console.log("JEUX TROUVÉS (IDs):", gameIds);
+  console.log("NOMBRE GAGNANTS REÇUS:", winnersData?.length || 0);
+  if (fetchError) console.log("ERREUR SUPABASE:", fetchError.message);
+  // ---------------------------
+
   const winnersList = (winnersData as any) || []
 
   const formattedWinners = winnersList.map((winner: any) => ({
