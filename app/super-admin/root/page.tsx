@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { LayoutDashboard, Users, Store, Settings, Activity, PlusCircle, ShieldAlert, Database, ArrowRight, CheckCircle2, Loader2 } from 'lucide-react'
+import { LayoutDashboard, Users, Store, Settings, Activity, PlusCircle, ShieldAlert, Database, ArrowRight, CheckCircle2, Loader2, Clock } from 'lucide-react'
 import Navbar from '@/components/Navbar'
 import { getRootStats } from '@/app/actions/get-root-stats'
-import { repairOrphansAction } from '@/app/actions/repair-orphans' // Import de la nouvelle action
+import { repairOrphansAction } from '@/app/actions/repair-orphans'
 
 export default function RootDashboard() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [isRepairing, setIsRepairing] = useState(false) // Pour l'état de chargement du bouton
+  const [isRepairing, setIsRepairing] = useState(false)
 
   const loadData = async () => {
     setLoading(true)
@@ -23,16 +23,13 @@ export default function RootDashboard() {
     loadData()
   }, [])
 
-  // Fonction de réparation
   const handleRepair = async () => {
     if (!confirm("Voulez-vous rattacher tous les restaurants orphelins à votre compte Super Admin ?")) return
-    
     setIsRepairing(true)
     const result = await repairOrphansAction()
-    
     if (result.success) {
       alert("Réparation terminée avec succès !")
-      loadData() // On rafraîchit les stats
+      loadData()
     } else {
       alert("Erreur lors de la réparation : " + result.error)
     }
@@ -44,6 +41,7 @@ export default function RootDashboard() {
       <Navbar roleName="Super Admin" />
 
       <div className="p-8 max-w-7xl mx-auto">
+        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
           <div>
             <h1 className="text-4xl font-black tracking-tight">FIDELIZ <span className="text-blue-500">ROOT</span></h1>
@@ -66,6 +64,7 @@ export default function RootDashboard() {
           </div>
         </div>
 
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           <StatCard title="Restaurants" value={data?.stats.restaurants} loading={loading} icon={<Store className="text-blue-400" />} color="bg-blue-500/10" />
           <StatCard title="CRM Global" value={data?.stats.contacts} loading={loading} icon={<Users className="text-orange-400" />} color="bg-orange-500/10" />
@@ -75,47 +74,67 @@ export default function RootDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          <div className="bg-slate-950 border-2 border-slate-800 rounded-3xl overflow-hidden flex flex-col">
+          {/* TERMINAL DE BUG AMÉLIORÉ */}
+          <div className="bg-slate-950 border-2 border-slate-800 rounded-3xl overflow-hidden flex flex-col min-h-[400px]">
             <div className="bg-slate-800/50 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
               <h2 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
                 <ShieldAlert size={16} className="text-red-500" /> Terminal de Diagnostic
               </h2>
               <div className="flex gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50"></div>
-                <div className="w-2.5 h-2.5 rounded-full bg-amber-500/20 border border-amber-500/50"></div>
-                <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/50"></div>
+                <div className={`w-2.5 h-2.5 rounded-full ${data?.orphans.length > 0 ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-slate-700'}`}></div>
+                <div className="w-2.5 h-2.5 rounded-full bg-slate-700"></div>
+                <div className={`w-2.5 h-2.5 rounded-full ${!loading && data?.orphans.length === 0 ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
               </div>
             </div>
             
-            <div className="p-6 space-y-4 font-mono">
-              {loading ? (
-                <p className="text-slate-500 animate-pulse text-xs">{">"} Initialisation du scan...</p>
-              ) : data?.orphans.length > 0 ? (
-                <div className="space-y-3">
-                  <p className="text-red-400 text-xs font-bold animate-pulse uppercase">
-                    [CRITICAL] {data.orphans.length} Restaurateur(s) sans propriétaire détectés
+            <div className="p-6 space-y-6 font-mono overflow-y-auto max-h-[500px]">
+              {/* SCANNER D'INTÉGRITÉ */}
+              <div className="space-y-3">
+                <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest border-b border-slate-900 pb-2">Scanner d'intégrité</p>
+                {loading ? (
+                  <p className="text-slate-500 animate-pulse text-xs">{">"} Scan en cours...</p>
+                ) : data?.orphans.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-red-400 text-xs font-bold animate-pulse">
+                      [CRITICAL] {data.orphans.length} Orphelins détectés
+                    </p>
+                    {data.orphans.map((o: any) => (
+                      <div key={o.id} className="text-[10px] bg-red-500/5 border border-red-500/20 p-3 rounded-xl text-red-300 flex justify-between items-center">
+                        <span>{o.name} ({o.slug})</span>
+                        <button onClick={handleRepair} disabled={isRepairing} className="font-black underline uppercase hover:text-white px-2 py-1 bg-red-500/10 rounded">
+                          {isRepairing ? "..." : "Fix"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-green-500 text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 size={14} /> Données 100% Intègres
                   </p>
-                  {data.orphans.map((o: any) => (
-                    <div key={o.id} className="text-[10px] bg-red-500/5 border border-red-500/20 p-2 rounded text-red-300 flex justify-between items-center">
-                      <span>ID: {o.slug} ({o.name})</span>
-                      <button 
-                        onClick={handleRepair}
-                        disabled={isRepairing}
-                        className="font-black underline uppercase hover:text-white transition-colors disabled:opacity-50"
-                      >
-                        {isRepairing ? "Réparation..." : "RÉPARER"}
-                      </button>
-                    </div>
-                  ))}
+                )}
+              </div>
+
+              {/* FLUX DE LOGS EN DIRECT */}
+              <div className="space-y-3 pt-4">
+                <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest border-b border-slate-900 pb-2">Journal d'activité système</p>
+                <div className="space-y-2">
+                  {data?.logs?.length > 0 ? (
+                    data.logs.map((log: any) => (
+                      <div key={log.id} className="flex items-start gap-3 text-[10px] p-2 bg-white/5 rounded-lg border border-white/5 group hover:bg-white/10 transition-all">
+                        <div className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${log.level === 'error' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                        <div className="flex-1 overflow-hidden">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-slate-300 font-bold truncate">{log.restaurant_slug || 'GLOBAL'}</span>
+                            <span className="text-slate-600 flex items-center gap-1 shrink-0"><Clock size={10}/>{new Date(log.created_at).toLocaleTimeString()}</span>
+                          </div>
+                          <p className="text-slate-500 italic break-words">{log.message}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-slate-600 text-xs italic opacity-50">Aucun log enregistré.</p>
+                  )}
                 </div>
-              ) : (
-                <div className="flex items-center gap-3 text-green-500 text-xs font-bold">
-                  <CheckCircle2 size={16} />
-                  <span>AUCUNE ERREUR D'INTÉGRITÉ DÉTECTÉE</span>
-                </div>
-              )}
-              <div className="pt-4 border-t border-slate-900 mt-4">
-                 <p className="text-slate-600 text-[10px]">Dernier scan : {new Date().toLocaleTimeString()}</p>
               </div>
             </div>
           </div>
