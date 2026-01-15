@@ -1,7 +1,8 @@
-import { createClient } from "@/utils/supabase/server"
+import { createClient } from "@supabase/supabase-js" // On change l'import
 import { AdminWinnersTable } from "@/components/admin/winners-table"
 import { notFound } from "next/navigation"
 
+// Force la mise à jour des données
 export const dynamic = "force-dynamic"
 
 interface Restaurant {
@@ -15,7 +16,12 @@ function isUUID(str: string) {
 
 export default async function AdminWinnersPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const supabase = await createClient()
+  
+  // INITIALISATION AVEC LA CLÉ MAÎTRESSE (Bypasse le RLS)
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
 
   // 1. DÉTECTION DU RESTAURANT
   let query = supabase.from("restaurants").select("id, name")
@@ -34,7 +40,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   const restaurant = rawRestaurant as unknown as Restaurant
 
-  // 2. RÉCUPÉRATION DES JEUX
+  // 2. RÉCUPÉRATION DES JEUX (Tous les jeux, sans exception)
   const { data: gamesData } = await supabase
     .from("games")
     .select("id")
@@ -42,7 +48,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   const gameIds = (gamesData as any[])?.map(g => g.id) || []
 
-  // 3. RÉCUPÉRATION DES GAGNANTS
+  // 3. RÉCUPÉRATION DES GAGNANTS (La Clé Maîtresse force le passage)
   const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
     .select(`
@@ -53,13 +59,11 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .in("game_id", gameIds) 
     .order("created_at", { ascending: false })
 
-  // --- LE MOUCHARD (DEBUG) ---
-  console.log("=== DEBUG WINNERS POINTB ===");
-  console.log("RESTAURANT ID:", restaurant.id);
-  console.log("JEUX TROUVÉS (IDs):", gameIds);
-  console.log("NOMBRE GAGNANTS REÇUS:", winnersData?.length || 0);
-  if (fetchError) console.log("ERREUR SUPABASE:", fetchError.message);
-  // ---------------------------
+  // --- LE MOUCHARD (Regarde ton terminal après rafraîchissement) ---
+  console.log("=== DIAGNOSTIC FINAL POINT B ===");
+  console.log("RESTAURANT:", restaurant.name);
+  console.log("NOMBRE DE GAGNANTS TROUVÉS:", winnersData?.length || 0);
+  if (fetchError) console.error("ERREUR TECHNIQUE:", fetchError.message);
 
   const winnersList = (winnersData as any) || []
 
@@ -78,8 +82,8 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
       </div>
 
       {fetchError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-xs font-mono">
-            Erreur technique : {fetchError.message}
+        <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-[10px] font-mono">
+            Mode Maintenance : {fetchError.message}
         </div>
       )}
 
