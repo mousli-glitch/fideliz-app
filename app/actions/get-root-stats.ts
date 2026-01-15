@@ -13,12 +13,17 @@ export async function getRootStats() {
   const { count: usersCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
   const { count: contactsCount } = await supabase.from('contacts').select('*', { count: 'exact', head: true })
 
+  // NOUVEAU : On compte les tickets validés (ceux qui ont une date de scan)
+  const { count: redeemedCount } = await supabase
+    .from('winners')
+    .select('*', { count: 'exact', head: true })
+    .not('redeemed_at', 'is', null)
+
   const { data: orphans } = await supabase
     .from('restaurants')
     .select('id, name, slug')
     .is('owner_id', null)
 
-  // RÉCUPÉRATION DES 10 DERNIERS LOGS D'ERREURS
   const { data: recentLogs } = await supabase
     .from('system_logs')
     .select('*')
@@ -30,9 +35,10 @@ export async function getRootStats() {
       restaurants: restoCount || 0,
       winners: winnersCount || 0,
       users: usersCount || 0,
-      contacts: contactsCount || 0
+      contacts: contactsCount || 0,
+      redeemed: redeemedCount || 0 // Ajouté ici
     },
     orphans: orphans || [],
-    logs: recentLogs || [] // On envoie les logs à la page
+    logs: recentLogs || []
   }
 }
