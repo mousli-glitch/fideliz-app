@@ -41,9 +41,10 @@ export default function RootDashboard() {
       <Navbar roleName="Super Admin" />
 
       <div className="p-8 max-w-7xl mx-auto">
+        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
           <div>
-            <h1 className="text-4xl font-black tracking-tight">FIDELIZ <span className="text-blue-500">ROOT</span></h1>
+            <h1 className="text-4xl font-black tracking-tight uppercase italic">Fideliz <span className="text-blue-500">Root</span></h1>
             <p className="text-slate-400 mt-1 uppercase text-xs font-bold tracking-widest">Contrôle Total Système</p>
           </div>
           
@@ -63,13 +64,13 @@ export default function RootDashboard() {
           </div>
         </div>
 
-        {/* Stats Grid Mise à jour avec Tickets Validés */}
+        {/* Stats Grid avec la nouvelle carte Tickets Validés */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           <StatCard title="Restaurants" value={data?.stats.restaurants} loading={loading} icon={<Store className="text-blue-400" />} color="bg-blue-500/10" />
           <StatCard title="CRM Global" value={data?.stats.contacts} loading={loading} icon={<Users className="text-orange-400" />} color="bg-orange-500/10" />
           <StatCard title="Gagnants" value={data?.stats.winners} loading={loading} icon={<Activity className="text-green-400" />} color="bg-green-500/10" />
           
-          {/* CARTE TICKETS VALIDÉS ICI */}
+          {/* REMPLACEMENT DE LA CARTE UTILISATEURS PAR TICKETS VALIDÉS */}
           <StatCard 
             title="Tickets Validés" 
             value={data?.stats.redeemed} 
@@ -80,6 +81,8 @@ export default function RootDashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* TERMINAL DE BUG */}
           <div className="bg-slate-950 border-2 border-slate-800 rounded-3xl overflow-hidden flex flex-col min-h-[400px]">
             <div className="bg-slate-800/50 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
               <h2 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
@@ -99,7 +102,7 @@ export default function RootDashboard() {
                   <p className="text-slate-500 animate-pulse text-xs">{">"} Scan en cours...</p>
                 ) : data?.orphans.length > 0 ? (
                   <div className="space-y-2">
-                    <p className="text-red-400 text-xs font-bold animate-pulse uppercase">
+                    <p className="text-red-400 text-xs font-bold animate-pulse">
                       [CRITICAL] {data.orphans.length} Orphelins détectés
                     </p>
                     {data.orphans.map((o: any) => (

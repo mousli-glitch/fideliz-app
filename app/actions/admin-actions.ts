@@ -7,6 +7,9 @@ const createAdminClient = () => createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// TON ID ROOT (Pour l'héritage des restaurants)
+const ROOT_ID = '04eb7091-6876-41e0-84c6-5891658a5768'
+
 export async function masterCreateRestaurant(data: any) {
   const supabase = createAdminClient()
   const { name, city, slug, email, password, creatorId } = data
@@ -67,26 +70,36 @@ export async function masterCreateSalesAction(data: any) {
   return { success: true }
 }
 
+// VERSION AMÉLIORÉE POUR LE TEST B (FANTÔME)
 export async function masterDeleteUser(userId: string) {
   const supabase = createAdminClient()
   
   try {
-    // 1. D'ABORD, on détache l'utilisateur de tous les restaurants qu'il a créés
-    // pour que la base de données accepte de le supprimer
+    // 1. TRANSFERT DE SÉCURITÉ (On brise toutes les chaînes SQL)
+    // On cherche si l'utilisateur est PROPRIÉTAIRE ou CRÉATEUR
     await supabase
       .from('restaurants')
-      .update({ created_by: null })
-      .eq('created_by', userId)
+      .update({ 
+        owner_id: ROOT_ID, // On te redonne la main
+        created_by: null   // On efface la trace du créateur pour libérer l'ID
+      })
+      .or(`owner_id.eq.${userId},created_by.eq.${userId}`)
 
-    // 2. On supprime le compte Auth (le fantôme)
+    // 2. SUPPRESSION DU PROFIL PUBLIC
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', userId)
+    
+    if (profileError) throw profileError
+
+    // 3. SUPPRESSION DÉFINITIVE DE L'AUTH (Le fantôme)
     const { error: authError } = await supabase.auth.admin.deleteUser(userId)
     if (authError) throw authError
     
-    // 3. On supprime le profil public
-    await supabase.from('profiles').delete().eq('id', userId)
-    
     return { success: true }
   } catch (err: any) {
+    console.error("Erreur MasterDelete:", err)
     return { success: false, error: err.message }
   }
 }
