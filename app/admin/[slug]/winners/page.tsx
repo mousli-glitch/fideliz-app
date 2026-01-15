@@ -35,16 +35,25 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   const restaurant = rawRestaurant as unknown as Restaurant
 
-  // 2. RÉCUPÉRATION DES GAGNANTS (AVEC JOINTURE SOUPLE)
-  // On retire le !inner pour garantir que les gagnants restent visibles même si un jeu est archivé
+  // 2. RÉCUPÉRATION DES GAGNANTS (VERSION ROBUSTE)
+  // On récupère d'abord tous les IDs de jeux du restaurant (même archivés)
+  // Cela évite que les jointures SQL ne filtrent les gagnants si un jeu est "invisible" pour le RLS
+  const { data: gamesData } = await supabase
+    .from("games")
+    .select("id")
+    .eq("restaurant_id", restaurant.id)
+
+  const gameIds = (gamesData as any[])?.map(g => g.id) || []
+
+  // On filtre les gagnants directement par la liste d'IDs de jeux
   const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
     .select(`
       *,
-      games(name, restaurant_id), 
+      games(name, status), 
       prizes(label, color)
     `)
-    .eq("games.restaurant_id", restaurant.id) 
+    .in("game_id", gameIds) 
     .order("created_at", { ascending: false })
 
   // 3. FIX DU TYPE 'NEVER' ET GESTION DU SNAPSHOT
