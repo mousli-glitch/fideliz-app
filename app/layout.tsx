@@ -23,11 +23,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // ⚠️ ACTION REQUISE ICI ⚠️
-  // 1. Mets ton curseur entre les guillemets ci-dessous.
-  // 2. Fais COLLER (Ctrl+V ou Cmd+V).
-  // 3. Vérifie qu'il n'y a pas d'espace avant ou après.
-  const GOOGLE_API_KEY = "AIzaSyAcidMbRAwpwvmW8ZfjhUrOMrcn-HjT-bs"; 
+  // ✅ SÉCURISÉ : On récupère la clé depuis le fichier .env
+  const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY; 
 
   return (
     <html lang="fr">
