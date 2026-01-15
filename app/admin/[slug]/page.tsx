@@ -3,7 +3,7 @@ import { Users, Gamepad2, Trophy, TrendingUp, Settings, DollarSign, ArrowUpRight
 import Link from "next/link"
 
 export const dynamic = "force-dynamic"
-export const revalidate = 0 // Anti-cache pour éviter les données fantômes
+export const revalidate = 0 
 
 export default async function AdminDashboardPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -14,7 +14,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // 1. RÉCUPÉRATION UNIQUE DU RESTO
+  // 1. RÉCUPÉRATION UNIQUE DU RESTO PAR SLUG
   const { data: restaurant } = await (supabase.from("restaurants") as any)
      .select("id, name")
      .eq("slug", slug)
@@ -22,7 +22,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
   
   if (!restaurant) return <div className="p-8 text-center font-bold text-slate-500">Restaurant introuvable ({slug})</div>
 
-  // 2. RÉCUPÉRATION DES JEUX DU RESTO
+  // 2. RÉCUPÉRATION DES JEUX : On vérifie qu'ils appartiennent bien à CE restaurant
   const { data: games } = await (supabase.from("games") as any)
     .select("id, status")
     .eq("restaurant_id", restaurant.id)
@@ -33,7 +33,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
   let winnersCount = 0
   let redeemedCount = 0
 
-  // 3. FILTRAGE STRICT : On ne compte QUE si les IDs de jeux appartiennent à CE resto
+  // 3. COMPTAGE GAGNANTS : Double vérification de sécurité
   if (allGameIds.length > 0) {
     const { count: total } = await (supabase.from("winners") as any)
         .select("*", { count: "exact", head: true })
@@ -53,6 +53,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
 
   return (
     <div className="p-4 md:p-8">
+      {/* ... (Le reste de ton JSX reste strictement identique) ... */}
       <div className="max-w-6xl mx-auto space-y-10">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
