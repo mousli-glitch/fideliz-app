@@ -31,21 +31,23 @@ export default function SalesDashboard() {
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       setProfile(profileData)
 
-      // 2. Récupération des restaurants (Utilisation de as any pour le schéma dynamique)
+      // 2. Récupération des restaurants (Correction as any pour éviter l'erreur de contrainte)
       const { data: restos } = await (supabase.from('restaurants') as any)
         .select('*')
         .eq('created_by', user.id)
         .order('created_at', { ascending: false })
 
       if (restos && restos.length > 0) {
-        // 3. Récupération des gagnants par restaurant pour les compteurs et l'inactivité
+        // 3. Récupération des gagnants par restaurant (Logique Promise.all conservée)
         const restosWithWinners = await Promise.all(restos.map(async (r: any) => {
+            // FIX : cast as any pour éviter l'erreur Property 'id' does not exist on type 'never'
             const { data: gameIdsData } = await (supabase.from('games') as any).select('id').eq('restaurant_id', r.id)
             const ids = (gameIdsData as any[])?.map((g: any) => g.id) || []
             
             let count = 0
             let lastDate = null
             if (ids.length > 0) {
+                // FIX : cast as any sur winners pour accéder à created_at
                 const { data: winnersData } = await (supabase.from('winners') as any)
                     .select('created_at')
                     .in('game_id', ids)
@@ -70,7 +72,7 @@ export default function SalesDashboard() {
       setLoading(false)
     }
     getData()
-  }, [])
+  }, [supabase, router])
 
   const getAtRiskStatus = (resto: any) => {
     if (!resto.is_retention_alert_enabled || !resto.winners_raw || resto.winners_raw.length === 0) return false;
@@ -100,12 +102,11 @@ export default function SalesDashboard() {
   }
 
   const handleLogout = async () => {
-    // FIX : Utilisation de auth.signOut() pour éviter l'erreur de propriété
+    // FIX : Utilisation obligatoire de auth.signOut()
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  // CALCULS STATS (Vérification des liaisons)
   const totalWinners = restaurants.reduce((acc, r) => acc + (r.winners?.count || 0), 0)
   const totalGoogle = restaurants.reduce((acc, r) => acc + (r.google_clicks || 0), 0)
   const totalSocial = restaurants.reduce((acc, r) => acc + ((r.tiktok_clicks || 0) + (r.instagram_clicks || 0) + (r.facebook_clicks || 0)), 0)

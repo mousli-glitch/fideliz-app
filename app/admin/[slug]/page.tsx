@@ -3,48 +3,43 @@ import { Users, Gamepad2, Trophy, TrendingUp, Settings, DollarSign, ArrowUpRight
 import Link from "next/link"
 
 export const dynamic = "force-dynamic"
+export const revalidate = 0 // Anti-cache pour éviter les données fantômes
 
 export default async function AdminDashboardPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const PANIER_MOYEN = 15 
 
-  // Utilisation de la clé service pour garantir que l'Admin voit ses données
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // 1. RÉCUPÉRATION UNIQUE : On s'assure de ne récupérer QUE le restaurant lié au slug
-  const { data: restaurant } = await supabase
-     .from("restaurants")
+  // 1. RÉCUPÉRATION UNIQUE DU RESTO
+  const { data: restaurant } = await (supabase.from("restaurants") as any)
      .select("id, name")
      .eq("slug", slug)
      .single()
   
-  if (!restaurant) return <div className="p-8 text-center font-bold text-slate-500">Établissement introuvable ({slug})</div>
+  if (!restaurant) return <div className="p-8 text-center font-bold text-slate-500">Restaurant introuvable ({slug})</div>
 
-  // 2. RÉCUPÉRATION DES JEUX : Uniquement ceux du restaurant identifié ci-dessus
-  const { data: games } = await supabase
-    .from("games")
+  // 2. RÉCUPÉRATION DES JEUX DU RESTO
+  const { data: games } = await (supabase.from("games") as any)
     .select("id, status")
     .eq("restaurant_id", restaurant.id)
 
-  const allGameIds = games?.map(g => g.id) || []
-  const activeGame = games?.find(g => g.status === 'active')
+  const allGameIds = (games as any[])?.map(g => g.id) || []
+  const activeGame = (games as any[])?.find(g => g.status === 'active')
 
   let winnersCount = 0
   let redeemedCount = 0
 
-  // 3. COMPTAGE GAGNANTS : On verrouille la requête sur les IDs de jeux trouvés
+  // 3. FILTRAGE STRICT : On ne compte QUE si les IDs de jeux appartiennent à CE resto
   if (allGameIds.length > 0) {
-    // Cette clause .in("game_id", allGameIds) est le rempart contre la fuite de données
-    const { count: total } = await supabase
-        .from("winners")
+    const { count: total } = await (supabase.from("winners") as any)
         .select("*", { count: "exact", head: true })
         .in("game_id", allGameIds)
 
-    const { count: redeemed } = await supabase
-        .from("winners")
+    const { count: redeemed } = await (supabase.from("winners") as any)
         .select("*", { count: "exact", head: true })
         .in("game_id", allGameIds)
         .eq("status", "redeemed")
@@ -59,13 +54,11 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
   return (
     <div className="p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-10">
-        
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Dashboard</h1>
             <p className="text-slate-500 font-medium text-lg italic">{restaurant.name} — Performance en direct</p>
           </div>
-          
           <div className="flex items-center gap-3">
             <div className="bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
