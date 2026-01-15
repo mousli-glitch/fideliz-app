@@ -2,7 +2,6 @@
 
 import { createClient } from "@supabase/supabase-js"
 
-// Client maître réutilisable
 const createAdminClient = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -46,7 +45,6 @@ export async function masterCreateRestaurant(data: any) {
   return { success: true }
 }
 
-// NOUVEAU : Création Maître pour les Commerciaux
 export async function masterCreateSalesAction(data: any) {
   const supabase = createAdminClient()
   const { email, password } = data
@@ -71,10 +69,24 @@ export async function masterCreateSalesAction(data: any) {
 
 export async function masterDeleteUser(userId: string) {
   const supabase = createAdminClient()
-  // Supprime le compte Auth (le fantôme) + le profil
-  const { error: authError } = await supabase.auth.admin.deleteUser(userId)
-  if (authError) return { success: false, error: authError.message }
   
-  await supabase.from('profiles').delete().eq('id', userId)
-  return { success: true }
+  try {
+    // 1. D'ABORD, on détache l'utilisateur de tous les restaurants qu'il a créés
+    // pour que la base de données accepte de le supprimer
+    await supabase
+      .from('restaurants')
+      .update({ created_by: null })
+      .eq('created_by', userId)
+
+    // 2. On supprime le compte Auth (le fantôme)
+    const { error: authError } = await supabase.auth.admin.deleteUser(userId)
+    if (authError) throw authError
+    
+    // 3. On supprime le profil public
+    await supabase.from('profiles').delete().eq('id', userId)
+    
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err.message }
+  }
 }
