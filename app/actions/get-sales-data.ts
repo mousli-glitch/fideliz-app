@@ -8,7 +8,6 @@ export async function getSalesData() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // 1. Récupérer les profils "sales"
   const { data: agents, error } = await supabase
     .from('profiles')
     .select('*')
@@ -17,12 +16,12 @@ export async function getSalesData() {
 
   if (error) return { success: false, error: error.message }
 
-  // 2. Compter les restaurants rattachés (Transfert vers toi si suppression)
   const agentsWithStats = await Promise.all(agents.map(async (agent) => {
+    // MODIFICATION ICI : On utilise created_by au lieu de owner_id
     const { count } = await supabase
       .from('restaurants')
       .select('*', { count: 'exact', head: true })
-      .eq('owner_id', agent.id) // On garde ta logique owner_id
+      .eq('created_by', agent.id) 
     
     return { ...agent, restaurants_count: count || 0 }
   }))
