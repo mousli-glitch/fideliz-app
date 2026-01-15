@@ -36,8 +36,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
   const restaurant = rawRestaurant as unknown as Restaurant
 
   // 2. RÉCUPÉRATION DES GAGNANTS (VERSION ROBUSTE)
-  // On récupère d'abord tous les IDs de jeux du restaurant (même archivés)
-  // Cela évite que les jointures SQL ne filtrent les gagnants si un jeu est "invisible" pour le RLS
+  // ÉTAPE A : On récupère d'abord tous les IDs de jeux du restaurant (même archivés)
   const { data: gamesData } = await supabase
     .from("games")
     .select("id")
@@ -45,7 +44,8 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   const gameIds = (gamesData as any[])?.map(g => g.id) || []
 
-  // On filtre les gagnants directement par la liste d'IDs de jeux
+  // ÉTAPE B : On récupère les gagnants filtrés par ces IDs
+  // Cette méthode est plus fiable que la jointure directe qui peut être filtrée par le RLS des jeux
   const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
     .select(`
@@ -57,12 +57,10 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .order("created_at", { ascending: false })
 
   // 3. FIX DU TYPE 'NEVER' ET GESTION DU SNAPSHOT
-  // Le cast 'as any' corrige l'erreur de typage TypeScript détectée précédemment
   const winnersList = (winnersData as any) || []
 
   const formattedWinners = winnersList.map((winner: any) => ({
     ...winner,
-    // Si prizes est NULL, on utilise le snapshot sauvegardé lors du gain
     prizes: winner.prizes || { 
         label: winner.prize_label_snapshot || "Lot archivé", 
         color: "#64748b" 
@@ -75,7 +73,6 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
         <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
       </div>
 
-      {/* Message d'alerte discret en cas d'erreur SQL */}
       {fetchError && (
         <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-xs font-mono">
             Erreur technique : {fetchError.message}
