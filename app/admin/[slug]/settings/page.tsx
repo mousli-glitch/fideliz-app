@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { updateRestaurantAction } from "@/app/actions/admin" 
-import { Loader2, Save, Store, Globe, Mail, Copy, Check, ImageIcon, Palette, Star, MessageSquare } from "lucide-react"
+import { Loader2, Save, Store, Globe, Mail, Copy, Check, Star, MessageSquare } from "lucide-react"
 import { useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import Link from "next/link" // <--- AJOUTÉ : Import indispensable pour la navigation
+import Link from "next/link" 
 
 export default function AdminSettingsPage() {
   const [restaurant, setRestaurant] = useState<any>(null)
@@ -42,9 +42,7 @@ export default function AdminSettingsPage() {
       await updateRestaurantAction(restaurant.id, {
         name: restaurant.name,
         contact_email: restaurant.contact_email,
-        theme: restaurant.theme,
-        background_url: restaurant.background_url,
-        // --- AJOUT DES NOUVEAUX CHAMPS IA ---
+        // On ne sauvegarde plus theme et background_url ici
         ai_tone: restaurant.ai_tone
       })
       alert("✅ Paramètres mis à jour !")
@@ -62,14 +60,6 @@ export default function AdminSettingsPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // Liste des thèmes
-  const themes = [
-    { id: 'casino', name: 'Casino Royal', img: 'https://images.unsplash.com/photo-1596838132731-3301c3fd4317?auto=format&fit=crop&w=300&q=80' },
-    { id: 'arcade', name: 'Arcade Néon', img: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=300&q=80' },
-    { id: 'minimal', name: 'Minimaliste', img: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=300&q=80' },
-    { id: 'dark', name: 'Dark Mode', img: 'https://images.unsplash.com/photo-1483478550801-ceba5fe50e8e?auto=format&fit=crop&w=300&q=80' },
-  ]
-
   // Liste des tons IA
   const aiTones = [
     { id: 'amical', name: 'Amical', desc: 'Chaleureux & Emojis', icon: '😊' },
@@ -86,7 +76,7 @@ export default function AdminSettingsPage() {
         <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
           <Store className="text-blue-600" /> Paramètres
         </h1>
-        <p className="text-slate-500 font-medium mt-1">Gérez les informations de contact et le design de votre établissement.</p>
+        <p className="text-slate-500 font-medium mt-1">Gérez les informations de contact et les réglages de votre établissement.</p>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
@@ -119,51 +109,7 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* SECTION 2 : DESIGN & THÈME */}
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><Palette size={20}/> Design & Thème Global</h2>
-            
-            <div className="space-y-6">
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-4">Choisir un thème par défaut :</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {themes.map((theme) => (
-                            <div 
-                                key={theme.id}
-                                onClick={() => setRestaurant({...restaurant, theme: theme.id})}
-                                className={`cursor-pointer relative group rounded-xl overflow-hidden border-2 transition-all ${restaurant.theme === theme.id ? 'border-blue-600 ring-2 ring-blue-200 scale-105' : 'border-transparent hover:border-slate-300'}`}
-                            >
-                                <img src={theme.img} alt={theme.name} className="w-full h-24 object-cover" />
-                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                    <span className="text-white font-bold text-xs">{theme.name}</span>
-                                </div>
-                                {restaurant.theme === theme.id && (
-                                    <div className="absolute top-2 right-2 bg-blue-600 text-white p-1 rounded-full">
-                                        <Check size={10} />
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                        <ImageIcon size={16} className="text-slate-400"/> Ou fond personnalisé (URL Image)
-                    </label>
-                    <input 
-                        type="url" 
-                        placeholder="https://..."
-                        value={restaurant.background_url || ""}
-                        onChange={(e) => setRestaurant({...restaurant, background_url: e.target.value})}
-                        className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 text-sm"
-                    />
-                    <p className="text-xs text-slate-400 mt-2 italic">Si rempli, cette image remplacera le thème.</p>
-                </div>
-            </div>
-        </div>
-
-        {/* --- NOUVELLE SECTION 4 : IA & GOOGLE BUSINESS --- */}
+        {/* SECTION 2 : IA & GOOGLE BUSINESS */}
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
             <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
                 <MessageSquare size={20} className="text-blue-600"/> Intelligence Artificielle & Avis
@@ -191,7 +137,7 @@ export default function AdminSettingsPage() {
                     </div>
                 </div>
 
-                {/* 2. Connexion Google (CORRIGÉ) */}
+                {/* 2. Connexion Google */}
                 <div className="pt-6 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
                     <div>
                         <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -206,7 +152,6 @@ export default function AdminSettingsPage() {
                             <Check size={16}/> Compte connecté
                         </div>
                     ) : (
-                        /* CHANGEMENT ICI : button devient Link */
                         <Link 
                             href={`/api/auth/google?slug=${restaurant.slug}`}
                             className="bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center gap-3 shadow-sm active:scale-95"
