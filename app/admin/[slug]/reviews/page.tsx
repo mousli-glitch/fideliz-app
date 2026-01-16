@@ -1,8 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Star, MessageSquare, Loader2, Send, Sparkles, RefreshCcw } from "lucide-react"
 import { useParams } from "next/navigation"
+import { createClient } from "@/utils/supabase/client"
+import { generateAIResponse } from "@/app/actions/ai" // L'action que tu as créée juste avant
 
 // Mock de données (en attendant la liaison API Google Reviews réelle)
 const MOCK_REVIEWS = [
@@ -12,20 +14,53 @@ const MOCK_REVIEWS = [
 ]
 
 export default function AdminReviewsPage() {
+  const [restaurant, setRestaurant] = useState<any>(null)
   const [reviews] = useState(MOCK_REVIEWS)
   const [generatingId, setGeneratingId] = useState<string | null>(null)
   const [responses, setResponses] = useState<Record<string, string>>({})
+  
+  const params = useParams()
+  const supabase = createClient()
 
+  // 1. Charger les infos du resto pour avoir le TON et le NOM
+  useEffect(() => {
+    const loadRestaurant = async () => {
+      const slugSecurise = params?.slug ? String(params.slug) : ""
+      const { data } = await (supabase
+        .from('restaurants') as any)
+        .select('*')
+        .eq('slug', slugSecurise)
+        .single()
+      
+      if (data) setRestaurant(data)
+    }
+    loadRestaurant()
+  }, [params.slug])
+
+  // 2. Gérer la génération réelle par OpenAI
   const handleGenerateAI = async (reviewId: string, comment: string) => {
     setGeneratingId(reviewId)
-    // Simulation d'appel IA (On connectera ta clé OpenAI ici)
-    setTimeout(() => {
-      setResponses(prev => ({
-        ...prev,
-        [reviewId]: `Merci beaucoup pour votre retour ! Nous sommes ravis que vous ayez apprécié notre cuisine. À très vite !`
-      }))
+    
+    try {
+      // On appelle la vraie IA avec les paramètres du resto
+      const aiResponse = await generateAIResponse(
+        comment, 
+        restaurant?.ai_tone || 'amical', 
+        restaurant?.name || 'Notre établissement'
+      )
+
+      if (aiResponse) {
+        setResponses(prev => ({
+          ...prev,
+          [reviewId]: aiResponse
+        }))
+      }
+    } catch (err) {
+      console.error("Erreur génération IA:", err)
+      alert("Erreur lors de la génération. Vérifie ta clé OpenAI dans Vercel.")
+    } finally {
       setGeneratingId(null)
-    }, 1500)
+    }
   }
 
   return (
@@ -76,9 +111,13 @@ export default function AdminReviewsPage() {
                 <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-500">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-black uppercase text-blue-600 tracking-widest flex items-center gap-2">
-                        <Sparkles size={12}/> Réponse suggérée
+                        <Sparkles size={12}/> Réponse suggérée ({restaurant?.ai_tone || 'amical'})
                     </label>
-                    <button onClick={() => handleGenerateAI(review.id, review.comment)} className="text-slate-400 hover:text-blue-600 transition-colors">
+                    <button 
+                      onClick={() => handleGenerateAI(review.id, review.comment)} 
+                      className="text-slate-400 hover:text-blue-600 transition-colors"
+                      title="Régénérer"
+                    >
                         <RefreshCcw size={14}/>
                     </button>
                   </div>
