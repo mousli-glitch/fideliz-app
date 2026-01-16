@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/server';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
-  const slug = searchParams.get('state');
+  const slug = searchParams.get('state'); // C'est ici qu'on récupère "le-test-boot"
 
   if (!code || !slug) return NextResponse.redirect(new URL('/admin?error=auth_failed', request.url));
 
@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     const { tokens } = await oauth2Client.getToken(code);
     const supabase = await createClient();
 
+    // On met à jour la ligne du restaurant qui correspond au slug
     const { error } = await (supabase
       .from('restaurants') as any)
       .update({
@@ -29,9 +30,10 @@ export async function GET(request: Request) {
 
     if (error) throw error;
 
+    // Redirection vers les paramètres avec un message de succès
     return NextResponse.redirect(new URL(`/admin/${slug}/settings?success=google_connected`, request.url));
   } catch (err) {
-    console.error("Erreur Google Callback:", err);
+    console.error("Erreur d'enregistrement Supabase:", err);
     return NextResponse.redirect(new URL(`/admin/${slug}/settings?error=google_failed`, request.url));
   }
 }
