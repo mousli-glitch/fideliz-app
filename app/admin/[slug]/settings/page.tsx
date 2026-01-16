@@ -5,6 +5,7 @@ import { updateRestaurantAction } from "@/app/actions/admin"
 import { Loader2, Save, Store, Globe, Mail, Copy, Check, ImageIcon, Palette, Star, MessageSquare } from "lucide-react"
 import { useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
+import Link from "next/link" // <--- AJOUTÉ : Import indispensable pour la navigation
 
 export default function AdminSettingsPage() {
   const [restaurant, setRestaurant] = useState<any>(null)
@@ -190,7 +191,7 @@ export default function AdminSettingsPage() {
                     </div>
                 </div>
 
-                {/* 2. Connexion Google */}
+                {/* 2. Connexion Google (CORRIGÉ) */}
                 <div className="pt-6 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
                     <div>
                         <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -205,13 +206,14 @@ export default function AdminSettingsPage() {
                             <Check size={16}/> Compte connecté
                         </div>
                     ) : (
-                        <button 
-                            type="button"
+                        /* CHANGEMENT ICI : button devient Link */
+                        <Link 
+                            href={`/api/auth/google?slug=${restaurant.slug}`}
                             className="bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center gap-3 shadow-sm active:scale-95"
                         >
                             <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5" alt="Google"/>
                             Lier ma fiche Google
-                        </button>
+                        </Link>
                     )}
                 </div>
             </div>

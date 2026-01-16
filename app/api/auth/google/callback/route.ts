@@ -19,7 +19,6 @@ export async function GET(request: Request) {
     const { tokens } = await oauth2Client.getToken(code);
     const supabase = await createClient();
 
-    // On utilise "as any" pour éviter l'erreur TypeScript sur les nouvelles colonnes
     const { error } = await (supabase
       .from('restaurants') as any)
       .update({
