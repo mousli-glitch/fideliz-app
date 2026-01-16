@@ -17,7 +17,6 @@ const BACKGROUNDS = [
   "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=1000&auto=format&fit=crop",
 ]
 
-// Note : Ces couleurs pourront être rendues dynamiques via game.theme plus tard
 const casinoConfig = {
   gold: "#d4af37",       
   goldLight: "#fbe285",  
@@ -28,11 +27,10 @@ const casinoConfig = {
   bulbGlow: "rgba(255, 200, 50, 0.9)",
   royalRed: "#8B0000",
   jetBlack: "#0F0F0F",
-  // 🔥 AJOUT DES PALETTES DYNAMIQUES 🔥
   palettes: {
-    MONACO: { c1: "#8B0000", c2: "#0F0F0F" }, // Rouge / Noir
-    GATSBY: { c1: "#1E3A8A", c2: "#0F0F0F" }, // Bleu / Noir
-    EMERALD: { c1: "#064E3B", c2: "#0F0F0F" } // Vert / Noir
+    MONACO: { c1: "#8B0000", c2: "#0F0F0F" }, 
+    GATSBY: { c1: "#1E3A8A", c2: "#0F0F0F" }, 
+    EMERALD: { c1: "#064E3B", c2: "#0F0F0F" } 
   }
 }
 
@@ -53,7 +51,7 @@ type Props = {
     bg_choice?: number;
     bg_image_url?: string;
     card_style?: string; 
-    wheel_palette?: 'MONACO' | 'GATSBY' | 'EMERALD'; // 🔥 AJOUTÉ POUR LA LIAISON DB
+    wheel_palette?: 'MONACO' | 'GATSBY' | 'EMERALD';
   }
   prizes: { id: string; label: string; color: string; weight: number }[]
   restaurant: { name: string; logo_url?: string; primary_color?: string; design?: any }
@@ -211,11 +209,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     setWinner(selectedPrize)
     confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
 
+    // 🔥 MODIFICATION 1 : Passage rapide à la page Félicitations (400ms au lieu de 1000ms)
     setTimeout(() => {
       setStep('FORM')
       setSpinning(false)
       setLightMode('IDLE')
-    }, 1000)
+    }, 400)
   }
 
   const handleFormSubmit = async (e: React.FormEvent) => {
@@ -241,14 +240,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     const numSegments = prizes.length
     const segmentAngle = 360 / numSegments
     
-    // 🔥 RÉCUPÉRATION DE LA PALETTE DYNAMIQUE 🔥
     // @ts-ignore
     const currentPalette = casinoConfig.palettes[game.wheel_palette || 'MONACO'];
 
     return prizes.map((prize, index) => {
         const startPercent = index / numSegments
         const endPercent = (index + 1) / numSegments
-        // 🔥 AUGMENTATION RAYON R=1.1 POUR SUPPRIMER LE VIDE 🔥
         const r = 1.1; 
         const x1 = Math.cos(2 * Math.PI * startPercent) * r; 
         const y1 = Math.sin(2 * Math.PI * startPercent) * r;
@@ -261,8 +258,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         const isLeft = midAngle > 90 && midAngle < 270
         const textRotateAngle = isLeft ? midAngle + 180 : midAngle
         const textTranslateX = isLeft ? -0.65 : 0.65
-
-        // 🔥 APPLICATION DES COULEURS DE LA PALETTE 🔥
         const sliceColor = index % 2 === 0 ? currentPalette.c1 : currentPalette.c2;
 
         return (
@@ -373,7 +368,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
         <AnimatePresence mode="wait">
             
-            {/* 1. LANDING */}
             {step === 'LANDING' && (
             <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -415,13 +409,11 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     
                     <div className="mb-8 w-full flex flex-col items-center">
                         <div className={`w-full p-0.5 rounded-xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
+                            {/* 🔥 MODIFICATION 2 : Image corrigée (safari-guide) sans placeholder d'erreur */}
                             <img 
-                                src="/tuto-safari.png?v=2" 
-                                alt="Instruction onglets iPhone" 
-                                className="w-full h-auto max-h-[55px] object-contain rounded-lg"
-                                onError={(e) => {
-                                    e.currentTarget.src = "https://placehold.co/600x150?text=Utilisez+vos+onglets";
-                                }}
+                                src="/safari-guide.png" 
+                                alt="Instruction onglets" 
+                                className="w-full h-auto max-h-[120px] object-contain rounded-lg"
                             />
                         </div>
                     </div>
@@ -467,7 +459,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     </div>
 
                     <div className="absolute inset-[32px] rounded-full overflow-hidden z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
-                        {/* 🔥 CERCLE DE SÉCURITÉ POUR COMBLER LE VIDE DYNAMIQUE 🔥 */}
                         <svg viewBox="-1.1 -1.1 2.2 2.2" className="absolute inset-0 w-full h-full transform -rotate-90">
                            {/* @ts-ignore */}
                            <circle cx="0" cy="0" r="1.1" fill={casinoConfig.palettes[game.wheel_palette || 'MONACO'].c2} />
@@ -501,13 +492,15 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             )}
         </AnimatePresence>
 
-        {/* 5. FORMULAIRE (RESTAURÉ) */}
         {step === 'FORM' && winner && (
         <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
                 <div className="text-center mb-6">
-                    <h2 className="text-2xl font-black mb-2">Félicitations !</h2>
-                    <p className={subTextClass}>Vous avez gagné :</p>
+                    {/* 🔥 MODIFICATION 3 : Titre Félicitations plus gros et flashy */}
+                    <h2 className="text-4xl font-black mb-2 uppercase tracking-tighter" style={{ color: primaryColor }}>
+                        Félicitations !
+                    </h2>
+                    <p className={`${subTextClass} font-bold`}>Vous avez gagné :</p>
                     <div className="mt-3 bg-yellow-100 text-yellow-800 py-3 px-6 rounded-xl inline-block font-black text-xl border-2 border-yellow-200">{winner.label}</div>
                 </div>
                 <form onSubmit={handleFormSubmit} className="space-y-4">
@@ -522,15 +515,23 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         </label>
                     </div>
                    
-                    <button type="submit" disabled={isSubmitting} className="w-full text-white font-bold text-lg py-4 rounded-xl mt-4 shadow-md transition-colors" style={{ backgroundColor: primaryColor }}>
-                        {isSubmitting ? "..." : "RÉCUPÉRER MON LOT"}
+                    {/* 🔥 MODIFICATION 4 : Bouton avec état de chargement propre (Spinner + Texte) */}
+                    <button 
+                        type="submit" 
+                        disabled={isSubmitting} 
+                        className={`w-full text-white font-bold text-lg py-4 rounded-xl mt-4 shadow-md transition-all flex items-center justify-center gap-3 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`} 
+                        style={{ backgroundColor: primaryColor }}
+                    >
+                        {isSubmitting && (
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        )}
+                        {isSubmitting ? "TRAITEMENT EN COURS..." : "RÉCUPÉRER MON LOT"}
                     </button>
                 </form>
             </motion.div>
         </div>
         )}
 
-        {/* 6. TICKET FINAL (RESTAURÉ) */}
         {step === 'TICKET' && winner && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300">
              <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
