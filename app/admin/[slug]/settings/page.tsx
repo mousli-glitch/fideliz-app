@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { updateRestaurantAction } from "@/app/actions/admin" 
-import { Loader2, Save, Store, Globe, Mail, Copy, Check, ImageIcon, Palette } from "lucide-react"
+import { Loader2, Save, Store, Globe, Mail, Copy, Check, ImageIcon, Palette, Star, MessageSquare } from "lucide-react"
 import { useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 
@@ -42,7 +42,9 @@ export default function AdminSettingsPage() {
         name: restaurant.name,
         contact_email: restaurant.contact_email,
         theme: restaurant.theme,
-        background_url: restaurant.background_url 
+        background_url: restaurant.background_url,
+        // --- AJOUT DES NOUVEAUX CHAMPS IA ---
+        ai_tone: restaurant.ai_tone
       })
       alert("✅ Paramètres mis à jour !")
     } catch (err) {
@@ -65,6 +67,13 @@ export default function AdminSettingsPage() {
     { id: 'arcade', name: 'Arcade Néon', img: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=300&q=80' },
     { id: 'minimal', name: 'Minimaliste', img: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=300&q=80' },
     { id: 'dark', name: 'Dark Mode', img: 'https://images.unsplash.com/photo-1483478550801-ceba5fe50e8e?auto=format&fit=crop&w=300&q=80' },
+  ]
+
+  // Liste des tons IA
+  const aiTones = [
+    { id: 'amical', name: 'Amical', desc: 'Chaleureux & Emojis', icon: '😊' },
+    { id: 'professionnel', name: 'Pro', desc: 'Sérieux & Carré', icon: '💼' },
+    { id: 'dynamique', name: 'Punchy', desc: 'Court & Direct', icon: '🚀' },
   ]
 
   if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin w-10 h-10 text-blue-600"/></div>
@@ -149,6 +158,61 @@ export default function AdminSettingsPage() {
                         className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 text-sm"
                     />
                     <p className="text-xs text-slate-400 mt-2 italic">Si rempli, cette image remplacera le thème.</p>
+                </div>
+            </div>
+        </div>
+
+        {/* --- NOUVELLE SECTION 4 : IA & GOOGLE BUSINESS --- */}
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+            <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
+                <MessageSquare size={20} className="text-blue-600"/> Intelligence Artificielle & Avis
+            </h2>
+            <p className="text-sm text-slate-500 mb-8 font-medium italic">Configurez comment l'IA doit répondre à vos clients sur Google.</p>
+            
+            <div className="space-y-8">
+                {/* 1. Sélection du Ton */}
+                <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">Identité de vos réponses :</label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {aiTones.map((tone) => (
+                            <div 
+                                key={tone.id}
+                                onClick={() => setRestaurant({...restaurant, ai_tone: tone.id})}
+                                className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${restaurant.ai_tone === tone.id ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-100' : 'border-slate-100 bg-slate-50 hover:border-slate-300'}`}
+                            >
+                                <div className="text-3xl">{tone.icon}</div>
+                                <div>
+                                    <p className={`font-bold ${restaurant.ai_tone === tone.id ? 'text-blue-700' : 'text-slate-700'}`}>{tone.name}</p>
+                                    <p className="text-xs text-slate-500 font-medium">{tone.desc}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* 2. Connexion Google */}
+                <div className="pt-6 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div>
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5" alt="Google"/>
+                            Fiche Google Business
+                        </h3>
+                        <p className="text-sm text-slate-500 font-medium">Connectez votre établissement pour gérer vos avis.</p>
+                    </div>
+                    
+                    {restaurant.google_refresh_token ? (
+                        <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-full border border-green-200 font-bold text-sm">
+                            <Check size={16}/> Compte connecté
+                        </div>
+                    ) : (
+                        <button 
+                            type="button"
+                            className="bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center gap-3 shadow-sm active:scale-95"
+                        >
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5" alt="Google"/>
+                            Lier ma fiche Google
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

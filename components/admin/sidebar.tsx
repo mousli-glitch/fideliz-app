@@ -1,6 +1,6 @@
 "use client"
 
-import { LayoutDashboard, Gamepad2, Trophy, Settings, Users, LogOut, X } from "lucide-react"
+import { LayoutDashboard, Gamepad2, Trophy, Settings, Users, LogOut, X, Star } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
@@ -78,6 +78,17 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: ()
           }`}
         >
           <Trophy size={20} className="group-hover:scale-110 transition-transform" /> Gagnants
+        </Link>
+
+        {/* --- NOUVEL ONGLET : AVIS GOOGLE --- */}
+        <Link 
+          href={`/admin/${restaurant.slug}/reviews`}
+          onClick={onClose}
+          className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+            isActive("/reviews") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
+          }`}
+        >
+          <Star size={20} className={`group-hover:scale-110 transition-transform ${isActive("/reviews") ? "text-white" : "text-yellow-500"}`} /> Avis Google
         </Link>
 
         <Link 
