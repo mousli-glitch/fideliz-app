@@ -4,274 +4,331 @@ export type Json =
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[];
+  | Json[]
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       profiles: {
         Row: {
-          id: string;
-          role: string | null; // ex: "sales", "admin", ...
-          created_at: string | null;
-        };
+          id: string
+          email: string | null
+          role: string | null
+          restaurant_id: string | null
+          created_at: string | null
+          is_active: boolean | null
+        }
         Insert: {
-          id: string;
-          role?: string | null;
-          created_at?: string | null;
-        };
+          id: string
+          email?: string | null
+          role?: string | null
+          restaurant_id?: string | null
+          created_at?: string | null
+          is_active?: boolean | null
+        }
         Update: {
-          id?: string;
-          role?: string | null;
-          created_at?: string | null;
-        };
-      };
-
+          id?: string
+          email?: string | null
+          role?: string | null
+          restaurant_id?: string | null
+          created_at?: string | null
+          is_active?: boolean | null
+        }
+      }
       restaurants: {
         Row: {
-          id: string;
-          // anciens champs (souvent encore présents)
-          user_id: string | null;
-          name: string;
-          slug: string;
-          brand_color: string | null;
-          text_color: string | null;
-          logo_url: string | null;
-          bg_image_url: string | null;
-          created_at: string;
-
-          // champs visibles dans ton dashboard Supabase (screenshots)
-          owner_id: string | null;
-          created_by: string | null;
-          city: string | null;
-          is_active: boolean | null;
-
-          color_primary: string | null;
-          primary_color: string | null;
-
-          internal_notes: string | null;
-
-          google_access_token: string | null;
-          google_refresh_token: string | null;
-          google_location_id: string | null;
-
-          ai_tone: string | null;
-          ai_enabled: boolean | null;
-
-          blocked_at: string | null;
-          blocked_reason: string | null;
-
-          google_clicks: number | null;
-          tiktok_clicks: number | null;
-          instagram_clicks: number | null;
-          facebook_clicks: number | null;
-
-          alert_threshold_days: number | null;
-          is_retention_alert_enabled: boolean | null;
-        };
+          id: string
+          user_id: string | null
+          owner_id: string | null
+          name: string
+          slug: string
+          city: string | null
+          created_by: string | null
+          is_active: boolean | null
+          brand_color: string | null
+          text_color: string | null
+          logo_url: string | null
+          bg_image_url: string | null
+          primary_color: string | null
+          color_primary: string | null
+          google_clicks: number | null
+          tiktok_clicks: number | null
+          instagram_clicks: number | null
+          facebook_clicks: number | null
+          alert_threshold_days: number | null
+          is_retention_alert_enabled: boolean | null
+          internal_notes: string | null
+          google_access_token: string | null
+          google_refresh_token: string | null
+          google_location_id: string | null
+          ai_tone: string | null
+          ai_enabled: boolean | null
+          blocked_at: string | null
+          blocked_reason: string | null
+          created_at: string | null
+        }
         Insert: {
-          id?: string;
-
-          user_id?: string | null;
-          name: string;
-          slug: string;
-
-          brand_color?: string | null;
-          text_color?: string | null;
-          logo_url?: string | null;
-          bg_image_url?: string | null;
-          created_at?: string;
-
-          owner_id?: string | null;
-          created_by?: string | null;
-          city?: string | null;
-          is_active?: boolean | null;
-
-          color_primary?: string | null;
-          primary_color?: string | null;
-
-          internal_notes?: string | null;
-
-          google_access_token?: string | null;
-          google_refresh_token?: string | null;
-          google_location_id?: string | null;
-
-          ai_tone?: string | null;
-          ai_enabled?: boolean | null;
-
-          blocked_at?: string | null;
-          blocked_reason?: string | null;
-
-          google_clicks?: number | null;
-          tiktok_clicks?: number | null;
-          instagram_clicks?: number | null;
-          facebook_clicks?: number | null;
-
-          alert_threshold_days?: number | null;
-          is_retention_alert_enabled?: boolean | null;
-        };
+          id?: string
+          user_id?: string | null
+          owner_id?: string | null
+          name: string
+          slug: string
+          city?: string | null
+          created_by?: string | null
+          is_active?: boolean | null
+          brand_color?: string | null
+          text_color?: string | null
+          logo_url?: string | null
+          bg_image_url?: string | null
+          primary_color?: string | null
+          color_primary?: string | null
+          google_clicks?: number | null
+          tiktok_clicks?: number | null
+          instagram_clicks?: number | null
+          facebook_clicks?: number | null
+          alert_threshold_days?: number | null
+          is_retention_alert_enabled?: boolean | null
+          internal_notes?: string | null
+          google_access_token?: string | null
+          google_refresh_token?: string | null
+          google_location_id?: string | null
+          ai_tone?: string | null
+          ai_enabled?: boolean | null
+          blocked_at?: string | null
+          blocked_reason?: string | null
+          created_at?: string | null
+        }
         Update: {
-          id?: string;
-
-          user_id?: string | null;
-          name?: string;
-          slug?: string;
-
-          brand_color?: string | null;
-          text_color?: string | null;
-          logo_url?: string | null;
-          bg_image_url?: string | null;
-          created_at?: string;
-
-          owner_id?: string | null;
-          created_by?: string | null;
-          city?: string | null;
-          is_active?: boolean | null;
-
-          color_primary?: string | null;
-          primary_color?: string | null;
-
-          internal_notes?: string | null;
-
-          google_access_token?: string | null;
-          google_refresh_token?: string | null;
-          google_location_id?: string | null;
-
-          ai_tone?: string | null;
-          ai_enabled?: boolean | null;
-
-          blocked_at?: string | null;
-          blocked_reason?: string | null;
-
-          google_clicks?: number | null;
-          tiktok_clicks?: number | null;
-          instagram_clicks?: number | null;
-          facebook_clicks?: number | null;
-
-          alert_threshold_days?: number | null;
-          is_retention_alert_enabled?: boolean | null;
-        };
-      };
-
+          id?: string
+          user_id?: string | null
+          owner_id?: string | null
+          name?: string
+          slug?: string
+          city?: string | null
+          created_by?: string | null
+          is_active?: boolean | null
+          brand_color?: string | null
+          text_color?: string | null
+          logo_url?: string | null
+          bg_image_url?: string | null
+          primary_color?: string | null
+          color_primary?: string | null
+          google_clicks?: number | null
+          tiktok_clicks?: number | null
+          instagram_clicks?: number | null
+          facebook_clicks?: number | null
+          alert_threshold_days?: number | null
+          is_retention_alert_enabled?: boolean | null
+          internal_notes?: string | null
+          google_access_token?: string | null
+          google_refresh_token?: string | null
+          google_location_id?: string | null
+          ai_tone?: string | null
+          ai_enabled?: boolean | null
+          blocked_at?: string | null
+          blocked_reason?: string | null
+          created_at?: string | null
+        }
+      }
       games: {
         Row: {
-          id: string;
-          restaurant_id: string;
-          status: "draft" | "active" | "ended";
-          active_action: string;
-          action_url: string | null;
-          validity_days: number;
-          min_spend: string | null;
-          created_at: string;
-        };
+          id: string
+          restaurant_id: string
+          name: string | null
+          status: string | null
+          active_action: string
+          action_url: string | null
+          validity_days: number | null
+          min_spend: string | null
+          bg_choice: number | null
+          title_style: string | null
+          bg_image_url: string | null
+          card_style: string | null
+          wheel_palette: string | null
+          created_at: string | null
+          end_date: string | null
+        }
         Insert: {
-          id?: string;
-          restaurant_id: string;
-          status?: "draft" | "active" | "ended";
-          active_action: string;
-          action_url?: string | null;
-          validity_days?: number;
-          min_spend?: string | null;
-          created_at?: string;
-        };
+          id?: string
+          restaurant_id: string
+          name?: string | null
+          status?: string | null
+          active_action: string
+          action_url?: string | null
+          validity_days?: number | null
+          min_spend?: string | null
+          bg_choice?: number | null
+          title_style?: string | null
+          bg_image_url?: string | null
+          card_style?: string | null
+          wheel_palette?: string | null
+          created_at?: string | null
+          end_date?: string | null
+        }
         Update: {
-          id?: string;
-          restaurant_id?: string;
-          status?: "draft" | "active" | "ended";
-          active_action?: string;
-          action_url?: string | null;
-          validity_days?: number;
-          min_spend?: string | null;
-          created_at?: string;
-        };
-      };
-
-      prizes: {
-        Row: {
-          id: string;
-          game_id: string;
-          label: string;
-          color: string;
-          weight: number;
-          quantity: number | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          game_id: string;
-          label: string;
-          color?: string;
-          weight?: number;
-          quantity?: number | null;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          game_id?: string;
-          label?: string;
-          color?: string;
-          weight?: number;
-          quantity?: number | null;
-          created_at?: string;
-        };
-      };
-
+          id?: string
+          restaurant_id?: string
+          name?: string | null
+          status?: string | null
+          active_action?: string
+          action_url?: string | null
+          validity_days?: number | null
+          min_spend?: string | null
+          bg_choice?: number | null
+          title_style?: string | null
+          bg_image_url?: string | null
+          card_style?: string | null
+          wheel_palette?: string | null
+          created_at?: string | null
+          end_date?: string | null
+        }
+      }
       winners: {
         Row: {
-          id: string;
-          game_id: string;
-          prize_id: string;
-          first_name: string;
-          phone: string;
-          email: string | null;
-          marketing_optin: boolean;
-          qr_code: string;
-          status: "available" | "redeemed";
-          expires_at: string;
-          redeemed_at: string | null;
-          created_at: string;
-        };
+          id: string
+          game_id: string
+          prize_id: string | null
+          first_name: string
+          phone: string | null
+          email: string | null
+          marketing_optin: boolean | null
+          qr_code: string
+          status: string | null
+          expires_at: string | null
+          redeemed_at: string | null
+          consumed_at: string | null
+          created_at: string | null
+          prize_label_snapshot: string | null
+          deleted_at: string | null
+        }
         Insert: {
-          id?: string;
-          game_id: string;
-          prize_id: string;
-          first_name: string;
-          phone: string;
-          email?: string | null;
-          marketing_optin?: boolean;
-          qr_code?: string;
-          status?: "available" | "redeemed";
-          expires_at?: string;
-          redeemed_at?: string | null;
-          created_at?: string;
-        };
+          id?: string
+          game_id: string
+          prize_id?: string | null
+          first_name: string
+          phone?: string | null
+          email?: string | null
+          marketing_optin?: boolean | null
+          qr_code: string
+          status?: string | null
+          expires_at?: string | null
+          redeemed_at?: string | null
+          consumed_at?: string | null
+          created_at?: string | null
+          prize_label_snapshot?: string | null
+          deleted_at?: string | null
+        }
         Update: {
-          id?: string;
-          game_id?: string;
-          prize_id?: string;
-          first_name?: string;
-          phone?: string;
-          email?: string | null;
-          marketing_optin?: boolean;
-          qr_code?: string;
-          status?: "available" | "redeemed";
-          expires_at?: string;
-          redeemed_at?: string | null;
-          created_at?: string;
-        };
-      };
-
-      // autres tables (au cas où ton code les touche)
-      contacts: { Row: Record<string, any>; Insert: Record<string, any>; Update: Record<string, any> };
-      activity_logs: { Row: Record<string, any>; Insert: Record<string, any>; Update: Record<string, any> };
-      system_logs: { Row: Record<string, any>; Insert: Record<string, any>; Update: Record<string, any> };
-      public_restaurants: { Row: Record<string, any>; Insert: Record<string, any>; Update: Record<string, any> };
-      view_integrity_check: { Row: Record<string, any>; Insert: Record<string, any>; Update: Record<string, any> };
-    };
-
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
+          id?: string
+          game_id?: string
+          prize_id?: string | null
+          first_name?: string
+          phone?: string | null
+          email?: string | null
+          marketing_optin?: boolean | null
+          qr_code?: string
+          status?: string | null
+          expires_at?: string | null
+          redeemed_at?: string | null
+          consumed_at?: string | null
+          created_at?: string | null
+          prize_label_snapshot?: string | null
+          deleted_at?: string | null
+        }
+      }
+      contacts: {
+        Row: {
+          id: string
+          restaurant_id: string
+          email: string | null
+          phone: string | null
+          first_name: string | null
+          marketing_optin: boolean | null
+          source_game_id: string | null
+          created_at: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          restaurant_id: string
+          email?: string | null
+          phone?: string | null
+          first_name?: string | null
+          marketing_optin?: boolean | null
+          source_game_id?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          restaurant_id?: string
+          email?: string | null
+          phone?: string | null
+          first_name?: string | null
+          marketing_optin?: boolean | null
+          source_game_id?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+        }
+      }
+      prizes: {
+        Row: {
+          id: string
+          game_id: string
+          label: string
+          color: string | null
+          weight: number
+          quantity: number | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          game_id: string
+          label: string
+          color?: string | null
+          weight: number
+          quantity?: number | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          game_id?: string
+          label?: string
+          color?: string | null
+          weight?: number
+          quantity?: number | null
+          created_at?: string | null
+        }
+      }
+      activity_logs: {
+        Row: {
+          id: string
+          created_at: string
+          user_id: string | null
+          user_email: string | null
+          user_role: string | null
+          action_type: string
+          entity_id: string | null
+          entity_type: string | null
+          restaurant_id: string | null
+          metadata: Json | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          user_id?: string | null
+          user_email?: string | null
+          user_role?: string | null
+          action_type: string
+          entity_id?: string | null
+          entity_type?: string | null
+          restaurant_id?: string | null
+          metadata?: Json | null
+        }
+        Update: {
+          metadata?: Json | null
+        }
+      }
+    }
+  }
 }
