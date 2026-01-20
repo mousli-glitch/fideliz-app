@@ -64,13 +64,11 @@ export default function RootDashboard() {
           </div>
         </div>
 
-        {/* Stats Grid avec la nouvelle carte Tickets Validés */}
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           <StatCard title="Restaurants" value={data?.stats.restaurants} loading={loading} icon={<Store className="text-blue-400" />} color="bg-blue-500/10" />
           <StatCard title="CRM Global" value={data?.stats.contacts} loading={loading} icon={<Users className="text-orange-400" />} color="bg-orange-500/10" />
           <StatCard title="Gagnants" value={data?.stats.winners} loading={loading} icon={<Activity className="text-green-400" />} color="bg-green-500/10" />
-          
-          {/* REMPLACEMENT DE LA CARTE UTILISATEURS PAR TICKETS VALIDÉS */}
           <StatCard 
             title="Tickets Validés" 
             value={data?.stats.redeemed} 
@@ -82,7 +80,7 @@ export default function RootDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* TERMINAL DE BUG */}
+          {/* TERMINAL DE DIAGNOSTIC */}
           <div className="bg-slate-950 border-2 border-slate-800 rounded-3xl overflow-hidden flex flex-col min-h-[400px]">
             <div className="bg-slate-800/50 px-6 py-4 border-b border-slate-800 flex justify-between items-center">
               <h2 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
@@ -96,6 +94,7 @@ export default function RootDashboard() {
             </div>
             
             <div className="p-6 space-y-6 font-mono overflow-y-auto max-h-[500px]">
+              {/* Scanner d'intégrité */}
               <div className="space-y-3">
                 <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest border-b border-slate-900 pb-2">Scanner d'intégrité</p>
                 {loading ? (
@@ -121,19 +120,43 @@ export default function RootDashboard() {
                 )}
               </div>
 
+              {/* Journal d'activité système (Modifié pour Activity_Logs) */}
               <div className="space-y-3 pt-4">
                 <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest border-b border-slate-900 pb-2">Journal d'activité système</p>
                 <div className="space-y-2">
                   {data?.logs?.length > 0 ? (
                     data.logs.map((log: any) => (
                       <div key={log.id} className="flex items-start gap-3 text-[10px] p-2 bg-white/5 rounded-lg border border-white/5 group hover:bg-white/10 transition-all">
-                        <div className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${log.level === 'error' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                        {/* Indicateur visuel selon l'action */}
+                        <div className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
+                          log.action_type?.includes('BLOCKED') ? 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]' : 
+                          log.action_type?.includes('DELETE') ? 'bg-orange-500' : 'bg-blue-500'
+                        }`} />
+                        
                         <div className="flex-1 overflow-hidden">
                           <div className="flex justify-between items-center mb-1">
-                            <span className="text-slate-300 font-bold truncate">{log.restaurant_slug || 'GLOBAL'}</span>
-                            <span className="text-slate-600 flex items-center gap-1 shrink-0"><Clock size={10}/>{new Date(log.created_at).toLocaleTimeString()}</span>
+                            <span className="text-slate-300 font-bold truncate uppercase tracking-tighter">
+                              {log.action_type?.replace(/_/g, ' ') || 'ACTION'}
+                            </span>
+                            <span className="text-slate-600 flex items-center gap-1 shrink-0">
+                              <Clock size={10}/>
+                              {new Date(log.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </div>
-                          <p className="text-slate-500 italic break-words">{log.message}</p>
+                          
+                          {/* Infos Utilisateur et Détails */}
+                          <div className="flex flex-col gap-0.5">
+                            <p className="text-slate-500 truncate">
+                              Utilisateur: <span className="text-blue-400/70">{log.user_email || 'Système'}</span>
+                            </p>
+                            {log.metadata?.reason && (
+                              <p className="text-red-400/60 italic truncate">Motif: {log.metadata.reason}</p>
+                            )}
+                            {/* Optionnel: Affiche le nom du resto s'il est dans la metadata */}
+                            {log.metadata?.restaurant_name && (
+                              <p className="text-slate-600 text-[9px]">Resto: {log.metadata.restaurant_name}</p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))
