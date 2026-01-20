@@ -18,6 +18,5 @@ export async function logSystemError(params: {
     level: params.level || 'error',
     restaurant_slug: params.restaurant_slug,
     details: params.details,
-    // On pourrait aussi récupérer l'ID de l'utilisateur ici
   }])
 }

@@ -1,122 +1,101 @@
-"use client"
-import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
-import { useRouter } from 'next/navigation'
-import { 
-  LogOut, Store, PlusCircle, Trophy, Star, Instagram, 
-  Facebook, Smartphone, Bell, AlertCircle, Ban, CheckCircle,
-  Share2, X, TrendingUp, DollarSign, MousePointer2, AlertTriangle, Clock
-} from 'lucide-react'
-import Link from 'next/link'
+"use client";
+import { useEffect, useState } from "react";
+import { createClient } from "@/utils/supabase/client";
+import { useRouter } from "next/navigation";
+import {
+  LogOut, Store, PlusCircle, Trophy, Star,
+  Facebook, Smartphone, Bell, Ban, CheckCircle,
+  Share2, X, DollarSign, AlertTriangle, Clock
+} from "lucide-react";
+import Link from "next/link";
 
 export default function SalesDashboard() {
-  const [profile, setProfile] = useState<any>(null)
-  const [restaurants, setRestaurants] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [updatingId, setUpdatingId] = useState<string | null>(null)
-  const [selectedBilan, setSelectedBilan] = useState<any>(null)
-  
-  const supabase = createClient()
-  const router = useRouter()
+  const [profile, setProfile] = useState<any>(null);
+  const [restaurants, setRestaurants] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [selectedBilan, setSelectedBilan] = useState<any>(null);
+
+  const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
-    async function getData() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return 
+    async function load() {
+      try {
+        const res = await fetch("/api/sales/dashboard", { cache: "no-store" });
+
+        if (res.status === 401) {
+          router.push("/login");
+          return;
+        }
+
+        const json = await res.json();
+        if (!res.ok) {
+          console.error(json);
+          setLoading(false);
+          return;
+        }
+
+        setProfile(json.profile);
+        setRestaurants(json.restaurants || []);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
       }
-      
-      // 1. Récupération du profil
-      const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      setProfile(profileData)
-
-      // 2. Récupération des restaurants (Correction as any pour éviter l'erreur de contrainte)
-      const { data: restos } = await (supabase.from('restaurants') as any)
-        .select('*')
-        .eq('created_by', user.id)
-        .order('created_at', { ascending: false })
-
-      if (restos && restos.length > 0) {
-        // 3. Récupération des gagnants par restaurant (Logique Promise.all conservée)
-        const restosWithWinners = await Promise.all(restos.map(async (r: any) => {
-            // FIX : cast as any pour éviter l'erreur Property 'id' does not exist on type 'never'
-            const { data: gameIdsData } = await (supabase.from('games') as any).select('id').eq('restaurant_id', r.id)
-            const ids = (gameIdsData as any[])?.map((g: any) => g.id) || []
-            
-            let count = 0
-            let lastDate = null
-            if (ids.length > 0) {
-                // FIX : cast as any sur winners pour accéder à created_at
-                const { data: winnersData } = await (supabase.from('winners') as any)
-                    .select('created_at')
-                    .in('game_id', ids)
-                    .order('created_at', { ascending: false })
-                
-                const winnersArray = (winnersData as any[]) || []
-                count = winnersArray.length || 0
-                lastDate = winnersArray[0]?.created_at || null
-            }
-
-            return { 
-                ...r, 
-                winners: { count, last_winner_at: lastDate },
-                winners_raw: lastDate ? [{ created_at: lastDate }] : [] 
-            }
-        }))
-        setRestaurants(restosWithWinners)
-      } else {
-        setRestaurants([])
-      }
-      
-      setLoading(false)
     }
-    getData()
-  }, [supabase, router])
+    load();
+  }, [router]);
 
   const getAtRiskStatus = (resto: any) => {
-    if (!resto.is_retention_alert_enabled || !resto.winners_raw || resto.winners_raw.length === 0) return false;
-    const lastWinnerTime = new Date(resto.winners_raw[0].created_at).getTime();
-    const now = new Date().getTime();
+    if (!resto.is_retention_alert_enabled) return false;
+    const last = resto.winners?.last_winner_at;
+    if (!last) return false;
+
+    const lastWinnerTime = new Date(last).getTime();
+    const now = Date.now();
     const diffDays = (now - lastWinnerTime) / (1000 * 60 * 60 * 24);
     return diffDays > (resto.alert_threshold_days || 7);
-  }
+  };
 
   const toggleStatus = async (id: string, currentStatus: boolean) => {
-    setUpdatingId(id)
-    const { error } = await (supabase.from('restaurants') as any).update({ is_active: !currentStatus }).eq('id', id)
+    setUpdatingId(id);
+    const { error } = await (supabase.from("restaurants") as any)
+      .update({ is_active: !currentStatus })
+      .eq("id", id);
+
     if (!error) {
-      setRestaurants(restaurants.map(r => r.id === id ? { ...r, is_active: !currentStatus } : r))
+      setRestaurants(restaurants.map(r => r.id === id ? { ...r, is_active: !currentStatus } : r));
     }
-    setUpdatingId(null)
-  }
+    setUpdatingId(null);
+  };
 
   const saveSettings = async (id: string, notes: string, threshold: number, alertEnabled: boolean) => {
-    setUpdatingId(id)
-    await (supabase.from('restaurants') as any).update({ 
+    setUpdatingId(id);
+    await (supabase.from("restaurants") as any).update({
       internal_notes: notes,
       alert_threshold_days: threshold,
       is_retention_alert_enabled: alertEnabled
-    }).eq('id', id)
-    setUpdatingId(null)
-  }
+    }).eq("id", id);
+    setUpdatingId(null);
+  };
 
   const handleLogout = async () => {
-    // FIX : Utilisation obligatoire de auth.signOut()
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
-  const totalWinners = restaurants.reduce((acc, r) => acc + (r.winners?.count || 0), 0)
-  const totalGoogle = restaurants.reduce((acc, r) => acc + (r.google_clicks || 0), 0)
-  const totalSocial = restaurants.reduce((acc, r) => acc + ((r.tiktok_clicks || 0) + (r.instagram_clicks || 0) + (r.facebook_clicks || 0)), 0)
+  const totalWinners = restaurants.reduce((acc, r) => acc + (r.winners?.count || 0), 0);
+  const totalGoogle = restaurants.reduce((acc, r) => acc + (r.google_clicks || 0), 0);
+  const totalSocial = restaurants.reduce((acc, r) => acc + ((r.tiktok_clicks || 0) + (r.instagram_clicks || 0) + (r.facebook_clicks || 0)), 0);
   const atRiskCount = restaurants.filter(r => getAtRiskStatus(r)).length;
 
-  if (loading) return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-black italic animate-pulse">FIDELIZ ANALYSE...</div>
+  if (loading) {
+    return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center font-black italic animate-pulse">FIDELIZ ANALYSE...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8">
-      
       {/* MODAL BILAN FLASH */}
       {selectedBilan && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -124,15 +103,32 @@ export default function SalesDashboard() {
           <div className="relative bg-slate-900 border border-white/10 w-full max-w-lg rounded-[40px] overflow-hidden shadow-2xl animate-in zoom-in-95">
             <button onClick={() => setSelectedBilan(null)} className="absolute right-6 top-6 text-slate-500 hover:text-white bg-white/5 p-2 rounded-full transition-colors"><X size={20} /></button>
             <div className="p-10">
-              <div className="flex items-center gap-3 mb-8"><div className="bg-blue-600 p-2 rounded-lg"><Trophy size={16} /></div><span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500">Bilan Fideliz</span></div>
+              <div className="flex items-center gap-3 mb-8">
+                <div className="bg-blue-600 p-2 rounded-lg"><Trophy size={16} /></div>
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500">Bilan Fideliz</span>
+              </div>
               <h2 className="text-3xl font-black mb-2">{selectedBilan.name}</h2>
               <div className="grid grid-cols-2 gap-4 my-10">
-                <div className="bg-white/5 p-6 rounded-3xl border border-white/5"><DollarSign className="text-green-500 mb-2" size={24}/><div className="text-2xl font-black">{(selectedBilan.winners?.count || 0) * 15}€</div><div className="text-[10px] font-bold text-slate-500 uppercase">CA Estimé</div></div>
-                <div className="bg-white/5 p-6 rounded-3xl border border-white/5"><Trophy className="text-blue-500 mb-2" size={24}/><div className="text-2xl font-black">{selectedBilan.winners?.count || 0}</div><div className="text-[10px] font-bold text-slate-500 uppercase">Gagnants</div></div>
+                <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                  <DollarSign className="text-green-500 mb-2" size={24} />
+                  <div className="text-2xl font-black">{(selectedBilan.winners?.count || 0) * 15}€</div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase">CA Estimé</div>
+                </div>
+                <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                  <Trophy className="text-blue-500 mb-2" size={24} />
+                  <div className="text-2xl font-black">{selectedBilan.winners?.count || 0}</div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase">Gagnants</div>
+                </div>
               </div>
               <div className="space-y-4">
-                <div className="flex justify-between p-4 bg-black/20 rounded-2xl border border-white/5"><span className="text-sm font-bold">Avis Google</span><span className="font-black">+{selectedBilan.google_clicks || 0}</span></div>
-                <div className="flex justify-between p-4 bg-black/20 rounded-2xl border border-white/5"><span className="text-sm font-bold">Clics Sociaux</span><span className="font-black">+{ (selectedBilan.tiktok_clicks || 0) + (selectedBilan.instagram_clicks || 0) + (selectedBilan.facebook_clicks || 0) }</span></div>
+                <div className="flex justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
+                  <span className="text-sm font-bold">Avis Google</span>
+                  <span className="font-black">+{selectedBilan.google_clicks || 0}</span>
+                </div>
+                <div className="flex justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
+                  <span className="text-sm font-bold">Clics Sociaux</span>
+                  <span className="font-black">+{(selectedBilan.tiktok_clicks || 0) + (selectedBilan.instagram_clicks || 0) + (selectedBilan.facebook_clicks || 0)}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -150,7 +146,7 @@ export default function SalesDashboard() {
         </button>
       </div>
 
-      {/* STATS GLOBALES */}
+      {/* STATS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl">
           <Trophy className="text-blue-500 mb-2" size={20} />
@@ -171,7 +167,7 @@ export default function SalesDashboard() {
         <div className="bg-blue-600 p-6 rounded-3xl shadow-lg shadow-blue-900/20">
           <Store className="text-white mb-2" size={20} />
           <div className="text-2xl font-black">{restaurants.length}</div>
-          <div className="text-blue-100 text-[10px] font-bold uppercase tracking-tighter">Restaurants Actifs</div>
+          <div className="text-blue-100 text-[10px] font-bold uppercase tracking-tighter">Restaurants</div>
         </div>
       </div>
 
@@ -186,7 +182,7 @@ export default function SalesDashboard() {
             {restaurants.map((resto) => {
               const isAtRisk = getAtRiskStatus(resto);
               return (
-                <div key={resto.id} className={`bg-slate-900 border ${isAtRisk ? 'border-red-600/50 shadow-lg shadow-red-900/10' : 'border-slate-800'} p-6 rounded-3xl transition-all`}>
+                <div key={resto.id} className={`bg-slate-900 border ${isAtRisk ? "border-red-600/50 shadow-lg shadow-red-900/10" : "border-slate-800"} p-6 rounded-3xl transition-all`}>
                   <div className="flex justify-between items-start mb-6">
                     <div>
                       <div className="flex items-center gap-3">
@@ -197,13 +193,13 @@ export default function SalesDashboard() {
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => setSelectedBilan(resto)} className="bg-blue-600/10 text-blue-500 p-2.5 rounded-xl hover:bg-blue-600 hover:text-white transition-all"><Share2 size={18} /></button>
-                      <button 
+                      <button
                         disabled={updatingId === resto.id}
                         onClick={() => toggleStatus(resto.id, resto.is_active)}
-                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${resto.is_active ? 'bg-red-500/10 text-red-500' : 'bg-green-500 text-white'}`}
+                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${resto.is_active ? "bg-red-500/10 text-red-500" : "bg-green-500 text-white"}`}
                       >
                         {resto.is_active ? <Ban size={14} /> : <CheckCircle size={14} />}
-                        {resto.is_active ? 'Bloquer' : 'Débloquer'}
+                        {resto.is_active ? "Bloquer" : "Débloquer"}
                       </button>
                     </div>
                   </div>
@@ -227,7 +223,7 @@ export default function SalesDashboard() {
                     <div className="flex flex-col md:flex-row gap-4">
                       <div className="flex-1">
                         <label className="text-[9px] font-black text-slate-500 uppercase mb-1 block">Notes CRM</label>
-                        <textarea 
+                        <textarea
                           defaultValue={resto.internal_notes}
                           onBlur={(e) => saveSettings(resto.id, e.target.value, resto.alert_threshold_days, resto.is_retention_alert_enabled)}
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 outline-none h-16"
@@ -237,36 +233,39 @@ export default function SalesDashboard() {
                         <label className="text-[9px] font-black text-slate-500 uppercase mb-1 block">Seuil Alerte</label>
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-2">
-                            <input 
-                              type="number" defaultValue={resto.alert_threshold_days}
-                              onBlur={(e) => saveSettings(resto.id, resto.internal_notes, parseInt(e.target.value), resto.is_retention_alert_enabled)}
+                            <input
+                              type="number"
+                              defaultValue={resto.alert_threshold_days}
+                              onBlur={(e) => saveSettings(resto.id, resto.internal_notes, parseInt(e.target.value || "7", 10), resto.is_retention_alert_enabled)}
                               className="w-16 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-center font-bold"
                             />
                             <span className="text-[10px] font-bold text-slate-600">Jours</span>
                           </div>
-                          <button 
+                          <button
                             onClick={() => saveSettings(resto.id, resto.internal_notes, resto.alert_threshold_days, !resto.is_retention_alert_enabled)}
-                            className={`flex items-center justify-center gap-2 p-2 rounded-lg text-[9px] font-black uppercase transition-all ${resto.is_retention_alert_enabled ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-500'}`}
+                            className={`flex items-center justify-center gap-2 p-2 rounded-lg text-[9px] font-black uppercase transition-all ${resto.is_retention_alert_enabled ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-500"}`}
                           >
-                            <Bell size={12} /> {resto.is_retention_alert_enabled ? 'Surveillance On' : 'Surveillance Off'}
+                            <Bell size={12} /> {resto.is_retention_alert_enabled ? "Surveillance On" : "Surveillance Off"}
                           </button>
                         </div>
                       </div>
                     </div>
                   </div>
+
                 </div>
               );
             })}
           </div>
         </div>
 
+        {/* SIDEBAR ALERTES */}
         <div className="space-y-6">
           <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl sticky top-8">
             <div className="flex items-center gap-3 mb-6">
               <AlertTriangle className="text-red-500" size={24} />
               <h3 className="text-xl font-black uppercase tracking-tighter">Alertes Clients</h3>
             </div>
-            
+
             <div className="space-y-4">
               {restaurants.filter(r => getAtRiskStatus(r)).length === 0 ? (
                 <div className="p-6 bg-green-500/5 border border-green-500/20 rounded-2xl text-center">
@@ -276,12 +275,16 @@ export default function SalesDashboard() {
                 </div>
               ) : (
                 restaurants.filter(r => getAtRiskStatus(r)).map(r => (
-                  <div key={r.id} className="p-4 bg-red-600/10 border border-red-600/20 rounded-2xl group relative overflow-hidden">
+                  <div key={r.id} className="p-4 bg-red-600/10 border border-red-600/20 rounded-2xl relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-2"><Clock size={12} className="text-red-500" /></div>
                     <h4 className="font-black text-sm text-red-500 uppercase">{r.name}</h4>
-                    <p className="text-[9px] text-slate-400 mt-1 italic">Aucun gagnant depuis +{r.alert_threshold_days} jours.</p>
+                    <p className="text-[9px] text-slate-400 mt-1 italic">
+                      Aucun gagnant depuis +{r.alert_threshold_days} jours.
+                    </p>
                     <div className="mt-3 flex gap-2">
-                       <button onClick={() => setSelectedBilan(r)} className="text-[9px] font-black bg-red-600 text-white px-3 py-1.5 rounded-lg uppercase">Voir Bilan</button>
+                      <button onClick={() => setSelectedBilan(r)} className="text-[9px] font-black bg-red-600 text-white px-3 py-1.5 rounded-lg uppercase">
+                        Voir Bilan
+                      </button>
                     </div>
                   </div>
                 ))
@@ -296,7 +299,8 @@ export default function SalesDashboard() {
             </div>
           </div>
         </div>
+
       </div>
     </div>
-  )
+  );
 }
