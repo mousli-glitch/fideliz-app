@@ -37,7 +37,6 @@ export async function middleware(request: NextRequest) {
 
   // 2. VÉRIFICATION DES RÔLES & BLOCAGE
   if (user) {
-    // On récupère le profil complet avec le restaurant_id
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, restaurant_id')
@@ -48,20 +47,20 @@ export async function middleware(request: NextRequest) {
     const restaurantId = profile?.restaurant_id
 
     // --- SÉCURITÉ CRITIQUE : BLOCAGE RESTAURANT ---
-    // Si l'utilisateur est un admin/owner et tente d'accéder à l'admin
     if (pathname.startsWith('/admin') && restaurantId) {
-      // On vérifie le statut du restaurant (sans passer par RLS ici car on est côté serveur)
+      // On récupère le statut
       const { data: restaurant } = await supabase
         .from('restaurants')
-        .select('blocked_at')
+        .select('blocked_at, is_active') // On vérifie les deux !
         .eq('id', restaurantId)
         .single()
 
-      // Si le restaurant est bloqué -> DEHORS
-      if (restaurant?.blocked_at) {
-        // On supprime la session (optionnel mais plus propre)
+      // BLOCAGE SI :
+      // 1. Il y a une date de blocage (blocked_at)
+      // 2. OU SI le restaurant est désactivé (is_active === false)
+      if (restaurant?.blocked_at || restaurant?.is_active === false) {
+        
         await supabase.auth.signOut() 
-        // Redirection avec un paramètre pour afficher un message
         return NextResponse.redirect(new URL('/login?reason=blocked', request.url))
       }
     }
@@ -77,7 +76,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // Sécurité pour empêcher les Sales d'aller sur l'admin Resto
+    // Sécurité Sales sur Admin
     if (pathname.startsWith('/admin') && role === 'sales') {
         return NextResponse.redirect(new URL('/super-admin/sales/dashboard', request.url))
     }
