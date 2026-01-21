@@ -3,8 +3,9 @@ import { type NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
+  
+  // On récupère le code (PKCE) et la destination suivante
   const code = searchParams.get('code')
-  // C'est ici qu'on récupère où aller après (ex: /update-password)
   const next = searchParams.get('next') ?? '/'
 
   if (code) {
@@ -24,14 +25,19 @@ export async function GET(request: NextRequest) {
       { cookies: cookieStore }
     )
     
-    // On échange le code contre une session active (L'utilisateur devient connecté)
+    // Échange du code contre une session
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
+      // ✅ SUCCÈS : On redirige vers la page prévue (ex: /update-password)
       return NextResponse.redirect(`${origin}${next}`)
+    } else {
+       // ❌ ÉCHEC ÉCHANGE : On affiche l'erreur précise
+       console.error('Auth Error Exchange:', error)
+       return NextResponse.redirect(`${origin}/login?error=exchange_failed&details=${encodeURIComponent(error.message)}`)
     }
   }
 
-  // Si erreur ou pas de code, retour à l'accueil
-  return NextResponse.redirect(`${origin}/login?error=auth`)
+  // ❌ ÉCHEC CODE : Aucun code trouvé dans l'URL
+  return NextResponse.redirect(`${origin}/login?error=missing_code`)
 }
