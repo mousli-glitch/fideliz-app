@@ -9,28 +9,35 @@ import Link from 'next/link'
 export default function UpdatePassword() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [checkingSession, setCheckingSession] = useState(true) // Nouvel état
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [checkingSession, setCheckingSession] = useState(true)
   const [hasSession, setHasSession] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   
   const router = useRouter()
   const supabase = createClient()
 
-  // 1. VÉRIFICATION IMMÉDIATE DE LA SESSION
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession()
+    // V2 : On utilise onAuthStateChange pour écouter la connexion en temps réel
+    // C'est plus robuste si le navigateur met quelques millisecondes à charger le cookie
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("🔒 Auth Event:", event)
       
-      if (error || !session) {
-        setHasSession(false)
-        setErrorMsg("Le lien est invalide ou a expiré. Veuillez refaire une demande.")
-      } else {
+      if (session) {
         setHasSession(true)
-        console.log("Session active confirmée pour :", session.user.email)
+        setCheckingSession(false)
+      } else if (event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') {
+        // On attend un tout petit peu avant de déclarer l'échec total
+        // pour laisser le temps au callback de faire son travail
+        setTimeout(() => {
+            if (!session) {
+                setHasSession(false)
+                setCheckingSession(false)
+            }
+        }, 1000)
       }
-      setCheckingSession(false)
-    }
-    checkUser()
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -44,7 +51,6 @@ export default function UpdatePassword() {
         return
     }
 
-    // On met à jour le mot de passe
     const { error } = await supabase.auth.updateUser({
       password: password
     })
@@ -53,21 +59,23 @@ export default function UpdatePassword() {
       setErrorMsg("Erreur technique : " + error.message)
       setLoading(false)
     } else {
-      alert("✅ Mot de passe modifié avec succès ! Vous allez être redirigé.")
+      alert("✅ Mot de passe modifié ! Redirection...")
       router.push('/login')
     }
   }
 
-  // AFFICHER UN LOADER PENDANT LA VÉRIFICATION DU LIEN
   if (checkingSession) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <Loader2 className="animate-spin text-blue-600" size={40} />
+        <div className="flex flex-col items-center gap-4">
+            <Loader2 className="animate-spin text-blue-600" size={40} />
+            <p className="text-slate-500 text-xs uppercase tracking-widest animate-pulse">Vérification du lien sécurisé...</p>
+        </div>
       </div>
     )
   }
 
-  // SI LIEN MORT / SESSION PERDUE
+  // Si vraiment aucune session n'est trouvée
   if (!hasSession) {
     return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
@@ -77,9 +85,10 @@ export default function UpdatePassword() {
                         <AlertTriangle className="text-red-500" size={40} />
                     </div>
                 </div>
-                <h1 className="text-2xl font-black text-white mb-4">Lien Expiré</h1>
+                <h1 className="text-2xl font-black text-white mb-4">Lien Invalide</h1>
                 <p className="text-slate-400 mb-8 text-sm">
-                    La session a été perdue ou le lien a déjà été utilisé. Par sécurité, veuillez refaire une demande.
+                    Impossible de vérifier votre identité.<br/>
+                    Cela arrive si le lien a été ouvert dans un autre navigateur ou s'il a expiré.
                 </p>
                 <Link 
                     href="/forgot-password"
@@ -92,11 +101,9 @@ export default function UpdatePassword() {
     )
   }
 
-  // LE FORMULAIRE (Affiché uniquement si session active)
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-800 p-8 rounded-[32px] w-full max-w-md shadow-2xl">
-        
         <div className="flex justify-center mb-8">
             <div className="bg-blue-600 p-4 rounded-2xl shadow-lg shadow-blue-600/20 animate-pulse">
             <Lock className="text-white" size={32} />
@@ -104,10 +111,7 @@ export default function UpdatePassword() {
         </div>
 
         <h1 className="text-2xl font-black text-center text-white mb-2 tracking-tight">Nouveau Mot de Passe</h1>
-        <p className="text-slate-500 text-center mb-8 text-xs font-medium uppercase tracking-widest">
-          Sécurisez votre compte
-        </p>
-
+        
         <form onSubmit={handleUpdate} className="space-y-4">
             {errorMsg && (
               <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-red-400 text-xs font-bold text-center flex items-center justify-center gap-2">
@@ -115,28 +119,25 @@ export default function UpdatePassword() {
               </div>
             )}
 
-            <div>
-              <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1 mb-2 block">Nouveau mot de passe</label>
-              <div className="relative group">
+            <div className="relative group">
                 <Lock className="absolute left-4 top-4 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={20} />
                 <input 
                   type="password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 text-white pl-12 pr-4 py-4 rounded-2xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-medium placeholder:text-slate-600"
-                  placeholder="••••••••"
+                  className="w-full bg-slate-800 border border-slate-700 text-white pl-12 pr-4 py-4 rounded-2xl outline-none focus:border-blue-500 font-medium placeholder:text-slate-600"
+                  placeholder="Nouveau mot de passe"
                   required
                 />
-              </div>
             </div>
 
             <button 
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-4 uppercase text-sm"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 mt-4 uppercase text-sm"
             >
-              {loading ? <Loader2 className="animate-spin" /> : "Enregistrer et Connexion"}
+              {loading ? <Loader2 className="animate-spin" /> : "Sauvegarder"}
             </button>
-          </form>
+        </form>
       </div>
     </div>
   )
