@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic"
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { 
-  LayoutDashboard, Users, Store, Settings, Activity, PlusCircle, 
-  ShieldAlert, Database, ArrowRight, CheckCircle2, Loader2, Clock, 
-  ShieldCheck, Server, Terminal, ChevronRight, DollarSign, Filter 
+  Users, Store, Activity, PlusCircle, 
+  ShieldAlert, Database, CheckCircle2, 
+  Terminal, ChevronRight, DollarSign, Filter 
 } from 'lucide-react'
 import Navbar from '@/components/Navbar'
 import { getRootStats } from '@/app/actions/get-root-stats'
@@ -18,23 +18,12 @@ import { repairOrphansAction } from '@/app/actions/repair-orphans'
 // TYPES POUR LES LOGS
 type LogLevel = 'info' | 'warning' | 'error' | 'critical'
 
-interface SystemLog {
-  id: string
-  created_at: string
-  level: LogLevel
-  message: string
-  details?: any // JSON string ou object
-  user_email?: string
-  action_type?: string
-  metadata?: any
-}
-
 export default function RootDashboard() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isRepairing, setIsRepairing] = useState(false)
   
-  // Nouveaux états pour le Terminal Avancé
+  // États pour le Terminal Avancé
   const [logFilter, setLogFilter] = useState<'all' | 'error' | 'warning'>('all')
   const [expandedLog, setExpandedLog] = useState<string | null>(null)
   const [systemHealth, setSystemHealth] = useState({ db: 'checking', latency: 0 })
@@ -70,21 +59,25 @@ export default function RootDashboard() {
     setIsRepairing(false)
   }
 
-  // Filtrage des logs
+  // Filtrage et Limitation des logs (Performance V3)
   const getFilteredLogs = () => {
     if (!data?.logs) return []
-    if (logFilter === 'all') return data.logs
-    // Adapter selon comment tes logs sont structurés (level ou type d'action)
-    return data.logs.filter((l: any) => {
-        const isError = l.level === 'error' || l.level === 'critical' || l.action_type?.includes('BLOCKED') || l.action_type?.includes('DELETE')
-        return logFilter === 'error' ? isError : true
-    })
+    
+    let filtered = data.logs
+    
+    if (logFilter !== 'all') {
+      filtered = data.logs.filter((l: any) => {
+          const isError = l.level === 'error' || l.level === 'critical' || l.action_type?.includes('BLOCKED') || l.action_type?.includes('DELETE')
+          return logFilter === 'error' ? isError : true
+      })
+    }
+    
+    // ⚠️ SÉCURITÉ PERFORMANCE : On ne garde que les 100 derniers pour l'affichage DOM
+    return filtered.slice(0, 100)
   }
 
-  // Calculs KPIs
-  const activeRestosCount = data?.stats?.active_restaurants || 0 // Suppose que getRootStats renvoie ce chiffre, sinon on peut estimer
+  const activeRestosCount = data?.stats?.active_restaurants || 0 
   const totalRestos = data?.stats?.restaurants || 0
-  const estimatedMRR = activeRestosCount * 49 // Base 49€/mois par exemple
 
   return (
     <div className="min-h-screen bg-[#050a14] text-white font-sans selection:bg-blue-500/30">
@@ -92,11 +85,12 @@ export default function RootDashboard() {
 
       <div className="p-6 max-w-7xl mx-auto space-y-8">
         
-        {/* 1. HEADER & SYSTEM STATUS */}
+        {/* 1. HEADER & ACTIONS */}
         <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-b border-slate-800 pb-6">
           <div>
+            {/* V3 : NOM CORRIGÉ */}
             <h1 className="text-4xl font-black italic tracking-tighter">
-              FIDELIZ <span className="text-blue-500">NEXUS</span>
+              FIDELIZ <span className="text-blue-500">ROOT</span>
             </h1>
             <p className="text-slate-500 text-xs font-mono mt-2 flex items-center gap-2">
               <span className="relative flex h-2 w-2">
@@ -107,19 +101,24 @@ export default function RootDashboard() {
             </p>
           </div>
           
-          <div className="flex gap-3">
-             <Link href="/super-admin/root/restaurants-management" className="bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-lg font-bold text-xs uppercase flex items-center gap-2 transition-all border border-slate-700">
+          <div className="flex flex-wrap gap-3">
+             {/* V3 : BOUTON COMMERCIAUX DÉPLACÉ ICI */}
+             <Link href="/super-admin/root/sales-management" className="bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-lg font-bold text-xs uppercase flex items-center gap-2 transition-all border border-slate-700 hover:text-white text-slate-300">
+                <Users size={16} className="text-purple-400" /> Commerciaux
+             </Link>
+
+             <Link href="/super-admin/root/restaurants-management" className="bg-slate-800 hover:bg-slate-700 px-5 py-2.5 rounded-lg font-bold text-xs uppercase flex items-center gap-2 transition-all border border-slate-700 text-slate-300 hover:text-white">
                 <Database size={16} className="text-blue-400" /> Parc
              </Link>
+             
              <Link href="/super-admin/root/new-restaurant" className="bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-lg font-bold text-xs uppercase flex items-center gap-2 transition-all shadow-lg shadow-blue-900/20">
                 <PlusCircle size={16} /> Nouveau Client
              </Link>
           </div>
         </div>
 
-        {/* 2. VITALS (KPIs INTELLIGENTS) */}
+        {/* 2. VITALS (KPIs) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            
             {/* KPI 1: PARC TOTAL */}
             <div className="bg-[#0f172a] border border-slate-800 p-5 rounded-2xl relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Store size={64} /></div>
@@ -132,7 +131,7 @@ export default function RootDashboard() {
                 </div>
             </div>
 
-            {/* KPI 2: MRR ESTIMÉ (Simulé pour l'instant) */}
+            {/* KPI 2: MRR ESTIMÉ */}
             <div className="bg-[#0f172a] border border-slate-800 p-5 rounded-2xl relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><DollarSign size={64} /></div>
                 <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">MRR Estimé</div>
@@ -169,16 +168,15 @@ export default function RootDashboard() {
             </div>
         </div>
 
-        {/* 3. TERMINAL DE DIAGNOSTIC AVANCÉ */}
+        {/* 3. TERMINAL & SCANNER */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
             
-            {/* GAUCHE : ÉTAT DES SERVICES & SCANNER */}
+            {/* GAUCHE : SCANNER INTÉGRITÉ */}
             <div className="lg:col-span-1 bg-[#0a0f18] border border-slate-800 rounded-2xl p-6 flex flex-col gap-6">
                 <h3 className="flex items-center gap-2 text-sm font-black uppercase text-slate-300">
                     <ShieldAlert size={16} className="text-red-500" /> Scanner Intégrité
                 </h3>
 
-                {/* SCANNER ORPHELINS (Ta logique existante intégrée ici) */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 p-4 bg-slate-900/30 rounded-xl border border-slate-800/50">
                     {loading ? (
                       <p className="text-slate-500 animate-pulse text-xs font-mono">{">"} Scan en cours...</p>
@@ -204,23 +202,11 @@ export default function RootDashboard() {
                       </div>
                     )}
                 </div>
-
-                {/* Gestion Sales Rapide */}
-                <div className="p-4 bg-blue-900/10 border border-blue-900/30 rounded-xl">
-                    <h4 className="text-[10px] font-black text-blue-400 uppercase mb-3">Accès Rapide</h4>
-                    <Link 
-                        href="/super-admin/root/sales-management" 
-                        className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white text-[10px] font-bold py-3 px-4 rounded-lg transition-all flex items-center justify-between w-full group"
-                    >
-                        <span>Gérer les Commerciaux</span>
-                        <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-                    </Link>
-                </div>
             </div>
 
-            {/* DROITE : JOURNAL D'ACTIVITÉ (THE TERMINAL) */}
+            {/* DROITE : JOURNAL (TERMINAL) */}
             <div className="lg:col-span-2 bg-[#050505] border border-slate-800 rounded-2xl overflow-hidden flex flex-col font-mono text-sm relative shadow-2xl">
-                {/* Terminal Header */}
+                {/* Header Terminal */}
                 <div className="bg-[#111] border-b border-slate-800 p-3 flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <Terminal size={14} className="text-slate-500" />
@@ -242,7 +228,7 @@ export default function RootDashboard() {
                     </div>
                 </div>
 
-                {/* Terminal Content */}
+                {/* Contenu Terminal */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
                     {getFilteredLogs().length > 0 ? (
                         getFilteredLogs().map((log: any) => (
@@ -250,43 +236,59 @@ export default function RootDashboard() {
                             <div 
                                 onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
                                 className={`
-                                    flex items-start gap-3 p-2 rounded cursor-pointer transition-colors
+                                    flex items-center gap-4 p-2 rounded cursor-pointer transition-colors
                                     ${log.level === 'error' || log.level === 'critical' || log.action_type?.includes('BLOCKED') ? 'hover:bg-red-900/10 text-red-400' : 
                                       'hover:bg-slate-800/50 text-slate-300'}
                                 `}
                             >
-                                <span className="text-[10px] text-slate-600 w-16 shrink-0 pt-0.5">
+                                {/* HEURE */}
+                                <span className="text-[10px] text-slate-600 w-12 shrink-0">
                                     {new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </span>
                                 
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className={`
-                                            text-[9px] font-bold uppercase px-1.5 py-0.5 rounded
-                                            ${log.action_type?.includes('BLOCKED') ? 'bg-red-500/20 text-red-500' : 
-                                              log.action_type?.includes('DELETE') ? 'bg-orange-500/20 text-orange-500' : 
-                                              'bg-blue-500/20 text-blue-500'}
-                                        `}>
-                                            {log.action_type || 'INFO'}
-                                        </span>
-                                        <span className="font-bold text-xs">{log.message || log.action_type?.replace(/_/g, ' ')}</span>
-                                        {log.user_email && <span className="text-slate-600 text-[10px]">by {log.user_email}</span>}
-                                    </div>
-                                    
-                                    {/* DÉTAILS EXPANDABLE */}
-                                    {expandedLog === log.id && (
-                                        <div className="mt-2 pl-2 border-l-2 border-slate-700 animate-in slide-in-from-top-2 duration-200">
-                                            <div className="text-[10px] text-slate-400 bg-black/50 p-2 rounded grid gap-1">
-                                                {log.metadata?.reason && <p><span className="text-slate-500">Reason:</span> {log.metadata.reason}</p>}
-                                                {log.metadata?.restaurant_name && <p><span className="text-slate-500">Target:</span> {log.metadata.restaurant_name}</p>}
-                                                <p className="text-slate-600 italic mt-1">ID: {log.id}</p>
-                                            </div>
-                                        </div>
-                                    )}
+                                {/* CATEGORIE (GAUCHE) */}
+                                <span className={`
+                                    text-[9px] font-bold uppercase px-2 py-1 rounded w-32 text-center shrink-0
+                                    ${log.action_type?.includes('BLOCKED') ? 'bg-red-500/20 text-red-500' : 
+                                      log.action_type?.includes('DELETE') ? 'bg-orange-500/20 text-orange-500' : 
+                                      'bg-blue-500/20 text-blue-500'}
+                                `}>
+                                    {log.action_type || 'INFO'}
+                                </span>
+
+                                {/* V3: MESSAGE PRÉCIS (MILIEU) */}
+                                <div className="flex-1 truncate">
+                                    <span className="font-bold text-xs text-white">
+                                        {/* On affiche la RAISON ou le DETAIL si dispo, sinon le message standard */}
+                                        {log.metadata?.reason || log.metadata?.restaurant_name 
+                                            ? <span className="text-white">{log.metadata?.restaurant_name ? `${log.metadata.restaurant_name} : ` : ''}{log.metadata?.reason || log.message}</span>
+                                            : <span className="text-slate-400">{log.message || 'Mise à jour effectuée'}</span>
+                                        }
+                                    </span>
                                 </div>
+                                
+                                {/* V3: AUTEUR (DROITE) */}
+                                {log.user_email && (
+                                    <span className="text-slate-600 text-[10px] truncate w-32 text-right">
+                                        by {log.user_email.split('@')[0]}
+                                    </span>
+                                )}
 
                                 <ChevronRight size={14} className={`transform transition-transform ${expandedLog === log.id ? 'rotate-90' : ''} opacity-0 group-hover:opacity-50`} />
                             </div>
+
+                            {/* DÉTAILS EXPANDABLE */}
+                            {expandedLog === log.id && (
+                                <div className="mt-1 ml-16 mb-2 pl-2 border-l-2 border-slate-700 animate-in slide-in-from-top-2 duration-200">
+                                    <div className="text-[10px] text-slate-400 bg-black/50 p-2 rounded grid gap-1">
+                                        <p><span className="text-slate-500">Full Message:</span> {log.message}</p>
+                                        {log.metadata && (
+                                            <pre className="text-blue-400 mt-1">{JSON.stringify(log.metadata, null, 2)}</pre>
+                                        )}
+                                        <p className="text-slate-600 italic mt-1">ID: {log.id}</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ))
                     ) : (
@@ -297,9 +299,8 @@ export default function RootDashboard() {
                     )}
                 </div>
 
-                {/* Terminal Footer */}
                 <div className="bg-[#111] border-t border-slate-800 p-2 text-[10px] text-slate-500 flex justify-between px-4">
-                    <span>System Monitoring Active</span>
+                    <span>System Monitoring Active (Limited to 100 logs)</span>
                     <span className="animate-pulse text-green-500">● Live</span>
                 </div>
             </div>
