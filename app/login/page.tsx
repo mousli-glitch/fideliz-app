@@ -1,28 +1,26 @@
 "use client"
-import { useState, useEffect } from 'react'
+
+import { useState, useEffect, Suspense } from 'react' // <--- Ajout de Suspense
 import { createClient } from '@/utils/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Lock, Mail, Loader2, AlertTriangle, Ban } from 'lucide-react'
 
-export default function LoginPage() {
+// 1. ON DÉPLACE TOUTE LA LOGIQUE DANS CETTE SOUS-COMPOSANTE
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
-  // On ajoute un état pour gérer l'affichage pendant la vérification auto
   const [checkingSession, setCheckingSession] = useState(true)
   
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const searchParams = useSearchParams() // <--- C'est lui qui posait problème sans Suspense
   const supabase = createClient()
 
-  // On détecte si le middleware a renvoyé ici à cause d'un blocage
   const isBlocked = searchParams.get("reason") === "blocked"
 
-  // --- FONCTION DE REDIRECTION INTELLIGENTE (Réutilisée) ---
   const routeUser = async (userId: string) => {
-    // 1. Récupération du profil
     const { data: profile, error: profileError } = await (supabase
       .from('profiles')
       .select('*')
@@ -37,7 +35,6 @@ export default function LoginPage() {
       return
     }
 
-    // 2. Vérification du Disjoncteur (User désactivé manuellement)
     if (profile.is_active === false) {
       setErrorMsg("Ce compte a été désactivé. Contactez l'administrateur.")
       await supabase.auth.signOut()
@@ -46,16 +43,13 @@ export default function LoginPage() {
       return
     }
 
-    // 3. Aiguillage selon le rôle
     switch (profile.role) {
       case 'root':
         router.push('/super-admin/root')
         break
-        
       case 'sales':
         router.push('/super-admin/sales/dashboard') 
         break
-        
       case 'admin':
         if (profile.restaurant_id) {
           const { data: resto } = await (supabase
@@ -75,16 +69,13 @@ export default function LoginPage() {
           router.push('/admin/setup')
         }
         break
-        
       default:
         router.push('/')
     }
   }
 
-  // --- EFFET 1 : REDIRECTION AUTO SI DÉJÀ CONNECTÉ ---
   useEffect(() => {
     const checkSession = async () => {
-      // Si on vient d'être bloqué, on ne redirige surtout pas !
       if (isBlocked) {
         setCheckingSession(false)
         return
@@ -93,10 +84,8 @@ export default function LoginPage() {
       const { data: { session } } = await supabase.auth.getSession()
       
       if (session?.user) {
-        // L'utilisateur est connecté, on lance l'aiguillage
         await routeUser(session.user.id)
       } else {
-        // Pas connecté, on affiche le formulaire
         setCheckingSession(false)
       }
     }
@@ -105,13 +94,11 @@ export default function LoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isBlocked])
 
-  // --- GESTION DU FORMULAIRE MANUEL ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setErrorMsg('')
 
-    // Connexion Auth
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -124,14 +111,12 @@ export default function LoginPage() {
     }
 
     if (authData.user) {
-      // Si connexion OK, on lance l'aiguillage
       await routeUser(authData.user.id)
     } else {
       setLoading(false)
     }
   }
 
-  // Si on est en train de vérifier la session, on affiche un loader minimaliste
   if (checkingSession) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -152,7 +137,6 @@ export default function LoginPage() {
         <h1 className="text-3xl font-black text-center text-white mb-2 tracking-tight">Fideliz V2</h1>
         <p className="text-slate-500 text-center mb-8 text-sm font-medium uppercase tracking-widest">Connexion Sécurisée</p>
 
-        {/* --- ALERTE SPÉCIALE BLOCAGE (Design rouge sombre) --- */}
         {isBlocked && (
           <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl mb-6 flex flex-col gap-2 animate-pulse">
              <div className="flex items-center gap-3 text-red-400 text-sm font-bold">
@@ -165,7 +149,6 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* --- ALERTE ERREUR CLASSIQUE --- */}
         {errorMsg && !isBlocked && (
           <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl mb-6 flex items-center gap-3 text-red-400 text-sm font-bold">
             <AlertTriangle size={20} />
@@ -213,5 +196,18 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// 2. LA COMPOSANTE PRINCIPALE EXPORTÉE QUI ENVELOPPE LE TOUT
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <Loader2 className="animate-spin text-blue-600" size={40} />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }
