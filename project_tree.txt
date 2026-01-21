@@ -1,163 +1,174 @@
-.cursor
-.env.local
-.github
-  workflows
-    playwright.yml
-.gitignore
-.npmrc
-app
-  actions
-    activateGameAction.ts
-    admin-actions.ts
-    admin.ts
-    ai.ts
-    create-game.ts
-    create-restaurant.ts
-    delete-contact.ts
-    delete-sales-user.ts
-    delete-winner.ts
-    deleteGameAction.ts
-    get-root-stats.ts
-    get-sales-data.ts
-    google-business.ts
-    log-system-error.ts
-    player.ts
-    redeem-winner.ts
-    register-winner.ts
-    repair-orphans.ts
-    save-marketing-winner.ts
-    save-winner.ts
-    update-game.ts
-    validate-win.ts
-  admin
-    [slug]
-      customers
+.
+  middleware.ts
+  .cursor
+  mon_projet_sain.txt
+  types
+    game-config.ts
+    database.types.ts
+    game-types.ts
+  project_tree.txt
+  .env.local
+  app
+    favicon.ico
+    verify
+      [id]
         page.tsx
-      games
-        [id]
-        new
-        page.tsx
-      layout.tsx
-      page.tsx
-      reviews
-        page.tsx
-      settings
-        page.tsx
-      winners
-        page.tsx
-    ClientValidateButton.tsx
-    layout.tsx
-    page.tsx
-    QrCard.tsx
-  api
+        verify-client.tsx
     admin
-      create-user
-        route.ts
-      winners
-        route.ts
-    auth
-      google
-        callback
+      QrCard.tsx
+      layout.tsx
+      ClientValidateButton.tsx
+      page.tsx
+      [slug]
+        customers
+          page.tsx
+        settings
+          page.tsx
+        winners
+          page.tsx
+        layout.tsx
+        page.tsx
+        games
+          new
+            page.tsx
+          [id]
+            page.tsx
+          page.tsx
+        reviews
+          page.tsx
+    qr
+      [id]
+        page.tsx
+    scan
+      [slug]
+        page.tsx
+    super-admin
+      sales
+        dashboard
+          page.tsx
+        page.tsx
+        new-restaurant
+          page.tsx
+      root
+        sales-management
+          page.tsx
+        restaurants-management
+          page.tsx
+        page.tsx
+        new-restaurant
+          page.tsx
+    layout.tsx
+    actions
+      update-game.ts
+      admin-actions.ts
+      delete-contact.ts
+      repair-orphans.ts
+      sales
+        get-sales-stats.ts
+      register-winner.ts
+      admin.ts
+      player.ts
+      delete-winner.ts
+      google-business.ts
+      activateGameAction.ts
+      get-root-stats.ts
+      ai.ts
+      get-sales-data.ts
+      create-game.ts
+      redeem-winner.ts
+      save-winner.ts
+      log-system-error.ts
+      deleteGameAction.ts
+      create-restaurant.ts
+      validate-win.ts
+      delete-sales-user.ts
+      save-marketing-winner.ts
+    api
+      sales
+        dashboard
+          route.ts
+      auth
+        google
+          route.ts
+          callback
+            route.ts
+      admin
+        winners
+          route.ts
+        create-user
+          route.ts
+      play
         route.ts
     play
-      route.ts
-  favicon.ico
-  globals.css
-  layout.tsx
-  login
+      [slug]
+        page.tsx
     page.tsx
-  page.tsx
-  play
-    [slug]
+    globals.css
+    login
       page.tsx
-  qr
-    [id]
-      page.tsx
-  scan
-    [slug]
-      page.tsx
-  super-admin
-    root
-      new-restaurant
-        page.tsx
-      page.tsx
-      restaurants-management
-        page.tsx
-      sales-management
-        page.tsx
-    sales
-      dashboard
-        page.tsx
-      new-restaurant
-        page.tsx
-      page.tsx
-  verify
-    [id]
-      page.tsx
-      verify-client.tsx
-components
-components.json
-  admin
-  admin-qr-card.tsx
-  admin-winner-row.tsx
-    csv-export-button.tsx
-    customers-table.tsx
-    mobile-header.tsx
-    sidebar.tsx
-    winners-table.tsx
-  AdminDashboard.tsx
-  game
-  game-flow.tsx
-    game-container.tsx
-    game-interface.tsx
-    game-wheel.tsx
-    public-game-client.tsx
-  GooglePlaceInput.tsx
-  LogoUploader.tsx
-  LogoutButton.tsx
-  Navbar.tsx
-  qr-generator.tsx
-  QrCard.tsx
-  ui
-    badge.tsx
-    button.tsx
-    card.tsx
-    input.tsx
-    label.tsx
-    progress.tsx
-    tabs.tsx
-  wheel.tsx
-eslint.config.mjs
-fideliz_2.zip
-fideliz.zip
-lib
-  supabaseClient.ts
-  utils.ts
-middleware.ts
-next-env.d.ts
-next.config.ts
-package-lock.json
-package.json
-playwright.config.ts
-postcss.config.mjs
-project_tree.txt
-public
-  file.svg
-  globe.svg
-  next.svg
-  safari-guide.png
-  vercel.svg
-  window.svg
-README.md
-tests
-  example.spec.ts
-tsconfig.json
-types
-  database.types.ts
-  game-config.ts
-  game-types.ts
-utils
-  supabase
-    admin.ts
-    client.ts
-    server.ts
+  postcss.config.mjs
+  tests
+    example.spec.ts
+  utils
+    supabase
+      admin.ts
+      client.ts
+      server.ts
+    logger.ts
+  .npmrc
+  next-env.d.ts
+  README.md
+  components
+    ui
+      tabs.tsx
+      card.tsx
+      progress.tsx
+      label.tsx
+      badge.tsx
+      button.tsx
+      input.tsx
+    Navbar.tsx
+    QrCard.tsx
+    LogoUploader.tsx
+    LogoutButton.tsx
+    admin-qr-card.tsx
+    admin
+      customers-table.tsx
+      mobile-header.tsx
+      csv-export-button.tsx
+      winners-table.tsx
+      sidebar.tsx
+    wheel.tsx
+    game
+      public-game-client.tsx
+      game-container.tsx
+      game-interface.tsx
+      game-wheel.tsx
+    GooglePlaceInput.tsx
+    game-flow.tsx
+    admin-winner-row.tsx
+    qr-generator.tsx
+    AdminDashboard.tsx
+  mon-projet.zip
+  public
+    file.svg
+    safari-guide.png
+    vercel.svg
+    next.svg
+    globe.svg
+    window.svg
+  .gitignore
+  package-lock.json
+  package.json
+  projet.zip
+  .github
+    workflows
+      playwright.yml
+  lib
+    supabaseClient.ts
+    utils.ts
+  components.json
+  tsconfig.json
+  playwright.config.ts
+  eslint.config.mjs
+  next.config.ts

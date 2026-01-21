@@ -2,18 +2,21 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { CheckCircle, XCircle, AlertTriangle, Clock, PartyPopper, Loader2 } from "lucide-react"
+// AJOUT : Import de l'icône Lock
+import { CheckCircle, XCircle, AlertTriangle, Clock, PartyPopper, Loader2, Lock } from "lucide-react"
 import Link from "next/link"
 import { validateWinAction } from "@/app/actions/validate-win"
 
 interface VerifyClientProps {
   winnerId: string
   initialStatus: string
-  initialRedeemedDate: string // C'est maintenant une string, plus de calcul !
+  initialRedeemedDate: string 
   prizeLabel: string
   isExpired: boolean
   expirationDateString: string
   minSpend: number
+  // AJOUT : Nouvelle prop
+  isStaff: boolean
 }
 
 export default function VerifyClient({ 
@@ -22,20 +25,24 @@ export default function VerifyClient({
   initialRedeemedDate,
   isExpired, 
   expirationDateString, 
-  minSpend 
+  minSpend,
+  // AJOUT : Récupération de la prop
+  isStaff 
 }: VerifyClientProps) {
 
   const [isLoading, setIsLoading] = useState(false)
   
-  // On initialise le statut en fonction de ce qui vient de la base
+  // VOTRE ETAT EXISTANT (INCHANGÉ)
   const [status, setStatus] = useState<'initial' | 'success' | 'already_used' | 'error'>(
     initialStatus === 'redeemed' ? 'already_used' : 'initial'
   )
   
-  // Pour stocker le message d'erreur dynamique si on scanne en direct
   const [errorMessage, setErrorMessage] = useState<string>("")
 
   const handleValidate = async () => {
+    // SÉCURITÉ EXTRA : On empêche l'action si pas staff
+    if (!isStaff) return;
+
     setIsLoading(true)
     const result = await validateWinAction(winnerId)
     setIsLoading(false)
@@ -44,14 +51,15 @@ export default function VerifyClient({
       setStatus('success')
     } else if (result.alreadyUsed) {
       setStatus('already_used')
-      // Si l'action renvoie un message précis (ex: "Déjà utilisé le..."), on l'utilise
       if (result.message) setErrorMessage(result.message)
     } else {
       setStatus('error')
+      // Si on a un message précis (ex: Accès refusé), on l'affiche
+      if (result.message) setErrorMessage(result.message)
     }
   }
 
-  // --- 1. SUCCÈS ---
+  // --- 1. SUCCÈS (Code INCHANGÉ) ---
   if (status === 'success') {
     return (
       <div className="text-center py-8 animate-in zoom-in duration-300">
@@ -67,10 +75,8 @@ export default function VerifyClient({
     )
   }
 
-  // --- 2. DÉJÀ UTILISÉ ---
+  // --- 2. DÉJÀ UTILISÉ (Code INCHANGÉ) ---
   if (status === 'already_used') {
-    // Si on a un message d'erreur qui vient du clic (errorMessage), on l'affiche.
-    // Sinon, on affiche la date formatée par le serveur (initialRedeemedDate).
     const displayMessage = errorMessage 
         ? errorMessage 
         : `Validé le ${initialRedeemedDate || "date inconnue"}`
@@ -89,7 +95,7 @@ export default function VerifyClient({
     )
   }
 
-  // --- 3. EXPIRÉ ---
+  // --- 3. EXPIRÉ (Code INCHANGÉ) ---
   if (isExpired) {
     return (
       <div className="bg-orange-50 p-6 rounded-xl text-center border-2 border-orange-100">
@@ -104,10 +110,23 @@ export default function VerifyClient({
       </div>
     )
   }
+  
+  // --- 3. BIS : ERREUR (Si le RLS bloque) ---
+  if (status === 'error') {
+     return (
+      <div className="bg-red-50 p-6 rounded-xl text-center border-2 border-red-100">
+        <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+        <h2 className="text-xl font-bold text-red-700">ERREUR</h2>
+        <p className="text-red-600 text-sm mt-1">{errorMessage || "Une erreur est survenue."}</p>
+        <Button onClick={() => setStatus('initial')} variant="outline" className="mt-4">Réessayer</Button>
+      </div>
+    )
+  }
 
-  // --- 4. PRÊT À VALIDER ---
+  // --- 4. AFFICHAGE PRINCIPAL ---
   return (
     <div>
+        {/* VOS CONDITIONS D'AFFICHAGE (Code INCHANGÉ) */}
         {minSpend > 0 && (
           <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6 rounded-r-lg shadow-sm">
             <div className="flex items-center mb-1">
@@ -127,29 +146,47 @@ export default function VerifyClient({
                 : "Durée illimitée"}
         </div>
 
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-50 rounded-full mb-4 ring-4 ring-blue-50/50">
-            <CheckCircle className="w-8 h-8 text-blue-600" />
-          </div>
-          <h2 className="text-xl font-bold text-slate-800">Prêt à valider ✅</h2>
-          <p className="text-slate-500 text-sm">Vérifiez les conditions ci-dessus.</p>
-        </div>
+        {/* ==================================================================== */}
+        {/* LOGIQUE D'AFFICHAGE CONDITIONNEL (C'est ici qu'on sécurise l'UI)     */}
+        {/* ==================================================================== */}
+        
+        {!isStaff ? (
+            // CAS 1 : C'est un client (ou pas connecté) => On affiche le cadenas
+            <div className="bg-slate-100 border-2 border-slate-200 p-6 rounded-xl text-center animate-in fade-in">
+                <Lock className="w-10 h-10 text-slate-400 mx-auto mb-3" />
+                <h3 className="font-bold text-slate-700">Validation Réservée</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                Veuillez présenter ce code à un membre du personnel pour récupérer votre gain.
+                </p>
+            </div>
+        ) : (
+            // CAS 2 : C'est le Staff => On affiche VOS boutons habituels
+            <>
+                <div className="text-center mb-8">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-50 rounded-full mb-4 ring-4 ring-blue-50/50">
+                    <CheckCircle className="w-8 h-8 text-blue-600" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800">Prêt à valider ✅</h2>
+                <p className="text-slate-500 text-sm">Vérifiez les conditions ci-dessus.</p>
+                </div>
 
-        <div className="grid grid-cols-2 gap-4">
-            <Link href="/admin" className="w-full">
-                <Button variant="outline" className="w-full py-6 text-slate-600 font-bold">
-                    REFUSER
-                </Button>
-            </Link>
+                <div className="grid grid-cols-2 gap-4">
+                    <Link href="/admin" className="w-full">
+                        <Button variant="outline" className="w-full py-6 text-slate-600 font-bold">
+                            REFUSER
+                        </Button>
+                    </Link>
 
-            <Button 
-                onClick={handleValidate} 
-                disabled={isLoading}
-                className="w-full py-6 text-white bg-green-600 hover:bg-green-700 font-bold shadow-lg shadow-green-200 transition-all active:scale-95"
-            >
-                {isLoading ? <Loader2 className="animate-spin mr-2" /> : "VALIDER LE DON"}
-            </Button>
-        </div>
+                    <Button 
+                        onClick={handleValidate} 
+                        disabled={isLoading}
+                        className="w-full py-6 text-white bg-green-600 hover:bg-green-700 font-bold shadow-lg shadow-green-200 transition-all active:scale-95"
+                    >
+                        {isLoading ? <Loader2 className="animate-spin mr-2" /> : "VALIDER LE DON"}
+                    </Button>
+                </div>
+            </>
+        )}
     </div>
   )
 }
