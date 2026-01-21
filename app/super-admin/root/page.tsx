@@ -1,5 +1,9 @@
 "use client"
 
+// --- LIGNE MAGIQUE POUR VERCEL ---
+export const dynamic = "force-dynamic"
+// ---------------------------------
+
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { LayoutDashboard, Users, Store, Settings, Activity, PlusCircle, ShieldAlert, Database, ArrowRight, CheckCircle2, Loader2, Clock, ShieldCheck } from 'lucide-react'
@@ -120,7 +124,7 @@ export default function RootDashboard() {
                 )}
               </div>
 
-              {/* Journal d'activité système (Modifié pour Activity_Logs) */}
+              {/* Journal d'activité système */}
               <div className="space-y-3 pt-4">
                 <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest border-b border-slate-900 pb-2">Journal d'activité système</p>
                 <div className="space-y-2">
@@ -152,7 +156,6 @@ export default function RootDashboard() {
                             {log.metadata?.reason && (
                               <p className="text-red-400/60 italic truncate">Motif: {log.metadata.reason}</p>
                             )}
-                            {/* Optionnel: Affiche le nom du resto s'il est dans la metadata */}
                             {log.metadata?.restaurant_name && (
                               <p className="text-slate-600 text-[9px]">Resto: {log.metadata.restaurant_name}</p>
                             )}
