@@ -29,37 +29,56 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const pathname = request.nextUrl.pathname
 
-  // 1. PROTECTION DE BASE : Si pas de user connecté sur les routes sensibles
+  // 1. PROTECTION DE BASE
   const isProtectedPath = pathname.startsWith('/admin') || pathname.startsWith('/super-admin')
   if (isProtectedPath && !user) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // 2. VÉRIFICATION DES RÔLES (Protection avancée)
+  // 2. VÉRIFICATION DES RÔLES & BLOCAGE
   if (user) {
-    // On récupère le rôle dans la table profiles
+    // On récupère le profil complet avec le restaurant_id
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, restaurant_id')
       .eq('id', user.id)
       .single()
 
     const role = profile?.role
+    const restaurantId = profile?.restaurant_id
 
-    // Sécurité pour l'espace ROOT (Toi uniquement)
+    // --- SÉCURITÉ CRITIQUE : BLOCAGE RESTAURANT ---
+    // Si l'utilisateur est un admin/owner et tente d'accéder à l'admin
+    if (pathname.startsWith('/admin') && restaurantId) {
+      // On vérifie le statut du restaurant (sans passer par RLS ici car on est côté serveur)
+      const { data: restaurant } = await supabase
+        .from('restaurants')
+        .select('blocked_at')
+        .eq('id', restaurantId)
+        .single()
+
+      // Si le restaurant est bloqué -> DEHORS
+      if (restaurant?.blocked_at) {
+        // On supprime la session (optionnel mais plus propre)
+        await supabase.auth.signOut() 
+        // Redirection avec un paramètre pour afficher un message
+        return NextResponse.redirect(new URL('/login?reason=blocked', request.url))
+      }
+    }
+    // ------------------------------------------------
+
+    // Sécurité ROOT
     if (pathname.startsWith('/super-admin/root') && role !== 'root') {
       return NextResponse.redirect(new URL('/login', request.url)) 
     }
 
-    // Sécurité pour l'espace SALES (Commerciaux et Root)
+    // Sécurité SALES
     if (pathname.startsWith('/super-admin/sales') && role !== 'sales' && role !== 'root') {
       return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // Sécurité pour l'espace ADMIN Restaurateur
-    // On s'assure qu'un commercial ne puisse pas modifier les jeux d'un resto par l'URL
+    // Sécurité pour empêcher les Sales d'aller sur l'admin Resto
     if (pathname.startsWith('/admin') && role === 'sales') {
-        // Optionnel : tu peux rediriger les sales vers leur dashboard s'ils essaient d'entrer dans un /admin
         return NextResponse.redirect(new URL('/super-admin/sales/dashboard', request.url))
     }
   }
