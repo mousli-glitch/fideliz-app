@@ -1,17 +1,37 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import { Lock, Loader2, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Lock, Loader2, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function UpdatePassword() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true) // Nouvel état
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [hasSession, setHasSession] = useState(false)
   
   const router = useRouter()
   const supabase = createClient()
+
+  // 1. VÉRIFICATION IMMÉDIATE DE LA SESSION
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      
+      if (error || !session) {
+        setHasSession(false)
+        setErrorMsg("Le lien est invalide ou a expiré. Veuillez refaire une demande.")
+      } else {
+        setHasSession(true)
+        console.log("Session active confirmée pour :", session.user.email)
+      }
+      setCheckingSession(false)
+    }
+    checkUser()
+  }, [])
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,22 +44,55 @@ export default function UpdatePassword() {
         return
     }
 
-    // On met à jour le mot de passe de l'utilisateur ACTUELLEMENT connecté
+    // On met à jour le mot de passe
     const { error } = await supabase.auth.updateUser({
       password: password
     })
 
     if (error) {
-      setErrorMsg("Erreur lors de la mise à jour : " + error.message)
+      setErrorMsg("Erreur technique : " + error.message)
       setLoading(false)
     } else {
-      // Succès ! On redirige vers le login pour qu'il se reconnecte proprement avec le nouveau mdp
-      // Ou direct dashboard. Ici je préfère Dashboard direct.
-      alert("Mot de passe modifié avec succès !")
-      router.push('/login') // Redirection Login pour tester le nouveau MDP
+      alert("✅ Mot de passe modifié avec succès ! Vous allez être redirigé.")
+      router.push('/login')
     }
   }
 
+  // AFFICHER UN LOADER PENDANT LA VÉRIFICATION DU LIEN
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <Loader2 className="animate-spin text-blue-600" size={40} />
+      </div>
+    )
+  }
+
+  // SI LIEN MORT / SESSION PERDUE
+  if (!hasSession) {
+    return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 p-8 rounded-[32px] w-full max-w-md shadow-2xl text-center">
+                <div className="flex justify-center mb-6">
+                    <div className="bg-red-500/10 p-4 rounded-full">
+                        <AlertTriangle className="text-red-500" size={40} />
+                    </div>
+                </div>
+                <h1 className="text-2xl font-black text-white mb-4">Lien Expiré</h1>
+                <p className="text-slate-400 mb-8 text-sm">
+                    La session a été perdue ou le lien a déjà été utilisé. Par sécurité, veuillez refaire une demande.
+                </p>
+                <Link 
+                    href="/forgot-password"
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase text-xs"
+                >
+                    <ArrowLeft size={16} /> Refaire une demande
+                </Link>
+            </div>
+        </div>
+    )
+  }
+
+  // LE FORMULAIRE (Affiché uniquement si session active)
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-800 p-8 rounded-[32px] w-full max-w-md shadow-2xl">
