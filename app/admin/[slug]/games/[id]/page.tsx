@@ -1,31 +1,23 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { 
-  Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, 
-  Trash2, Sun, Plus, Check, Wand2, AlertCircle 
-} from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, Check } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
 import { updateGameAction } from "@/app/actions/update-game"
 
-// --- LES 10 FONDS (VOS 6 + 4 PASSE-PARTOUT) ---
 const BACKGROUNDS = [
-  "https://i.postimg.cc/VvsZ09Qf/four-slices-pepperoni-pizza-corners-dark-background-top-view-space-copy-text.jpg",
-  "https://i.postimg.cc/2SLcW8tP/triangular-slices-chicago-style-pizza-with-hot-sauce-transparent-background.jpg",
-  "https://i.postimg.cc/1zpvW7s0/drawing-hamburgers-with-toothpick-background.jpg",
-  "https://i.postimg.cc/DZ6BhWW5/background-37.jpg",
-  "https://i.postimg.cc/J0dxy95G/64f68220-f9ae-4dc1-994f-d9f0e972aad4.jpg",
-  "https://i.postimg.cc/448BF9R4/set-sushi-rolls-plate-with-chopsticks.jpg",
-  "https://images.unsplash.com/photo-1517433367423-c7e5b0f35086?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1503455637927-730bce8583c0?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=1000&auto=format&fit=crop"
+  "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
+  "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1000&auto=format&fit=crop", 
+  "https://images.unsplash.com/photo-1605806616949-1e87b487bc2a?q=80&w=1000&auto=format&fit=crop", 
+  "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?q=80&w=1000&auto=format&fit=crop", 
+  "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=1000&auto=format&fit=crop",
 ]
 
+// 🔥 NOUVELLE CONSTANTE : PALETTES LUXE
 const PALETTES = [
     { id: 'MONACO', label: 'Monaco', c1: '#8B0000', c2: '#0F0F0F' },
     { id: 'GATSBY', label: 'Gatsby', c1: '#1E3A8A', c2: '#0F0F0F' },
@@ -66,42 +58,33 @@ export default function EditGamePage() {
       title_style: 'STYLE_1',
       bg_image_url: "",
       card_style: 'light',
-      wheel_palette: 'MONACO'
+      wheel_palette: 'MONACO' // 🔥 AJOUT INITIALISATION PALETTE
   })
 
   const [prizes, setPrizes] = useState<any[]>([])
 
-  // --- LOGIQUE 100% ---
-  const totalWeight = useMemo(() => {
-    return prizes.reduce((acc, p) => acc + (Number(p.weight) || 0), 0)
-  }, [prizes])
-
-  const isWeightValid = totalWeight === 100
-
-  const autoBalance = () => {
-    if (prizes.length === 0) return
-    const equalShare = Math.floor(100 / prizes.length)
-    const remainder = 100 % prizes.length
-    const newPrizes = prizes.map((p, i) => ({
-      ...p,
-      weight: i === 0 ? equalShare + remainder : equalShare
-    }))
-    setPrizes(newPrizes)
-  }
-
+  // 🔥 FONCTION RÉTABLIE POUR L'API GOOGLE (IDENTIQUE À NEW GAME)
   const handleGoogleSelect = (url: string) => {
     setFormData((prev: any) => ({ ...prev, action_url: url }))
   }
 
-  // --- 1. CHARGEMENT ---
+  // --- 1. CHARGEMENT DES DONNÉES EXISTANTES ---
   useEffect(() => {
     const loadGame = async () => {
         const idToLoad = params?.id
         if(!idToLoad) return;
+
         const { data: game } = await (supabase.from('games') as any).select('*').eq('id', idToLoad).single()
+        
         if (game) {
-            setGameId(game.id); setRestaurantId(game.restaurant_id) 
-            const { data: restaurant } = await (supabase.from('restaurants') as any).select('*').eq('id', game.restaurant_id).single()
+            setGameId(game.id)
+            setRestaurantId(game.restaurant_id) 
+            
+            const { data: restaurant } = await (supabase.from('restaurants') as any)
+                .select('*')
+                .eq('id', game.restaurant_id)
+                .single()
+
             setFormData({
                 name: game.name,
                 active_action: game.active_action,
@@ -110,16 +93,24 @@ export default function EditGamePage() {
                 min_spend: game.min_spend ? Number(game.min_spend) : 0,
                 has_min_spend: Number(game.min_spend) > 0
             })
+
+            const isDark = restaurant?.text_color === '#FFFFFF'
+
             setDesignData({
                 primary_color: restaurant?.primary_color || "#E11D48",
                 logo_url: restaurant?.logo_url || "",
                 bg_choice: game.bg_choice || 0,
                 title_style: game.title_style || 'STYLE_1',
                 bg_image_url: game.bg_image_url || "",
-                card_style: game.card_style || (restaurant?.text_color === '#FFFFFF' ? 'dark' : 'light'),
-                wheel_palette: game.wheel_palette || 'MONACO'
+                card_style: game.card_style || (isDark ? 'dark' : 'light'),
+                wheel_palette: game.wheel_palette || 'MONACO' // 🔥 CHARGEMENT DE LA PALETTE DEPUIS SUPABASE
             })
-            const { data: prizesData } = await (supabase.from('prizes') as any).select('*').eq('game_id', game.id).order('weight', {ascending: false})
+
+            const { data: prizesData } = await (supabase.from('prizes') as any)
+                .select('*')
+                .eq('game_id', game.id)
+                .order('weight', {ascending: false})
+            
             setPrizes(prizesData || [])
         }
         setLoading(false)
@@ -127,24 +118,34 @@ export default function EditGamePage() {
     loadGame()
   }, [params, supabase])
 
-  // --- 2. MISE À JOUR ---
+
+  // --- 2. MISE À JOUR (UPDATE) ---
   const handleUpdate = async () => {
     if (!formData.name) return alert("Veuillez donner un Nom au Jeu.")
-    if (!isWeightValid) return alert(`Total Probabilités : ${totalWeight}%. Il doit être de 100%.`)
     
+    if (formData.active_action === 'GOOGLE_REVIEW' && formData.action_url && !formData.action_url.includes('google.com')) {
+         return alert("❌ Veuillez sélectionner un établissement Google valide.")
+    }
+
     setSaving(true)
+
     try {
+        // Appeler l'action serveur avec les nouvelles données incluant wheel_palette
         const res = await updateGameAction(gameId, {
             restaurant_id: restaurantId,
             form: formData,
             design: designData,
-            prizes: prizes.map(p => ({ ...p, color: "#000000", weight: Number(p.weight) })) // Forçage du type Nombre
+            prizes: prizes
         })
+
         if (!res.success) throw new Error(res.error)
+
         alert("✅ Jeu modifié avec succès !")
-        router.push(`/admin/${params.slug}/games`); router.refresh()
+        router.push(`/admin/${params.slug}/games`)
+        router.refresh()
+
     } catch (e: any) {
-        alert("Oups erreur : " + e.message)
+        alert("Oups : " + e.message)
     } finally {
         setSaving(false)
     }
@@ -155,82 +156,307 @@ export default function EditGamePage() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 pb-20">
       <div className="max-w-4xl mx-auto">
+        
+        {/* HEADER RESPONSIVE */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
             <div>
                 <Link href={`/admin/${params.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Retour</Link>
-                <h1 className="text-2xl md:text-3xl font-black text-slate-900">Modifier le Jeu ✏️</h1>
+                <h1 className="text-2xl md:text-3xl font-black text-slate-900 flex items-center gap-2">Modifier le Jeu ✏️</h1>
             </div>
-            <button onClick={handleUpdate} disabled={saving || !isWeightValid} className={`px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all w-full sm:w-auto shadow-lg ${isWeightValid ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-300 text-slate-500'}`}>
-                {saving ? <Loader2 className="animate-spin"/> : <Save size={20}/>} Enregistrer {!isWeightValid && `(${totalWeight}%)`}
+            <button 
+                onClick={handleUpdate} 
+                disabled={saving} 
+                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg active:scale-95 transition-all w-full sm:w-auto"
+            >
+                {saving ? <Loader2 className="animate-spin"/> : <Save size={20}/>} 
+                Enregistrer tout
             </button>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="flex border-b border-slate-200 bg-slate-50 overflow-x-auto">
-                <button onClick={() => setActiveTab('INFOS')} className={`flex-1 min-w-[120px] py-4 text-xs font-bold uppercase flex items-center justify-center gap-2 border-b-2 transition-all ${activeTab === 'INFOS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500'}`}><Layout size={18}/> 1. Infos</button>
-                <button onClick={() => setActiveTab('LOTS')} className={`flex-1 min-w-[120px] py-4 text-xs font-bold uppercase flex items-center justify-center gap-2 border-b-2 transition-all ${activeTab === 'LOTS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500'}`}><Gift size={18}/> 2. Lots</button>
-                <button onClick={() => setActiveTab('DESIGN')} className={`flex-1 min-w-[120px] py-4 text-xs font-bold uppercase flex items-center justify-center gap-2 border-b-2 transition-all ${activeTab === 'DESIGN' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500'}`}><Palette size={18}/> 3. Design</button>
+        {/* ONGLETS RESPONSIVE (SCROLLABLE SUR MOBILE) */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="flex border-b border-slate-200 bg-slate-50 overflow-x-auto scrollbar-hide">
+                <button onClick={() => setActiveTab('INFOS')} className={`flex-1 min-w-[120px] py-4 text-xs md:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors shrink-0 ${activeTab === 'INFOS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Layout size={18}/> Infos Jeu</button>
+                <button onClick={() => setActiveTab('LOTS')} className={`flex-1 min-w-[120px] py-4 text-xs md:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors shrink-0 ${activeTab === 'LOTS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Gift size={18}/> Lots (Roue)</button>
+                <button onClick={() => setActiveTab('DESIGN')} className={`flex-1 min-w-[120px] py-4 text-xs md:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors shrink-0 ${activeTab === 'DESIGN' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Palette size={18}/> Design & Logo</button>
             </div>
 
-            <div className="p-6 md:p-10">
+            <div className="p-4 md:p-8">
+                
+                {/* --- TAB 1: INFOS --- */}
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div><label className="block text-xs font-black text-slate-500 uppercase mb-2">Nom</label><input type="text" className="w-full p-4 border rounded-2xl bg-slate-50 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}/></div>
-                            <div><label className="block text-xs font-black text-slate-500 uppercase mb-2">Action</label><select className="w-full p-4 border rounded-2xl bg-slate-50 font-bold" value={formData.active_action} onChange={e => setFormData({...formData, active_action: e.target.value})}><option value="GOOGLE_REVIEW">⭐ Avis Google</option><option value="INSTAGRAM">📸 Instagram</option><option value="FACEBOOK">👍 Facebook</option><option value="TIKTOK">🎵 TikTok</option></select></div>
-                        </div>
-                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                            {formData.active_action === 'GOOGLE_REVIEW' ? <GooglePlaceInput onSelect={handleGoogleSelect} defaultValue={formData.action_url} /> : <input type="url" className="w-full p-4 border rounded-2xl bg-white" value={formData.action_url} onChange={e => setFormData({...formData, action_url: e.target.value})}/>}
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-100">
-                            <div><label className="block text-xs font-black text-slate-500 uppercase mb-2">Validité (jours)</label><input type="number" className="w-full p-4 border rounded-2xl bg-slate-50 font-bold" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}/></div>
-                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                                <div className="flex items-center gap-3 mb-3"><input type="checkbox" id="min_s" className="w-5 h-5 accent-blue-600" checked={formData.has_min_spend} onChange={e => setFormData({...formData, has_min_spend: e.target.checked})}/><label htmlFor="min_s" className="text-sm font-bold text-slate-700">Minimum commande</label></div>
-                                {formData.has_min_spend && <div className="flex items-center gap-2"><input type="number" className="w-full p-2 border rounded-lg bg-white" value={formData.min_spend} onChange={e => setFormData({...formData, min_spend: parseInt(e.target.value) || 0})}/><span className="text-slate-400 font-black">€</span></div>}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Nom du Jeu</label>
+                                <input type="text" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}/>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Objectif (Action)</label>
+                                <select 
+                                    className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" 
+                                    value={formData.active_action} 
+                                    onChange={e => setFormData({...formData, active_action: e.target.value})}
+                                >
+                                    <option value="GOOGLE_REVIEW">⭐ Avis Google (Recommandé)</option>
+                                    <option value="INSTAGRAM">📸 S'abonner Instagram</option>
+                                    <option value="FACEBOOK">👍 S'abonner Facebook</option>
+                                    <option value="TIKTOK">🎵 S'abonner TikTok</option>
+                                </select>
                             </div>
                         </div>
-                    </div>
-                )}
 
-                {activeTab === 'LOTS' && (
-                    <div className="space-y-8 animate-in slide-in-from-bottom-4">
-                        <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl text-white">
-                            <div className="flex justify-between items-center mb-4">
-                                <span className="text-xs font-black uppercase text-slate-400 tracking-widest">Total Probabilités : {totalWeight}%</span>
-                                <button onClick={autoBalance} className="text-[10px] font-black uppercase text-blue-400 bg-blue-500/10 px-3 py-1.5 rounded-lg flex items-center gap-2"><Wand2 size={12}/> Équilibrer</button>
-                            </div>
-                            <div className="w-full h-4 bg-slate-800 rounded-full overflow-hidden"><div className={`h-full transition-all ${isWeightValid ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(totalWeight, 100)}%` }}></div></div>
-                        </div>
-                        <div className="space-y-3">
-                            {prizes.map((prize, index) => (
-                                <div key={index} className="flex flex-col md:flex-row gap-4 p-5 bg-white rounded-2xl border border-slate-200 items-center">
-                                    <div className="flex-1 w-full"><label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Lot</label><input type="text" maxLength={15} value={prize.label} onChange={(e) => { const n = [...prizes]; n[index].label = e.target.value; setPrizes(n); }} className="w-full p-2 font-black text-slate-900 border-b outline-none"/></div>
-                                    <div className="w-full md:w-32"><label className="text-[9px] font-black text-slate-400 uppercase mb-1 block text-center">Chance (%)</label><input type="number" value={prize.weight} onChange={(e) => { const n = [...prizes]; n[index].weight = parseInt(e.target.value) || 0; setPrizes(n); }} className="w-full p-2 font-black text-blue-600 text-center text-lg border-b outline-none"/></div>
-                                    <button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={20}/></button>
+                        <div className="bg-slate-50 p-4 md:p-6 rounded-xl border border-slate-200 transition-all">
+                            <label className="block text-sm font-bold text-slate-700 mb-2">
+                                {formData.active_action === 'GOOGLE_REVIEW' ? 'Rechercher votre établissement :' : 'Lien URL de votre page :'}
+                            </label>
+
+                            {formData.active_action === 'GOOGLE_REVIEW' ? (
+                                <div className="space-y-2">
+                                    {/* 🔥 FIX : Liaison avec handleGoogleSelect et affichage de la valeur par défaut */}
+                                    <GooglePlaceInput 
+                                        onSelect={handleGoogleSelect} 
+                                        defaultValue={formData.action_url} 
+                                    />
+                                    <p className="text-xs text-blue-600 font-bold">
+                                        💡 Tapez le nom de votre commerce pour mettre à jour le lien.
+                                    </p>
+                                    {formData.action_url && (
+                                        <p className="text-[10px] text-green-600 truncate bg-green-50 p-1 rounded font-mono">
+                                            Lien enregistré : {formData.action_url}
+                                        </p>
+                                    )}
                                 </div>
-                            ))}
-                            <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", weight: 10 }])} className="w-full py-6 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 font-black uppercase tracking-widest flex items-center justify-center gap-2"><Plus size={20}/> Ajouter un lot</button>
+                            ) : (
+                                <div className="space-y-2">
+                                    <input 
+                                        type="url" 
+                                        className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" 
+                                        value={formData.action_url} 
+                                        onChange={e => setFormData({...formData, action_url: e.target.value})}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="border-t border-slate-100 pt-6 mt-6">
+                            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Validité du Gain (Jours)</label><input type="number" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}/></div>
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                    <div className="flex items-center gap-3 mb-3"><input type="checkbox" id="min_spend_toggle" className="w-5 h-5 accent-blue-600" checked={formData.has_min_spend} onChange={e => setFormData({...formData, has_min_spend: e.target.checked})}/><label htmlFor="min_spend_toggle" className="text-sm font-bold text-slate-700 cursor-pointer">Activer minimum commande</label></div>
+                                    {formData.has_min_spend && (<div className="flex items-center gap-2"><span className="text-slate-400 font-bold">Min:</span><input type="number" className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={formData.min_spend} onChange={e => setFormData({...formData, min_spend: parseInt(e.target.value) || 0})}/><span className="text-slate-400 font-bold">€</span></div>)}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
 
-                {activeTab === 'DESIGN' && (
-                    <div className="space-y-10 animate-in slide-in-from-right-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200">
-                                <label className="text-xs font-black text-slate-500 uppercase mb-4 block">Logo & Couleur</label>
-                                <LogoUploader currentUrl={designData.logo_url} onUrlChange={(url) => setDesignData({...designData, logo_url: url})} />
-                                <div className="mt-6 flex items-center gap-4 pt-6 border-t"><input type="color" className="w-12 h-12 rounded-xl" value={designData.primary_color} onChange={e => setDesignData({...designData, primary_color: e.target.value})}/><span className="font-mono font-black text-slate-600">{designData.primary_color}</span></div>
-                            </div>
-                            <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200">
-                                <label className="text-xs font-black text-slate-500 uppercase mb-4 block">Couleurs Roue</label>
-                                <div className="space-y-2">{PALETTES.map((p) => (<div key={p.id} onClick={() => setDesignData({...designData, wheel_palette: p.id})} className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer ${designData.wheel_palette === p.id ? 'bg-white border-blue-600 shadow-md' : 'bg-transparent border-slate-200'}`}><span className="text-[10px] font-black uppercase">{p.label}</span><div className="flex h-5 w-12 rounded overflow-hidden border"><div className="flex-1" style={{backgroundColor: p.c1}}></div><div className="flex-1" style={{backgroundColor: p.c2}}></div></div></div>))}</div>
+                {/* --- TAB 2: LOTS (DÉPLACEMENT DE LA PALETTE ICI) --- */}
+                {activeTab === 'LOTS' && (
+                    <div className="space-y-8 animate-in fade-in duration-300">
+                        
+                        {/* 🔥 COULEURS DE LA ROUE (DÉPLACÉ ICI ET RENOMMÉ) */}
+                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
+                                <Palette className="text-blue-600" size={24}/> Couleurs de la roue
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+                                {PALETTES.map((p) => (
+                                    <div 
+                                        key={p.id} 
+                                        onClick={() => setDesignData({...designData, wheel_palette: p.id})} 
+                                        className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3 ${designData.wheel_palette === p.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                                    >
+                                        <div className="flex w-full h-10 rounded-lg overflow-hidden border border-slate-200 shadow-inner">
+                                            <div className="flex-1" style={{ backgroundColor: p.c1 }}></div>
+                                            <div className="flex-1" style={{ backgroundColor: p.c2 }}></div>
+                                        </div>
+                                        <span className="font-bold text-xs md:text-sm flex items-center gap-2">
+                                            {p.label} 
+                                            {designData.wheel_palette === p.id && <Check size={16} className="text-blue-600"/>}
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                        <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200">
-                            <label className="text-xs font-black text-slate-500 uppercase mb-6 block">Ambiance de fond</label>
-                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">{BACKGROUNDS.map((bg, index) => (<div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-2xl overflow-hidden border-4 ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 scale-105 z-10' : 'border-white opacity-60'}`}><img src={bg} className="w-full h-full object-cover" alt="Fond" />{(!designData.bg_image_url && designData.bg_choice === index) && <div className="absolute inset-0 flex items-center justify-center"><Check className="text-blue-600 bg-white p-1 rounded-full"/></div>}</div>))}</div>
-                            <input type="url" placeholder="Ou URL personnalisée..." className="w-full p-4 border rounded-2xl bg-white mt-8" value={designData.bg_image_url || ''} onChange={e => setDesignData({...designData, bg_image_url: e.target.value})} />
+
+                        {/* LISTE DES LOTS */}
+                        <div className="space-y-6">
+                            <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-xl text-xs md:text-sm flex items-center gap-3">
+                                <Gift size={20} className="shrink-0"/> 
+                                <span>Gérez vos lots. Le <strong>"Poids"</strong> définit la rareté (ex: 100 est plus fréquent que 1).</span>
+                            </div>
+                            <div className="space-y-3">
+                                {prizes.map((prize, index) => (
+                                    <div key={index} className="flex flex-col md:flex-row gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm items-center group hover:border-blue-300 transition-all">
+                                        <div className="flex-1 w-full">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nom du lot</label>
+                                            <input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/>
+                                        </div>
+                                        <div className="w-full md:w-24">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center block">Poids</label>
+                                            <input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center"/>
+                                        </div>
+                                        <button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center">
+                                            <Trash2 size={20}/>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", weight: 10 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2">
+                                <Plus size={20}/> Ajouter un lot
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- TAB 3: DESIGN --- */}
+                {activeTab === 'DESIGN' && (
+                    <div className="space-y-8 animate-in fade-in duration-300">
+                        
+                        {/* 1. IDENTITÉ VISUELLE */}
+                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
+                                <Palette className="text-blue-600" size={24}/> Identité Visuelle
+                            </h3>
+                            
+                            <div className="space-y-8">
+                                {/* SECTION LOGO */}
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
+                                        Logo du commerce
+                                    </label>
+                                    <div className="bg-white p-1 rounded-xl border border-slate-200">
+                                        <LogoUploader 
+                                            currentUrl={designData.logo_url} 
+                                            onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
+                                        />
+                                    </div>
+                                    
+                                    <p className="text-xs text-slate-400 mt-2 ml-1">
+                                        Conseil : Utilisez un format PNG transparent pour un meilleur rendu.
+                                    </p>
+                                </div>
+
+                                <div className="w-full h-px bg-slate-200"></div>
+
+                                {/* SECTION COULEUR */}
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
+                                        Couleur Principale
+                                    </label>
+                                    <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm w-full md:w-fit">
+                                        <div className="relative group cursor-pointer">
+                                            <input 
+                                                type="color" 
+                                                className="absolute inset-0 w-12 h-12 opacity-0 cursor-pointer z-10"
+                                                value={designData.primary_color} 
+                                                onChange={e => setDesignData({...designData, primary_color: e.target.value})}
+                                            />
+                                            <div 
+                                                className="w-12 h-12 rounded-lg shadow-inner border border-slate-200 ring-2 ring-transparent group-hover:ring-blue-200 transition-all" 
+                                                style={{ backgroundColor: designData.primary_color }}
+                                            ></div>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Code HEX</span>
+                                            <input 
+                                                type="text" 
+                                                className="font-mono font-bold text-slate-800 outline-none uppercase w-24 bg-transparent text-lg" 
+                                                value={designData.primary_color} 
+                                                readOnly
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. THÈME */}
+                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
+                                <Sun className="text-orange-500" size={24}/> Thème au choix
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                                
+                                {/* Colonne Mode Clair */}
+                                <div className="flex flex-col gap-3">
+                                    <span className="text-center font-bold text-slate-700">Mode Clair</span>
+                                    <div 
+                                        onClick={() => setDesignData({...designData, card_style: 'light'})} 
+                                        className={`cursor-pointer p-4 md:p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-blue-50/50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="bg-white border border-slate-200 px-6 py-3 rounded-xl shadow-sm">
+                                            <span className="text-slate-900 font-bold">Texte Noir</span>
+                                        </div>
+                                        <span className="text-xs text-slate-400">Recommandé (Standard)</span>
+                                    </div>
+                                </div>
+                                
+                                {/* Colonne Mode Sombre */}
+                                <div className="flex flex-col gap-3">
+                                    <span className="text-center font-bold text-slate-700">Mode Sombre</span>
+                                    <div 
+                                        onClick={() => setDesignData({...designData, card_style: 'dark'})} 
+                                        className={`cursor-pointer p-4 md:p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-800 shadow-md text-white' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="bg-slate-900 border border-slate-700 px-6 py-3 rounded-xl shadow-sm">
+                                            <span className="text-white font-bold">Texte Blanc</span>
+                                        </div>
+                                        <span className="text-xs text-slate-400">Élégant & Moderne</span>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        {/* 3. STYLE DU TITRE */}
+                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 className="font-black text-xl text-slate-900 mb-6">Style du Titre</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                {TITLE_STYLES.map((style) => (
+                                    <div key={style.id} onClick={() => setDesignData({...designData, title_style: style.id})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all ${designData.title_style === style.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                                        <p className="font-bold text-xs md:text-sm mb-3 text-slate-700">{style.label}</p>
+                                        <div className="text-[10px] md:text-xs bg-slate-900 text-white p-2 rounded-lg font-black italic shadow-inner tracking-wide">
+                                            {style.preview}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 4. FOND D'ECRAN */}
+                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
+                            <h3 className="font-black text-xl text-slate-900 mb-6">Fond d'écran</h3>
+                            <div className="mb-6">
+                                <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Thèmes prédéfinis</label>
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 md:gap-4">
+                                    {BACKGROUNDS.map((bg, index) => (
+                                        <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-70 hover:opacity-100'}`}>
+                                            <img src={bg} className="w-full h-full object-cover" alt="Fond" />
+                                            {(!designData.bg_image_url && designData.bg_choice === index) && (
+                                                <div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center">
+                                                    <div className="bg-white rounded-full p-1.5 shadow-md">
+                                                        <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="pt-6 border-t border-slate-200 mt-6">
+                                <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Ou image personnalisée</label>
+                                <input 
+                                    type="url" 
+                                    className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" 
+                                    value={designData.bg_image_url || ''} 
+                                    onChange={e => setDesignData({...designData, bg_image_url: e.target.value})} 
+                                    placeholder="https://mon-site.com/mon-fond.jpg" 
+                                />
+                                <p className="text-xs text-slate-400 mt-2 ml-1">L'URL personnalisée remplacera le thème choisi ci-dessus.</p>
+                            </div>
                         </div>
                     </div>
                 )}
