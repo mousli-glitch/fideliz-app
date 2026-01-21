@@ -37,29 +37,32 @@ export async function middleware(request: NextRequest) {
 
   // 2. VÉRIFICATION DES RÔLES & BLOCAGE
   if (user) {
+    // 👇 MODIFICATION ICI : On ajoute 'is_active' dans la sélection
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, restaurant_id')
+      .select('role, restaurant_id, is_active')
       .eq('id', user.id)
       .single()
 
     const role = profile?.role
     const restaurantId = profile?.restaurant_id
+    
+    // 🔥 SÉCURITÉ CRITIQUE : BLOCAGE UTILISATEUR GLOBAL (SALES / ADMIN) 🔥
+    // Si le profil est désactivé manuellement (is_active === false) -> DEHORS
+    if (profile?.is_active === false) {
+      await supabase.auth.signOut()
+      return NextResponse.redirect(new URL('/login?reason=blocked', request.url))
+    }
 
-    // --- SÉCURITÉ CRITIQUE : BLOCAGE RESTAURANT ---
+    // --- SÉCURITÉ CRITIQUE : BLOCAGE RESTAURANT (Existante) ---
     if (pathname.startsWith('/admin') && restaurantId) {
-      // On récupère le statut
       const { data: restaurant } = await supabase
         .from('restaurants')
-        .select('blocked_at, is_active') // On vérifie les deux !
+        .select('blocked_at, is_active')
         .eq('id', restaurantId)
         .single()
 
-      // BLOCAGE SI :
-      // 1. Il y a une date de blocage (blocked_at)
-      // 2. OU SI le restaurant est désactivé (is_active === false)
       if (restaurant?.blocked_at || restaurant?.is_active === false) {
-        
         await supabase.auth.signOut() 
         return NextResponse.redirect(new URL('/login?reason=blocked', request.url))
       }

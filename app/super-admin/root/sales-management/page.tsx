@@ -2,12 +2,13 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Navbar from '@/components/Navbar'
-import { UserPlus, Shield, ArrowLeft, X, Loader2, Power, Ban, Trash2, Store, Mail, ShieldCheck, Clock } from 'lucide-react'
+import { UserPlus, ArrowLeft, X, Loader2, Power, Ban, Trash2, Store, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 import { getSalesData } from '@/app/actions/get-sales-data'
 import { logSystemError } from '@/app/actions/log-system-error'
-// IMPORT DES ACTIONS MAÎTRES
-import { masterCreateSalesAction, masterDeleteUser } from '@/app/actions/admin-actions'
+// 👇 ON GARDE TON CREATE, MAIS ON IMPORTE NOTRE DELETE VALIDÉ
+import { masterCreateSalesAction } from '@/app/actions/admin-actions'
+import { deleteSalesUserAction } from '@/app/actions/delete-sales-user'
 
 export default function SalesManagement() {
   const [salesUsers, setSalesUsers] = useState<any[]>([]) 
@@ -33,15 +34,19 @@ export default function SalesManagement() {
 
   useEffect(() => { loadSales() }, [])
 
+  // --- 1. BLOCAGE / DÉBLOCAGE (Compatible Middleware) ---
   const toggleStatus = async (id: string, currentStatus: boolean, userEmail: string) => {
+    // Optimistic UI
     setSalesUsers(salesUsers.map(user => 
       user.id === id ? { ...user, is_active: !currentStatus } : user
     ))
+    
     const query: any = supabase.from('profiles' as any)
     const { error } = await query.update({ is_active: !currentStatus }).eq('id', id)
+    
     if (error) {
       alert("Erreur lors du changement de statut")
-      loadSales()
+      loadSales() // On recharge si ça a planté
     } else {
       await logSystemError({ 
         message: `${!currentStatus ? 'Activation' : 'Blocage'} du commercial ${userEmail}`,
@@ -50,7 +55,7 @@ export default function SalesManagement() {
     }
   }
 
-  // MODIFIÉ : Utilise Master Create pour éviter le bug "User already registered"
+  // --- 2. CRÉATION (On garde ta logique Master) ---
   const handleCreateSales = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsCreating(true)
@@ -69,31 +74,33 @@ export default function SalesManagement() {
     setIsCreating(false)
   }
 
-  // MODIFIÉ : Utilise Master Delete pour nettoyer l'Auth + Profil
+  // --- 3. SUPPRESSION PROPRE (Modifié pour libérer l'email) ---
   const handleDelete = async (id: string, userEmail: string, count: number) => {
     const message = count > 0 
       ? `⚠️ ATTENTION : Ce commercial gère ${count} restaurant(s).\n\nIls vous seront automatiquement réattribués.\n\nContinuer ?`
-      : `Supprimer définitivement ${userEmail} ?`;
+      : `Supprimer définitivement ${userEmail} ?\n(L'email sera libéré)`;
 
     if (!confirm(message)) return
     setDeleteLoading(id)
 
     const { data: { user: currentUser } } = await supabase.auth.getUser()
 
+    // A. Transfert des orphelins (Ta logique intelligente)
     if (currentUser && count > 0) {
       const { error: updateError } = await (supabase.from('restaurants') as any)
-        .update({ owner_id: currentUser.id })
-        .eq('owner_id', id)
+        .update({ owner_id: currentUser.id }) // On les donne au Root
+        .eq('owner_id', id) // Ceux qui appartenaient au commercial
 
       if (updateError) {
-        alert("Erreur critique lors du transfert")
+        alert("Erreur critique lors du transfert des restaurants. Suppression annulée.")
         setDeleteLoading(null)
         return
       }
     }
 
-    // SUPPRESSION TOTALE
-    const result = await masterDeleteUser(id)
+    // B. SUPPRESSION TOTALE (Utilisation de notre script validé)
+    // C'est ici que ça change : on utilise deleteSalesUserAction pour tuer l'Auth
+    const result = await deleteSalesUserAction(id)
 
     if (!result.success) {
       alert("Erreur suppression : " + result.error)
@@ -155,6 +162,7 @@ export default function SalesManagement() {
             </div>
           ))}
         </div>
+        {/* FORMULAIRE (Inchangé) */}
         {showForm && (
           <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 p-10 rounded-[3rem] max-w-md w-full relative shadow-2xl">
