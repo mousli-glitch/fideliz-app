@@ -4,11 +4,11 @@ import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import {
   LogOut, Store, PlusCircle, Trophy, Star,
-  Smartphone, Bell, Ban, CheckCircle,
-  Share2, X, DollarSign, AlertTriangle, Clock, ExternalLink, Search, Wallet, TrendingUp
+  Smartphone, Bell, Share2, X, DollarSign, 
+  AlertTriangle, Clock, Search, Wallet, TrendingUp,
+  Activity, Lock, CheckCircle // <--- L'oubli est réparé ici !
 } from "lucide-react";
 import Link from "next/link";
-import Navbar from "@/components/Navbar"; // Assure-toi d'avoir une Navbar ou supprime si non utilisé
 
 export default function SalesDashboard() {
   const [profile, setProfile] = useState<any>(null);
@@ -17,7 +17,7 @@ export default function SalesDashboard() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectedBilan, setSelectedBilan] = useState<any>(null);
   
-  // NOUVEAU : Barre de recherche et Filtres
+  // Barre de recherche et Filtres
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState<'all' | 'risk' | 'active'>('all');
 
@@ -44,7 +44,7 @@ export default function SalesDashboard() {
     load();
   }, [router]);
 
-  // LOGIQUE EXISTANTE (RISQUE & ACTIONS)
+  // LOGIQUE EXISTANTE
   const getAtRiskStatus = (resto: any) => {
     if (!resto.is_retention_alert_enabled) return false;
     const last = resto.winners?.last_winner_at;
@@ -80,7 +80,7 @@ export default function SalesDashboard() {
     router.push("/login");
   };
 
-  // --- NOUVEAU : FILTRAGE INTELLIGENT ---
+  // FILTRAGE INTELLIGENT
   const filteredRestaurants = restaurants.filter(r => {
     const matchesSearch = r.name.toLowerCase().includes(searchTerm.toLowerCase()) || r.slug.toLowerCase().includes(searchTerm.toLowerCase());
     if (!matchesSearch) return false;
@@ -89,12 +89,8 @@ export default function SalesDashboard() {
     return true;
   });
 
-  // --- STATS GLOBALES ---
+  // STATS GLOBALES
   const totalWinners = restaurants.reduce((acc, r) => acc + (r.winners?.count || 0), 0);
-  const totalGoogle = restaurants.reduce((acc, r) => acc + (r.google_clicks || 0), 0);
-  const totalSocial = restaurants.reduce((acc, r) => acc + ((r.tiktok_clicks || 0) + (r.instagram_clicks || 0) + (r.facebook_clicks || 0)), 0);
-  const atRiskCount = restaurants.filter(r => getAtRiskStatus(r)).length;
-  // KPI VENDEUR : Valeur Estimée du Parc (ex: 49€ par resto actif)
   const portfolioValue = restaurants.filter(r => r.is_active !== false).length * 49;
 
   if (loading) return <div className="min-h-screen bg-[#050a14] text-white flex items-center justify-center font-black italic animate-pulse">FIDELIZ LOADING...</div>;
@@ -102,7 +98,7 @@ export default function SalesDashboard() {
   return (
     <div className="min-h-screen bg-[#050a14] text-white font-sans selection:bg-blue-500/30">
       
-      {/* MODAL BILAN (INCHANGÉ) */}
+      {/* MODAL BILAN */}
       {selectedBilan && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setSelectedBilan(null)} />
@@ -143,7 +139,7 @@ export default function SalesDashboard() {
 
       <div className="p-6 max-w-7xl mx-auto space-y-8">
         
-        {/* 1. HEADER "SALES" (Style Root) */}
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b border-slate-800 pb-6">
           <div>
             <h1 className="text-4xl font-black italic tracking-tighter">
@@ -159,7 +155,7 @@ export default function SalesDashboard() {
           </button>
         </div>
 
-        {/* 2. KPIs "ARGUMENT DE VENTE" */}
+        {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-[#0f172a] border border-slate-800 p-5 rounded-2xl relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Wallet size={64} /></div>
@@ -191,10 +187,10 @@ export default function SalesDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
-            {/* COLONNE GAUCHE : LISTE CLIENTS */}
+            {/* LISTE CLIENTS */}
             <div className="lg:col-span-2 space-y-6">
                 
-                {/* BARRE DE RECHERCHE & FILTRES */}
+                {/* BARRE DE RECHERCHE */}
                 <div className="flex flex-col sm:flex-row gap-4 bg-slate-900/50 p-2 rounded-2xl border border-slate-800">
                     <div className="relative flex-1">
                         <Search className="absolute left-4 top-3.5 text-slate-500" size={18} />
@@ -212,7 +208,7 @@ export default function SalesDashboard() {
                     </div>
                 </div>
 
-                {/* LISTING */}
+                {/* LISTING CARTES */}
                 <div className="space-y-4">
                     {filteredRestaurants.length === 0 ? (
                         <div className="text-center py-20 bg-slate-900/30 rounded-3xl border border-dashed border-slate-800">
@@ -226,8 +222,10 @@ export default function SalesDashboard() {
                             return (
                                 <div key={resto.id} className={`group relative bg-slate-900 border transition-all rounded-3xl overflow-hidden ${isBlocked ? "border-red-900/50 opacity-75" : isAtRisk ? "border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.1)]" : "border-slate-800 hover:border-slate-700"}`}>
                                     
-                                    {/* En-tête Carte */}
-                                    <div className="p-6 pb-4 flex justify-between items-start">
+                                    {/* EN-TÊTE CARTE & BOUTONS */}
+                                    <div className="p-6 pb-4 flex flex-col sm:flex-row justify-between items-start gap-4">
+                                        
+                                        {/* INFO RESTO */}
                                         <div className="flex items-center gap-4">
                                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${isBlocked ? 'bg-red-900/20 text-red-500' : 'bg-slate-800 text-blue-500'}`}>
                                                 {resto.name.charAt(0)}
@@ -236,30 +234,50 @@ export default function SalesDashboard() {
                                                 <div className="flex items-center gap-2">
                                                     <h3 className={`font-black text-lg ${isBlocked ? 'line-through text-slate-500' : 'text-white'}`}>{resto.name}</h3>
                                                     {isAtRisk && !isBlocked && <span className="bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-full font-bold animate-pulse">RISQUE</span>}
-                                                    {isBlocked && <span className="bg-red-900 text-red-200 text-[9px] px-2 py-0.5 rounded-full font-bold">BLOQUÉ</span>}
                                                 </div>
                                                 <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">{resto.city}</p>
                                             </div>
                                         </div>
 
-                                        <div className="flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                             <Link href={`/admin/${resto.slug}`} className={`p-2 rounded-lg transition-colors ${isBlocked ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-blue-600/10 text-blue-500 hover:bg-blue-600 hover:text-white'}`}>
-                                                <ExternalLink size={16} />
-                                             </Link>
-                                             <button onClick={() => setSelectedBilan(resto)} className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:bg-white hover:text-black transition-colors">
-                                                <Share2 size={16} />
+                                        {/* BOUTONS D'ACTION FIXES */}
+                                        <div className="flex items-center gap-2">
+                                             {/* 1. BOUTON BILAN (Avec Texte) */}
+                                             <button 
+                                                onClick={() => setSelectedBilan(resto)} 
+                                                className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-[10px] font-bold uppercase transition-all text-slate-300 hover:text-white"
+                                             >
+                                                <Share2 size={14} />
+                                                <span>Bilan</span>
                                              </button>
+                                             
+                                             {/* 2. BOUTON ON/OFF (Style Interrupteur) */}
                                              <button 
                                                 disabled={updatingId === resto.id}
                                                 onClick={() => toggleStatus(resto.id, resto.is_active)}
-                                                className={`p-2 rounded-lg transition-colors ${resto.is_active !== false ? 'bg-slate-800 text-slate-400 hover:bg-red-500 hover:text-white' : 'bg-green-600 text-white hover:bg-green-500'}`}
+                                                className={`
+                                                    flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-all border
+                                                    ${resto.is_active !== false 
+                                                        ? "bg-slate-900 border-green-900 text-green-500 hover:bg-green-900/20" 
+                                                        : "bg-red-900/20 border-red-900 text-red-500 hover:bg-red-900/30"
+                                                    }
+                                                `}
                                              >
-                                                {resto.is_active !== false ? <Ban size={16} /> : <CheckCircle size={16} />}
+                                                {resto.is_active !== false ? (
+                                                    <>
+                                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.8)]"></div>
+                                                        <span>Actif</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                                                        <span>Bloqué</span>
+                                                    </>
+                                                )}
                                              </button>
                                         </div>
                                     </div>
 
-                                    {/* Stats Rapides (Grid) */}
+                                    {/* STATS */}
                                     <div className="px-6 py-4 grid grid-cols-3 gap-2 border-t border-b border-slate-800/50 bg-black/20">
                                         <div className="text-center">
                                             <div className="text-[10px] text-slate-500 uppercase font-bold">Gagnants</div>
@@ -275,7 +293,7 @@ export default function SalesDashboard() {
                                         </div>
                                     </div>
 
-                                    {/* Footer (CRM Compact) */}
+                                    {/* NOTES CRM */}
                                     <div className="px-6 py-3 bg-slate-900 flex flex-col md:flex-row gap-4 items-center">
                                         <div className="flex-1 w-full">
                                             <input 
@@ -310,7 +328,7 @@ export default function SalesDashboard() {
                 </div>
             </div>
 
-            {/* COLONNE DROITE : ALERTES & CONSEILS */}
+            {/* COLONNE DROITE : ALERTES */}
             <div className="space-y-6">
                 <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl sticky top-8">
                     <div className="flex items-center gap-2 mb-6 border-b border-slate-800 pb-4">
