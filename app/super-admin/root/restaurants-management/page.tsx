@@ -3,16 +3,18 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Navbar from '@/components/Navbar'
-import { Store, MapPin, ArrowLeft, Search, Loader2, Power, Trash2, ExternalLink, User } from 'lucide-react'
+import { Store, MapPin, ArrowLeft, Search, Loader2, Power, Trash2, ExternalLink, User, Briefcase } from 'lucide-react'
 import Link from 'next/link'
-// 👇 IMPORT DE L'ACTION DE SUPPRESSION TOTALE
+// 👇 IMPORT DE L'ACTION DE SUPPRESSION TOTALE (Ton fichier validé)
 import { deleteRestaurantFullAction } from '@/app/actions/delete-restaurant-full'
 
 export default function RestaurantsManagement() {
   const [restaurants, setRestaurants] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [owners, setOwners] = useState<Record<string, string>>({}) 
+  
+  // On renomme 'owners' en 'userMap' car on va stocker les Owners ET les Commerciaux
+  const [userMap, setUserMap] = useState<Record<string, string>>({}) 
 
   // Loader spécifique pour les actions
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -37,20 +39,25 @@ export default function RestaurantsManagement() {
 
     setRestaurants(restos || [])
 
-    // B. Récupérer les emails des propriétaires
-    const ownerIds = Array.from(new Set((restos as any[])?.map(r => r.owner_id).filter(Boolean)))
+    // B. Récupérer TOUS les IDs utiles (Propriétaires ET Créateurs)
+    const allUserIds = new Set<string>()
+    restos?.forEach((r: any) => {
+        if (r.owner_id) allUserIds.add(r.owner_id)
+        if (r.created_by) allUserIds.add(r.created_by)
+    })
     
-    if (ownerIds.length > 0) {
+    // C. Charger les emails correspondants en une seule fois
+    if (allUserIds.size > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, email')
-        .in('id', ownerIds)
+        .in('id', Array.from(allUserIds))
       
-      const ownerMap: Record<string, string> = {}
+      const mapping: Record<string, string> = {}
       profiles?.forEach((p: any) => {
-        ownerMap[p.id] = p.email
+        mapping[p.id] = p.email
       })
-      setOwners(ownerMap)
+      setUserMap(mapping)
     }
 
     setLoading(false)
@@ -169,11 +176,24 @@ export default function RestaurantsManagement() {
                       </div>
                     </div>
                     
-                    {/* AFFICHAGE DU PROPRIÉTAIRE */}
-                    <div className="flex items-center gap-1 mt-2 text-[10px] text-slate-600 uppercase tracking-wider font-medium">
-                      <User size={10} />
-                      Géré par : {owners[resto.owner_id] || 'Inconnu / Supprimé'}
+                    {/* --- ZONES D'INFORMATION RESPONSABLES --- */}
+                    <div className="flex flex-col gap-1 mt-3 pt-3 border-t border-slate-700/50">
+                        
+                        {/* 1. Géré par (Propriétaire actuel) */}
+                        <div className="flex items-center gap-2 text-[10px] text-slate-300 uppercase tracking-wider font-bold">
+                            <User size={12} className="text-blue-400" />
+                            Géré par : <span className="text-white">{userMap[resto.owner_id] || 'Inconnu / Supprimé'}</span>
+                        </div>
+
+                        {/* 2. Apporté par (Créateur d'origine) - S'affiche uniquement si différent du gérant */}
+                        {resto.created_by && resto.created_by !== resto.owner_id && (
+                             <div className="flex items-center gap-2 text-[10px] text-slate-500 uppercase tracking-wider font-medium">
+                                <Briefcase size={12} className="text-slate-600" />
+                                Apporté par : {userMap[resto.created_by] || 'Utilisateur Supprimé'}
+                            </div>
+                        )}
                     </div>
+
                   </div>
                 </div>
 
