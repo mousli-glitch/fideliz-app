@@ -5,6 +5,8 @@ import { createClient } from '@/utils/supabase/client'
 import Navbar from '@/components/Navbar'
 import { Store, MapPin, ArrowLeft, Search, Loader2, Power, Trash2, ExternalLink, User } from 'lucide-react'
 import Link from 'next/link'
+// 👇 IMPORT DE L'ACTION DE SUPPRESSION TOTALE
+import { deleteRestaurantFullAction } from '@/app/actions/delete-restaurant-full'
 
 export default function RestaurantsManagement() {
   const [restaurants, setRestaurants] = useState<any[]>([])
@@ -21,7 +23,7 @@ export default function RestaurantsManagement() {
   const fetchData = async () => {
     setLoading(true)
     
-    // A. Récupérer tous les restaurants (CORRECTION ICI : as any)
+    // A. Récupérer tous les restaurants
     const { data: restos, error } = await (supabase
       .from('restaurants') as any)
       .select('*')
@@ -36,7 +38,6 @@ export default function RestaurantsManagement() {
     setRestaurants(restos || [])
 
     // B. Récupérer les emails des propriétaires
-    // (CORRECTION ICI : On précise que restos est un tableau d'objets quelconques)
     const ownerIds = Array.from(new Set((restos as any[])?.map(r => r.owner_id).filter(Boolean)))
     
     if (ownerIds.length > 0) {
@@ -61,6 +62,7 @@ export default function RestaurantsManagement() {
 
   // --- 2. ACTION : DÉSACTIVER / ACTIVER (Disjoncteur) ---
   const toggleStatus = async (id: string, currentStatus: boolean) => {
+    // Optimistic UI update
     setRestaurants(restaurants.map(r => 
       r.id === id ? { ...r, is_active: !currentStatus } : r
     ))
@@ -71,26 +73,29 @@ export default function RestaurantsManagement() {
 
     if (error) {
       alert("Erreur update : " + error.message)
-      fetchData()
+      fetchData() // Revert si erreur
     }
   }
 
-  // --- 3. ACTION : SUPPRIMER DÉFINITIVEMENT ---
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`⚠️ DANGER : Êtes-vous sûr de vouloir supprimer le restaurant "${name}" ?\n\nCette action est irréversible et supprimera tout l'historique (Jeux, Gagnants...).`)) return
+  // --- 3. ACTION : SUPPRESSION TOTALE (Nettoyage Email) ---
+  const handleDelete = async (id: string, ownerId: string, name: string) => {
+    const confirmMessage = `⚠️ SUPPRESSION DÉFINITIVE\n\nVous allez supprimer "${name}".\n\nCela va :\n1. Supprimer le restaurant et toutes ses données.\n2. SUPPRIMER LE COMPTE UTILISATEUR (L'email sera libéré).\n\nContinuer ?`
+    
+    if (!confirm(confirmMessage)) return
 
     setActionLoading(id)
 
-    const { error } = await supabase
-      .from('restaurants')
-      .delete()
-      .eq('id', id)
+    // Appel de l'action serveur (qui a le droit de supprimer l'Auth)
+    const result = await deleteRestaurantFullAction(id, ownerId)
 
-    if (error) {
-      alert("Impossible de supprimer (Vérifiez s'il y a des jeux liés) : " + error.message)
-    } else {
+    if (result.success) {
+      // On retire l'élément de la liste localement
       setRestaurants(restaurants.filter(r => r.id !== id))
+      alert("✅ Restaurant et compte utilisateur supprimés avec succès.")
+    } else {
+      alert("❌ Erreur critique lors de la suppression : " + result.error)
     }
+    
     setActionLoading(null)
   }
 
@@ -198,7 +203,8 @@ export default function RestaurantsManagement() {
                   </button>
 
                   <button 
-                    onClick={() => handleDelete(resto.id, resto.name)}
+                    // 👇 ICI : On passe aussi l'owner_id pour la suppression totale
+                    onClick={() => handleDelete(resto.id, resto.owner_id, resto.name)}
                     disabled={actionLoading === resto.id}
                     className="bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-white px-4 py-3 rounded-xl transition-all shadow-lg shadow-red-900/0 hover:shadow-red-900/40 disabled:opacity-50"
                   >
