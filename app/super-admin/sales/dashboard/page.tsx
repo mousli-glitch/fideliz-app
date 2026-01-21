@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   LogOut, Store, PlusCircle, Trophy, Star,
   Facebook, Smartphone, Bell, Ban, CheckCircle,
-  Share2, X, DollarSign, AlertTriangle, Clock
+  Share2, X, DollarSign, AlertTriangle, Clock, ExternalLink, Power
 } from "lucide-react";
 import Link from "next/link";
 
@@ -19,6 +19,7 @@ export default function SalesDashboard() {
   const supabase = createClient();
   const router = useRouter();
 
+  // 1. CHARGEMENT DES DONNÉES
   useEffect(() => {
     async function load() {
       try {
@@ -37,6 +38,7 @@ export default function SalesDashboard() {
         }
 
         setProfile(json.profile);
+        // On s'assure que is_active est bien pris en compte
         setRestaurants(json.restaurants || []);
       } catch (e) {
         console.error(e);
@@ -47,6 +49,7 @@ export default function SalesDashboard() {
     load();
   }, [router]);
 
+  // 2. LOGIQUE RISQUE (Ta logique existante)
   const getAtRiskStatus = (resto: any) => {
     if (!resto.is_retention_alert_enabled) return false;
     const last = resto.winners?.last_winner_at;
@@ -58,14 +61,21 @@ export default function SalesDashboard() {
     return diffDays > (resto.alert_threshold_days || 7);
   };
 
+  // 3. ACTION BLOCAGE / DÉBLOCAGE (Connecté à is_active)
   const toggleStatus = async (id: string, currentStatus: boolean) => {
     setUpdatingId(id);
+    
+    // Optimistic UI : Mise à jour immédiate
+    setRestaurants(restaurants.map(r => r.id === id ? { ...r, is_active: !currentStatus } : r));
+
     const { error } = await (supabase.from("restaurants") as any)
       .update({ is_active: !currentStatus })
       .eq("id", id);
 
-    if (!error) {
-      setRestaurants(restaurants.map(r => r.id === id ? { ...r, is_active: !currentStatus } : r));
+    if (error) {
+      alert("Erreur lors de la modification du statut.");
+      // Rollback si erreur
+      setRestaurants(restaurants.map(r => r.id === id ? { ...r, is_active: currentStatus } : r));
     }
     setUpdatingId(null);
   };
@@ -96,7 +106,7 @@ export default function SalesDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8">
-      {/* MODAL BILAN FLASH */}
+      {/* MODAL BILAN FLASH (INCHANGÉ) */}
       {selectedBilan && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setSelectedBilan(null)} />
@@ -181,30 +191,68 @@ export default function SalesDashboard() {
           <div className="space-y-4">
             {restaurants.map((resto) => {
               const isAtRisk = getAtRiskStatus(resto);
+              // 👇 MODIF IMPORTANTE : On détecte si c'est bloqué
+              const isBlocked = resto.is_active === false; 
+
               return (
-                <div key={resto.id} className={`bg-slate-900 border ${isAtRisk ? "border-red-600/50 shadow-lg shadow-red-900/10" : "border-slate-800"} p-6 rounded-3xl transition-all`}>
+                <div 
+                  key={resto.id} 
+                  // 👇 STYLE CONDITIONNEL : Rouge si bloqué, sinon style normal
+                  className={`
+                    transition-all border p-6 rounded-3xl relative overflow-hidden
+                    ${isBlocked 
+                        ? "bg-red-950/20 border-red-900/50" // Style Bloqué
+                        : isAtRisk 
+                            ? "bg-slate-900 border-red-600/50 shadow-lg shadow-red-900/10" // Style Risque
+                            : "bg-slate-900 border-slate-800" // Style Normal
+                    }
+                  `}
+                >
                   <div className="flex justify-between items-start mb-6">
                     <div>
                       <div className="flex items-center gap-3">
-                        <h4 className="text-xl font-black tracking-tight">{resto.name}</h4>
-                        {isAtRisk && <span className="bg-red-600 text-white text-[8px] px-2 py-1 rounded-full font-black animate-bounce">ALERTE RÉTENTION</span>}
+                        {/* 👇 NOM BARRÉ SI BLOQUÉ */}
+                        <h4 className={`text-xl font-black tracking-tight ${isBlocked ? 'text-slate-500 line-through' : 'text-white'}`}>
+                          {resto.name}
+                        </h4>
+                        
+                        {/* BADGES */}
+                        {isBlocked && <span className="bg-red-600 text-white text-[8px] px-2 py-1 rounded-full font-black">ACCÈS BLOQUÉ</span>}
+                        {isAtRisk && !isBlocked && <span className="bg-red-600 text-white text-[8px] px-2 py-1 rounded-full font-black animate-bounce">ALERTE RÉTENTION</span>}
                       </div>
-                      <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">{resto.city}</p>
+                      <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">{resto.city} <span className="font-mono opacity-50">/{resto.slug}</span></p>
                     </div>
+
                     <div className="flex gap-2">
-                      <button onClick={() => setSelectedBilan(resto)} className="bg-blue-600/10 text-blue-500 p-2.5 rounded-xl hover:bg-blue-600 hover:text-white transition-all"><Share2 size={18} /></button>
+                      {/* BOUTON VOIR DASHBOARD (Désactivé si bloqué) */}
+                      <Link 
+                        href={`/admin/${resto.slug}`} 
+                        className={`p-2.5 rounded-xl transition-all flex items-center justify-center ${isBlocked ? 'bg-red-900/20 text-red-500 cursor-not-allowed opacity-50' : 'bg-blue-600/10 text-blue-500 hover:bg-blue-600 hover:text-white'}`}
+                      >
+                         <ExternalLink size={18} />
+                      </Link>
+
+                      <button onClick={() => setSelectedBilan(resto)} className="bg-slate-800 text-slate-400 p-2.5 rounded-xl hover:bg-white hover:text-black transition-all"><Share2 size={18} /></button>
+                      
+                      {/* BOUTON BLOQUER / DÉBLOQUER (Synchronisé Root) */}
                       <button
                         disabled={updatingId === resto.id}
                         onClick={() => toggleStatus(resto.id, resto.is_active)}
-                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${resto.is_active ? "bg-red-500/10 text-red-500" : "bg-green-500 text-white"}`}
+                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${
+                            // Si is_active !== false (donc true ou null), c'est Actif -> Bouton pour Désactiver
+                            resto.is_active !== false 
+                            ? "bg-slate-800 text-slate-400 hover:bg-red-500 hover:text-white" 
+                            : "bg-green-600 text-white hover:bg-green-500"
+                        }`}
                       >
-                        {resto.is_active ? <Ban size={14} /> : <CheckCircle size={14} />}
-                        {resto.is_active ? "Bloquer" : "Débloquer"}
+                        {resto.is_active !== false ? <Ban size={14} /> : <CheckCircle size={14} />}
+                        {resto.is_active !== false ? "Bloquer" : "Débloquer"}
                       </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 mb-6">
+                  {/* STATS (Grisées si bloqué) */}
+                  <div className={`grid grid-cols-3 gap-4 mb-6 ${isBlocked ? 'opacity-30 grayscale' : ''}`}>
                     <div className="bg-black/30 p-4 rounded-2xl border border-white/5">
                       <Trophy className="text-blue-500 mb-1" size={14} />
                       <p className="text-lg font-black">{resto.winners?.count || 0}</p>
@@ -219,6 +267,7 @@ export default function SalesDashboard() {
                     </div>
                   </div>
 
+                  {/* NOTES CRM (Toujours accessibles même si bloqué, pour noter pourquoi) */}
                   <div className="space-y-4 pt-4 border-t border-slate-800">
                     <div className="flex flex-col md:flex-row gap-4">
                       <div className="flex-1">
@@ -226,7 +275,8 @@ export default function SalesDashboard() {
                         <textarea
                           defaultValue={resto.internal_notes}
                           onBlur={(e) => saveSettings(resto.id, e.target.value, resto.alert_threshold_days, resto.is_retention_alert_enabled)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 outline-none h-16"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 outline-none h-16 focus:border-blue-500 transition-colors"
+                          placeholder="Note interne..."
                         />
                       </div>
                       <div className="w-full md:w-48">
@@ -237,7 +287,7 @@ export default function SalesDashboard() {
                               type="number"
                               defaultValue={resto.alert_threshold_days}
                               onBlur={(e) => saveSettings(resto.id, resto.internal_notes, parseInt(e.target.value || "7", 10), resto.is_retention_alert_enabled)}
-                              className="w-16 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-center font-bold"
+                              className="w-16 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-center font-bold outline-none focus:border-blue-500"
                             />
                             <span className="text-[10px] font-bold text-slate-600">Jours</span>
                           </div>
@@ -258,7 +308,7 @@ export default function SalesDashboard() {
           </div>
         </div>
 
-        {/* SIDEBAR ALERTES */}
+        {/* SIDEBAR ALERTES (INCHANGÉE) */}
         <div className="space-y-6">
           <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl sticky top-8">
             <div className="flex items-center gap-3 mb-6">
