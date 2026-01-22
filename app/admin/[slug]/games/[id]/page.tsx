@@ -1,23 +1,27 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, Check } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, Check, Wand2 } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
 import { updateGameAction } from "@/app/actions/update-game"
 
 const BACKGROUNDS = [
-  "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=1000&auto=format&fit=crop", 
+  "https://i.postimg.cc/VvsZ09Qf/four-slices-pepperoni-pizza-corners-dark-background-top-view-space-copy-text.jpg",
+  "https://i.postimg.cc/2SLcW8tP/triangular-slices-chicago-style-pizza-with-hot-sauce-transparent-background.jpg",
+  "https://i.postimg.cc/1zpvW7s0/drawing-hamburgers-with-toothpick-background.jpg",
+  "https://i.postimg.cc/DZ6BhWW5/background-37.jpg",
+  "https://i.postimg.cc/J0dxy95G/64f68220-f9ae-4dc1-994f-d9f0e972aad4.jpg",
+  "https://i.postimg.cc/448BF9R4/set-sushi-rolls-plate-with-chopsticks.jpg",
+  "https://images.unsplash.com/photo-1517433367423-c7e5b0f35086?q=80&w=1000&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1000&auto=format&fit=crop", 
   "https://images.unsplash.com/photo-1605806616949-1e87b487bc2a?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?q=80&w=1000&auto=format&fit=crop",
 ]
 
-// 🔥 NOUVELLE CONSTANTE : PALETTES LUXE
 const PALETTES = [
     { id: 'MONACO', label: 'Monaco', c1: '#8B0000', c2: '#0F0F0F' },
     { id: 'GATSBY', label: 'Gatsby', c1: '#1E3A8A', c2: '#0F0F0F' },
@@ -58,17 +62,34 @@ export default function EditGamePage() {
       title_style: 'STYLE_1',
       bg_image_url: "",
       card_style: 'light',
-      wheel_palette: 'MONACO' // 🔥 AJOUT INITIALISATION PALETTE
+      wheel_palette: 'MONACO' 
   })
 
   const [prizes, setPrizes] = useState<any[]>([])
 
-  // 🔥 FONCTION RÉTABLIE POUR L'API GOOGLE (IDENTIQUE À NEW GAME)
+  // 🔥 INSERTION CHIRURGICALE : CALCUL DU TOTAL 100%
+  const totalWeight = useMemo(() => {
+    return prizes.reduce((acc, p) => acc + (Number(p.weight) || 0), 0)
+  }, [prizes])
+
+  const isWeightValid = totalWeight === 100
+
+  // 🔥 INSERTION CHIRURGICALE : ÉQUILIBRAGE AUTOMATIQUE
+  const autoBalance = () => {
+    if (prizes.length === 0) return
+    const equalShare = Math.floor(100 / prizes.length)
+    const remainder = 100 % prizes.length
+    const newPrizes = prizes.map((p, i) => ({
+      ...p,
+      weight: i === 0 ? equalShare + remainder : equalShare
+    }))
+    setPrizes(newPrizes)
+  }
+
   const handleGoogleSelect = (url: string) => {
     setFormData((prev: any) => ({ ...prev, action_url: url }))
   }
 
-  // --- 1. CHARGEMENT DES DONNÉES EXISTANTES ---
   useEffect(() => {
     const loadGame = async () => {
         const idToLoad = params?.id
@@ -103,7 +124,7 @@ export default function EditGamePage() {
                 title_style: game.title_style || 'STYLE_1',
                 bg_image_url: game.bg_image_url || "",
                 card_style: game.card_style || (isDark ? 'dark' : 'light'),
-                wheel_palette: game.wheel_palette || 'MONACO' // 🔥 CHARGEMENT DE LA PALETTE DEPUIS SUPABASE
+                wheel_palette: game.wheel_palette || 'MONACO'
             })
 
             const { data: prizesData } = await (supabase.from('prizes') as any)
@@ -119,10 +140,14 @@ export default function EditGamePage() {
   }, [params, supabase])
 
 
-  // --- 2. MISE À JOUR (UPDATE) ---
   const handleUpdate = async () => {
     if (!formData.name) return alert("Veuillez donner un Nom au Jeu.")
     
+    // 🔥 AJOUT SÉCURITÉ : VÉRIFICATION DU 100%
+    if (!isWeightValid) {
+        return alert(`Le total des probabilités doit être de 100% (Actuellement : ${totalWeight}%)`)
+    }
+
     if (formData.active_action === 'GOOGLE_REVIEW' && formData.action_url && !formData.action_url.includes('google.com')) {
          return alert("❌ Veuillez sélectionner un établissement Google valide.")
     }
@@ -130,12 +155,11 @@ export default function EditGamePage() {
     setSaving(true)
 
     try {
-        // Appeler l'action serveur avec les nouvelles données incluant wheel_palette
         const res = await updateGameAction(gameId, {
             restaurant_id: restaurantId,
             form: formData,
             design: designData,
-            prizes: prizes
+            prizes: prizes.map(p => ({ ...p, weight: Number(p.weight) })) // On force le nombre ici
         })
 
         if (!res.success) throw new Error(res.error)
@@ -157,23 +181,22 @@ export default function EditGamePage() {
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 pb-20">
       <div className="max-w-4xl mx-auto">
         
-        {/* HEADER RESPONSIVE */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
             <div>
                 <Link href={`/admin/${params.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Retour</Link>
                 <h1 className="text-2xl md:text-3xl font-black text-slate-900 flex items-center gap-2">Modifier le Jeu ✏️</h1>
             </div>
+            {/* 🔥 BOUTON CONDITIONNÉ PAR LE 100% */}
             <button 
                 onClick={handleUpdate} 
-                disabled={saving} 
-                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-lg active:scale-95 transition-all w-full sm:w-auto"
+                disabled={saving || !isWeightValid} 
+                className={`px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all w-full sm:w-auto ${isWeightValid ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}
             >
                 {saving ? <Loader2 className="animate-spin"/> : <Save size={20}/>} 
-                Enregistrer tout
+                Enregistrer tout {!isWeightValid && `(${totalWeight}%)`}
             </button>
         </div>
 
-        {/* ONGLETS RESPONSIVE (SCROLLABLE SUR MOBILE) */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="flex border-b border-slate-200 bg-slate-50 overflow-x-auto scrollbar-hide">
                 <button onClick={() => setActiveTab('INFOS')} className={`flex-1 min-w-[120px] py-4 text-xs md:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors shrink-0 ${activeTab === 'INFOS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Layout size={18}/> Infos Jeu</button>
@@ -183,7 +206,6 @@ export default function EditGamePage() {
 
             <div className="p-4 md:p-8">
                 
-                {/* --- TAB 1: INFOS --- */}
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
@@ -213,7 +235,6 @@ export default function EditGamePage() {
 
                             {formData.active_action === 'GOOGLE_REVIEW' ? (
                                 <div className="space-y-2">
-                                    {/* 🔥 FIX : Liaison avec handleGoogleSelect et affichage de la valeur par défaut */}
                                     <GooglePlaceInput 
                                         onSelect={handleGoogleSelect} 
                                         defaultValue={formData.action_url} 
@@ -252,32 +273,27 @@ export default function EditGamePage() {
                     </div>
                 )}
 
-                {/* --- TAB 2: LOTS (DÉPLACEMENT DE LA PALETTE ICI) --- */}
+                {/* --- TAB 2: LOTS --- */}
                 {activeTab === 'LOTS' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
-                        {/* 🔥 COULEURS DE LA ROUE (DÉPLACÉ ICI ET RENOMMÉ) */}
-                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
-                                <Palette className="text-blue-600" size={24}/> Couleurs de la roue
-                            </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-                                {PALETTES.map((p) => (
-                                    <div 
-                                        key={p.id} 
-                                        onClick={() => setDesignData({...designData, wheel_palette: p.id})} 
-                                        className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3 ${designData.wheel_palette === p.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
-                                    >
-                                        <div className="flex w-full h-10 rounded-lg overflow-hidden border border-slate-200 shadow-inner">
-                                            <div className="flex-1" style={{ backgroundColor: p.c1 }}></div>
-                                            <div className="flex-1" style={{ backgroundColor: p.c2 }}></div>
-                                        </div>
-                                        <span className="font-bold text-xs md:text-sm flex items-center gap-2">
-                                            {p.label} 
-                                            {designData.wheel_palette === p.id && <Check size={16} className="text-blue-600"/>}
-                                        </span>
-                                    </div>
-                                ))}
+                        {/* 🔥 BARRE DE PROGRESSION 100% */}
+                        <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="flex items-center gap-2">
+                                    <div className={`w-3 h-3 rounded-full ${isWeightValid ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
+                                    <span className="text-xs font-black uppercase tracking-tighter text-slate-300">Total Probabilités</span>
+                                </div>
+                                <span className={`text-2xl font-black ${isWeightValid ? 'text-green-500' : 'text-white'}`}>{totalWeight}%</span>
+                            </div>
+                            <div className="w-full h-4 bg-slate-800 rounded-full overflow-hidden">
+                                <div className={`h-full transition-all duration-500 ${isWeightValid ? 'bg-green-500' : totalWeight > 100 ? 'bg-red-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(totalWeight, 100)}%` }}></div>
+                            </div>
+                            <div className="mt-4 flex justify-between items-center">
+                                <p className="text-[10px] text-slate-500 font-black uppercase italic">
+                                    {isWeightValid ? "Parfait ! La roue est équilibrée." : `Attention : Il reste ${100 - totalWeight}% à distribuer.`}
+                                </p>
+                                <button onClick={autoBalance} className="flex items-center gap-2 text-[10px] font-black uppercase text-blue-400 hover:text-white transition-colors bg-blue-500/10 px-3 py-1.5 rounded-lg"><Wand2 size={12}/> Répartir 100%</button>
                             </div>
                         </div>
 
@@ -285,7 +301,7 @@ export default function EditGamePage() {
                         <div className="space-y-6">
                             <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-xl text-xs md:text-sm flex items-center gap-3">
                                 <Gift size={20} className="shrink-0"/> 
-                                <span>Gérez vos lots. Le <strong>"Poids"</strong> définit la rareté (ex: 100 est plus fréquent que 1).</span>
+                                <span>Gérez vos lots. Le <strong>"Poids"</strong> définit la chance de gain (Total doit être 100%).</span>
                             </div>
                             <div className="space-y-3">
                                 {prizes.map((prize, index) => (
@@ -295,8 +311,8 @@ export default function EditGamePage() {
                                             <input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/>
                                         </div>
                                         <div className="w-full md:w-24">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center block">Poids</label>
-                                            <input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center"/>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center block">Chance (%)</label>
+                                            <input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center text-lg"/>
                                         </div>
                                         <button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center">
                                             <Trash2 size={20}/>
@@ -322,7 +338,6 @@ export default function EditGamePage() {
                             </h3>
                             
                             <div className="space-y-8">
-                                {/* SECTION LOGO */}
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
                                         Logo du commerce
@@ -333,15 +348,10 @@ export default function EditGamePage() {
                                             onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
                                         />
                                     </div>
-                                    
-                                    <p className="text-xs text-slate-400 mt-2 ml-1">
-                                        Conseil : Utilisez un format PNG transparent pour un meilleur rendu.
-                                    </p>
                                 </div>
 
                                 <div className="w-full h-px bg-slate-200"></div>
 
-                                {/* SECTION COULEUR */}
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
                                         Couleur Principale
@@ -368,6 +378,22 @@ export default function EditGamePage() {
                                                 readOnly
                                             />
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* 🔥 DÉPLACEMENT PALETTE ROUE ICI */}
+                                <div className="pt-6 border-t border-slate-200">
+                                    <label className="block text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">Couleurs de la roue</label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+                                        {PALETTES.map((p) => (
+                                            <div key={p.id} onClick={() => setDesignData({...designData, wheel_palette: p.id})} className={`cursor-pointer p-3 md:p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3 ${designData.wheel_palette === p.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                                                <div className="flex w-full h-10 rounded-lg overflow-hidden border border-slate-200 shadow-inner">
+                                                    <div className="flex-1" style={{ backgroundColor: p.c1 }}></div>
+                                                    <div className="flex-1" style={{ backgroundColor: p.c2 }}></div>
+                                                </div>
+                                                <span className="font-bold text-xs md:text-sm flex items-center gap-2">{p.label} {designData.wheel_palette === p.id && <Check size={16} className="text-blue-600"/>}</span>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
