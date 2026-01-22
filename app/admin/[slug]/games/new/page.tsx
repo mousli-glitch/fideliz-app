@@ -39,10 +39,8 @@ export default function NewGamePage() {
   const router = useRouter()
   
   const [saving, setSaving] = useState(false)
-  
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
-
   const [activeTab, setActiveTab] = useState<'INFOS' | 'DESIGN' | 'LOTS'>('INFOS')
 
   const [formData, setFormData] = useState({
@@ -64,7 +62,6 @@ export default function NewGamePage() {
       wheel_palette: 'MONACO'
   })
 
-  // 🔥 MODIFICATION ICI : 4 Lots par défaut totalisant 100%
   const [prizes, setPrizes] = useState([
     { label: "1 Café Offert", color: "#3b82f6", weight: 40 },
     { label: "-10% addition", color: "#10b981", weight: 30 },
@@ -72,7 +69,6 @@ export default function NewGamePage() {
     { label: "Surprise !", color: "#8b5cf6", weight: 10 }
   ])
 
-  // 🔥 AJOUT : LOGIQUE 100%
   const totalWeight = useMemo(() => {
     return prizes.reduce((acc, p) => acc + (Number(p.weight) || 0), 0)
   }, [prizes])
@@ -105,7 +101,6 @@ export default function NewGamePage() {
         return
     }
     
-    // 🔥 VALIDATION 100%
     if (!isWeightValid) {
         setActiveTab('LOTS')
         setErrorMsg(`Le total des probabilités doit être de 100% (Actuel: ${totalWeight}%)`)
@@ -140,11 +135,9 @@ export default function NewGamePage() {
         }
 
         const res = await createGameAction(cleanData)
-        
         if (!res.success) throw new Error(res.error)
         
         setSuccessMsg("Le jeu a bien été créé ! Redirection...")
-        
         setTimeout(() => {
             router.push(`/admin/${params.slug}/games`)
             router.refresh()
@@ -160,9 +153,7 @@ export default function NewGamePage() {
   if (successMsg) {
     return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-green-50 animate-in fade-in zoom-in duration-300 p-6 text-center">
-            <div className="bg-white p-4 rounded-full shadow-lg mb-6">
-                <CheckCircle size={64} className="text-green-500" />
-            </div>
+            <div className="bg-white p-4 rounded-full shadow-lg mb-6"><CheckCircle size={64} className="text-green-500" /></div>
             <h1 className="text-3xl font-black text-slate-900 mb-2">Félicitations ! 🎉</h1>
             <p className="text-xl text-green-700 font-medium">{successMsg}</p>
             <p className="text-slate-400 mt-8 text-sm animate-pulse">Redirection vers vos jeux...</p>
@@ -173,31 +164,19 @@ export default function NewGamePage() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 pb-20">
       <div className="max-w-4xl mx-auto">
-        
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
             <div>
                 <Link href={`/admin/${params.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Annuler</Link>
                 <h1 className="text-2xl md:text-3xl font-black text-slate-900 flex items-center gap-2">Nouveau Jeu <Rocket className="text-purple-600" size={28}/></h1>
             </div>
-            <button 
-                onClick={handleCreate} 
-                disabled={saving || !isWeightValid} 
-                className={`px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all w-full sm:w-auto ${isWeightValid ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}
-            >
-                {saving ? <Loader2 className="animate-spin"/> : <Save size={20}/>} 
-                Créer le jeu {!isWeightValid && `(${totalWeight}%)`}
+            <button onClick={handleCreate} disabled={saving || !isWeightValid} className={`px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all w-full sm:w-auto ${isWeightValid ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}>
+                {saving ? <Loader2 className="animate-spin"/> : <Save size={20}/>} Créer le jeu {!isWeightValid && `(${totalWeight}%)`}
             </button>
         </div>
 
-        {errorMsg && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 flex items-center gap-3 animate-in slide-in-from-top-2">
-                <AlertCircle size={20} className="shrink-0" />
-                <span className="font-bold text-sm">{errorMsg}</span>
-            </div>
-        )}
+        {errorMsg && (<div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 flex items-center gap-3 animate-in slide-in-from-top-2"><AlertCircle size={20} className="shrink-0" /><span className="font-bold text-sm">{errorMsg}</span></div>)}
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            
             <div className="flex border-b border-slate-200 bg-slate-50 overflow-x-auto scrollbar-hide">
                 <button onClick={() => setActiveTab('INFOS')} className={`flex-1 min-w-[120px] py-4 text-xs md:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors shrink-0 ${activeTab === 'INFOS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Layout size={18}/> Infos Jeu</button>
                 <button onClick={() => setActiveTab('LOTS')} className={`flex-1 min-w-[120px] py-4 text-xs md:text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors shrink-0 ${activeTab === 'LOTS' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-slate-500 hover:bg-white/50'}`}><Gift size={18}/> Lots (Roue)</button>
@@ -205,110 +184,60 @@ export default function NewGamePage() {
             </div>
 
             <div className="p-4 md:p-8">
-                
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Nom du Jeu <span className="text-red-500">*</span></label>
-                                <input type="text" placeholder="Ex: Roue de Noël 2024" className={`w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 ${errorMsg && !formData.name ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : ''}`} value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                            </div>
-                            
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Objectif (Action)</label>
-                                <select className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.active_action} onChange={e => setFormData({...formData, active_action: e.target.value, action_url: ""})}>
-                                    <option value="GOOGLE_REVIEW">⭐ Avis Google (Recommandé)</option>
-                                    <option value="INSTAGRAM">📸 S'abonner Instagram</option>
-                                    <option value="FACEBOOK">👍 S'abonner Facebook</option>
-                                    <option value="TIKTOK">🎵 S'abonner TikTok</option>
-                                </select>
-                            </div>
+                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Nom du Jeu <span className="text-red-500">*</span></label><input type="text" placeholder="Ex: Roue de Noël 2024" className={`w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 ${errorMsg && !formData.name ? 'border-red-500 ring-1 ring-red-500 bg-red-50' : ''}`} value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}/></div>
+                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Objectif (Action)</label><select className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.active_action} onChange={e => setFormData({...formData, active_action: e.target.value, action_url: ""})}><option value="GOOGLE_REVIEW">⭐ Avis Google (Recommandé)</option><option value="INSTAGRAM">📸 Instagram</option><option value="FACEBOOK">👍 Facebook</option><option value="TIKTOK">🎵 TikTok</option></select></div>
                         </div>
-
                         <div className={`bg-slate-50 p-4 md:p-6 rounded-xl border transition-all ${errorMsg && !formData.action_url ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}>
                             <label className="block text-sm font-bold text-slate-700 mb-2">{formData.active_action === 'GOOGLE_REVIEW' ? 'Rechercher votre établissement * :' : 'Lien URL de votre page * :'}</label>
                             {formData.active_action === 'GOOGLE_REVIEW' ? (
-                                <div className="space-y-2">
-                                    <GooglePlaceInput onSelect={handleGoogleSelect} />
-                                    <p className="text-xs text-slate-500">💡 Tapez le nom de votre commerce. Le lien d'avis sera généré automatiquement.</p>
-                                    {formData.action_url && (<div className="mt-2 p-2 bg-green-50 text-green-700 text-[10px] rounded border border-green-100 truncate font-mono">Lien lié : {formData.action_url}</div>)}
-                                </div>
+                                <div className="space-y-2"><GooglePlaceInput onSelect={handleGoogleSelect} /><p className="text-xs text-slate-500">💡 Tapez le nom de votre commerce.</p>{formData.action_url && (<div className="mt-2 p-2 bg-green-50 text-green-700 text-[10px] rounded border border-green-100 truncate font-mono">Lien lié : {formData.action_url}</div>)}</div>
                             ) : (
-                                <div className="space-y-2"><input type="url" className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" placeholder={`Collez ici le lien de votre profil ${formData.active_action.toLowerCase()}...`} value={formData.action_url} onChange={e => setFormData({...formData, action_url: e.target.value})} /></div>
+                                <div className="space-y-2"><input type="url" className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://..." value={formData.action_url} onChange={e => setFormData({...formData, action_url: e.target.value})}/></div>
                             )}
                         </div>
-
                         <div className="border-t border-slate-100 pt-6 mt-6">
                             <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Validité du Gain (Jours)</label><input type="number" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})} /><p className="text-xs text-slate-400 mt-1">Temps laissé au client pour récupérer son lot.</p></div>
+                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Validité du Gain (Jours)</label><input type="number" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}/><p className="text-xs text-slate-400 mt-1">Temps laissé au client.</p></div>
                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                    <div className="flex items-center gap-3 mb-3"><input type="checkbox" id="min_spend_check" className="w-5 h-5 accent-blue-600" checked={formData.has_min_spend} onChange={e => setFormData({...formData, has_min_spend: e.target.checked})} /><label htmlFor="min_spend_check" className="text-sm font-bold text-slate-700 cursor-pointer">Activer minimum commande</label></div>
-                                    {formData.has_min_spend && (<div className="flex items-center gap-2"><span className="text-slate-400 font-bold">Min:</span><input type="number" className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ex: 15" value={formData.min_spend} onChange={e => setFormData({...formData, min_spend: parseInt(e.target.value) || 0})} /><span className="text-slate-400 font-bold">€</span></div>)}
+                                    <div className="flex items-center gap-3 mb-3"><input type="checkbox" id="min_spend_check" className="w-5 h-5 accent-blue-600" checked={formData.has_min_spend} onChange={e => setFormData({...formData, has_min_spend: e.target.checked})}/><label htmlFor="min_spend_check" className="text-sm font-bold text-slate-700 cursor-pointer">Activer minimum commande</label></div>
+                                    {formData.has_min_spend && (<div className="flex items-center gap-2"><span className="text-slate-400 font-bold">Min:</span><input type="number" className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={formData.min_spend} onChange={e => setFormData({...formData, min_spend: parseInt(e.target.value) || 0})}/><span className="text-slate-400 font-bold">€</span></div>)}
                                 </div>
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* --- TAB 2: LOTS --- */}
                 {activeTab === 'LOTS' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
-                        
-                        {/* 🔥 BARRE DE PROGRESSION 100% */}
                         <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">
                             <div className="flex justify-between items-center mb-4">
-                                <div className="flex items-center gap-2">
-                                    <div className={`w-3 h-3 rounded-full ${isWeightValid ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
-                                    <span className="text-xs font-black uppercase tracking-tighter text-slate-300">Total Probabilités</span>
-                                </div>
-                                <span className={`text-2xl font-black ${isWeightValid ? 'text-green-500' : 'text-white'}`}>{totalWeight}%</span>
-                            </div>
-                            <div className="w-full h-4 bg-slate-800 rounded-full overflow-hidden">
-                                <div className={`h-full transition-all duration-500 ${isWeightValid ? 'bg-green-500' : totalWeight > 100 ? 'bg-red-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(totalWeight, 100)}%` }}></div>
-                            </div>
-                            <div className="mt-4 flex justify-between items-center">
-                                <p className="text-[10px] text-slate-500 font-black uppercase italic">
-                                    {isWeightValid ? "Parfait ! La roue est équilibrée." : `Attention : Il reste ${100 - totalWeight}% à distribuer.`}
-                                </p>
+                                <span className="text-xs font-black uppercase tracking-tighter text-slate-300">Total Probabilités : {totalWeight}%</span>
                                 <button onClick={autoBalance} className="flex items-center gap-2 text-[10px] font-black uppercase text-blue-400 hover:text-white transition-colors bg-blue-500/10 px-3 py-1.5 rounded-lg"><Wand2 size={12}/> Répartir 100%</button>
                             </div>
+                            <div className="w-full h-4 bg-slate-800 rounded-full overflow-hidden"><div className={`h-full transition-all duration-500 ${isWeightValid ? 'bg-green-500' : totalWeight > 100 ? 'bg-red-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(totalWeight, 100)}%` }}></div></div>
                         </div>
-
-                        {/* LISTE DES LOTS */}
                         <div className="space-y-6">
-                            <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-xl text-xs md:text-sm flex items-center gap-3">
-                                <Gift size={20} className="shrink-0"/> 
-                                <span>Gérez vos lots. Le <strong>"Poids"</strong> définit la chance de gain (Total doit être 100%).</span>
-                            </div>
+                            <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-xl text-xs md:text-sm flex items-center gap-3"><Gift size={20} className="shrink-0"/><span>Le total des poids doit faire 100.</span></div>
                             <div className="space-y-3">
                                 {prizes.map((prize, index) => (
-                                    <div key={index} className="flex flex-col md:flex-row gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm items-center group hover:border-blue-300 transition-all">
-                                        <div className="flex-1 w-full">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nom du lot</label>
-                                            <input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/>
-                                        </div>
-                                        <div className="w-full md:w-24">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center block">Chance (%)</label>
-                                            <input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center"/>
-                                        </div>
-                                        <button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center">
-                                            <Trash2 size={20}/>
-                                        </button>
+                                    <div key={index} className="flex flex-col md:flex-row gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm items-center hover:border-blue-300 transition-all">
+                                        <div className="flex-1 w-full"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nom du lot</label><input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/></div>
+                                        <div className="w-full md:w-24 text-center"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Chance %</label><input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center"/></div>
+                                        <button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center"><Trash2 size={20}/></button>
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", color: "#000000", weight: 10 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2">
-                                <Plus size={20}/> Ajouter un lot
-                            </button>
+                            <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", color: "#000000", weight: 10 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 flex items-center justify-center gap-2"><Plus size={20}/> Ajouter un lot</button>
                         </div>
                     </div>
                 )}
 
-                {/* --- TAB 3: DESIGN --- */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
-                        
                         {/* 🔥 DESIGN OPTIMISÉ 2 COLONNES */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             
@@ -318,9 +247,7 @@ export default function NewGamePage() {
                                 
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Logo du commerce</label>
-                                    <div className="bg-white p-2 rounded-xl border border-slate-200">
-                                        <LogoUploader currentUrl={designData.logo_url} onUrlChange={(url) => setDesignData({...designData, logo_url: url})} />
-                                    </div>
+                                    <div className="bg-white p-2 rounded-xl border border-slate-200"><LogoUploader currentUrl={designData.logo_url} onUrlChange={(url) => setDesignData({...designData, logo_url: url})} /></div>
                                     <p className="text-xs text-slate-400 mt-2 ml-1">Conseil : Utilisez un format PNG transparent.</p>
                                 </div>
 
@@ -328,7 +255,7 @@ export default function NewGamePage() {
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Couleur du Bouton (Actions)</label>
                                     <div className="flex items-center gap-4 p-3 bg-white rounded-xl border border-slate-200">
                                         <div className="relative group cursor-pointer">
-                                            <input type="color" className="absolute inset-0 w-10 h-10 opacity-0 cursor-pointer z-10" value={designData.primary_color} onChange={e => setDesignData({...designData, primary_color: e.target.value})} />
+                                            <input type="color" className="absolute inset-0 w-10 h-10 opacity-0 cursor-pointer z-10" value={designData.primary_color} onChange={e => setDesignData({...designData, primary_color: e.target.value})}/>
                                             <div className="w-10 h-10 rounded-lg shadow-inner border border-slate-200" style={{ backgroundColor: designData.primary_color }}></div>
                                         </div>
                                         <span className="font-mono font-bold text-slate-800 uppercase">{designData.primary_color}</span>
@@ -352,9 +279,14 @@ export default function NewGamePage() {
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold ${designData.card_style === 'light' ? 'border-blue-600 bg-white text-blue-600' : 'border-slate-200 text-slate-400'}`}>Mode Clair</div>
-                                    <div onClick={() => setDesignData({...designData, card_style: 'dark'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 text-white' : 'border-slate-200 text-slate-400'}`}>Mode Sombre</div>
+                                <div>
+                                    {/* 🔥 AJOUT DU TITRE ET DE L'ESPACE COMBLÉ */}
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Apparence de la carte</label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${designData.card_style === 'light' ? 'border-blue-600 bg-white text-blue-600 shadow-sm' : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}>Mode Clair</div>
+                                        <div onClick={() => setDesignData({...designData, card_style: 'dark'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 text-white shadow-sm' : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}>Mode Sombre</div>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-2 italic">Définit la couleur de fond de la carte de jeu.</p>
                                 </div>
                             </div>
                         </div>
@@ -371,7 +303,7 @@ export default function NewGamePage() {
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                                 {BACKGROUNDS.map((bg, index) => (
-                                    <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-60 hover:opacity-100'}`}>
+                                    <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: bg})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) || designData.bg_image_url === bg ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-60 hover:opacity-100'}`}>
                                         <img src={bg} className="w-full h-full object-cover" alt="Fond" />
                                     </div>
                                 ))}

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, Check, Wand2 } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, Check, Wand2, AlertCircle, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
@@ -41,6 +41,11 @@ export default function EditGamePage() {
   
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  
+  // 🔥 AJOUT : États pour les messages (comme dans New Game)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
   const [activeTab, setActiveTab] = useState<'INFOS' | 'DESIGN' | 'LOTS'>('INFOS')
 
   const [gameId, setGameId] = useState<string>("")
@@ -67,14 +72,12 @@ export default function EditGamePage() {
 
   const [prizes, setPrizes] = useState<any[]>([])
 
-  // 🔥 INSERTION CHIRURGICALE : CALCUL DU TOTAL 100%
   const totalWeight = useMemo(() => {
     return prizes.reduce((acc, p) => acc + (Number(p.weight) || 0), 0)
   }, [prizes])
 
   const isWeightValid = totalWeight === 100
 
-  // 🔥 INSERTION CHIRURGICALE : ÉQUILIBRAGE AUTOMATIQUE
   const autoBalance = () => {
     if (prizes.length === 0) return
     const equalShare = Math.floor(100 / prizes.length)
@@ -141,15 +144,29 @@ export default function EditGamePage() {
 
 
   const handleUpdate = async () => {
-    if (!formData.name) return alert("Veuillez donner un Nom au Jeu.")
+    // Reset des messages
+    setErrorMsg(null)
+    setSuccessMsg(null)
+
+    if (!formData.name) {
+        setActiveTab('INFOS')
+        setErrorMsg("Veuillez donner un Nom au Jeu.")
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return 
+    }
     
-    // 🔥 AJOUT SÉCURITÉ : VÉRIFICATION DU 100%
     if (!isWeightValid) {
-        return alert(`Le total des probabilités doit être de 100% (Actuellement : ${totalWeight}%)`)
+        setActiveTab('LOTS')
+        setErrorMsg(`Le total des probabilités doit être de 100% (Actuellement : ${totalWeight}%)`)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return 
     }
 
     if (formData.active_action === 'GOOGLE_REVIEW' && formData.action_url && !formData.action_url.includes('google.com')) {
-         return alert("❌ Veuillez sélectionner un établissement Google valide.")
+         setActiveTab('INFOS')
+         setErrorMsg("❌ Veuillez sélectionner un établissement Google valide.")
+         window.scrollTo({ top: 0, behavior: 'smooth' })
+         return 
     }
 
     setSaving(true)
@@ -159,20 +176,38 @@ export default function EditGamePage() {
             restaurant_id: restaurantId,
             form: formData,
             design: designData,
-            prizes: prizes.map(p => ({ ...p, weight: Number(p.weight) })) // On force le nombre ici
+            prizes: prizes.map(p => ({ ...p, weight: Number(p.weight) }))
         })
 
         if (!res.success) throw new Error(res.error)
 
-        alert("✅ Jeu modifié avec succès !")
-        router.push(`/admin/${params.slug}/games`)
-        router.refresh()
+        // 🔥 SUCCÈS : Affiche l'overlay vert et redirige
+        setSuccessMsg("Le jeu a bien été modifié ! Redirection...")
+        
+        setTimeout(() => {
+            router.push(`/admin/${params.slug}/games`)
+            router.refresh()
+        }, 1500)
 
     } catch (e: any) {
-        alert("Oups : " + e.message)
-    } finally {
+        setErrorMsg("Oups : " + e.message)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
         setSaving(false)
     }
+  }
+
+  // 🔥 ECRAN DE SUCCÈS (OVERLAY)
+  if (successMsg) {
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-green-50 animate-in fade-in zoom-in duration-300 p-6 text-center">
+            <div className="bg-white p-4 rounded-full shadow-lg mb-6">
+                <CheckCircle size={64} className="text-green-500" />
+            </div>
+            <h1 className="text-3xl font-black text-slate-900 mb-2">Modifications enregistrées ! 🎉</h1>
+            <p className="text-xl text-green-700 font-medium">{successMsg}</p>
+            <p className="text-slate-400 mt-8 text-sm animate-pulse">Redirection vers vos jeux...</p>
+        </div>
+    )
   }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600"/></div>
@@ -186,7 +221,7 @@ export default function EditGamePage() {
                 <Link href={`/admin/${params.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Retour</Link>
                 <h1 className="text-2xl md:text-3xl font-black text-slate-900 flex items-center gap-2">Modifier le Jeu ✏️</h1>
             </div>
-            {/* 🔥 BOUTON CONDITIONNÉ PAR LE 100% */}
+            {/* BOUTON CONDITIONNÉ PAR LE 100% */}
             <button 
                 onClick={handleUpdate} 
                 disabled={saving || !isWeightValid} 
@@ -196,6 +231,14 @@ export default function EditGamePage() {
                 Enregistrer tout {!isWeightValid && `(${totalWeight}%)`}
             </button>
         </div>
+
+        {/* 🔥 BANDEAU D'ERREUR */}
+        {errorMsg && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 flex items-center gap-3 animate-in slide-in-from-top-2">
+                <AlertCircle size={20} className="shrink-0" />
+                <span className="font-bold text-sm">{errorMsg}</span>
+            </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="flex border-b border-slate-200 bg-slate-50 overflow-x-auto scrollbar-hide">
@@ -277,7 +320,7 @@ export default function EditGamePage() {
                 {activeTab === 'LOTS' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
-                        {/* 🔥 BARRE DE PROGRESSION 100% */}
+                        {/* BARRE DE PROGRESSION 100% */}
                         <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">
                             <div className="flex justify-between items-center mb-4">
                                 <div className="flex items-center gap-2">
@@ -312,7 +355,7 @@ export default function EditGamePage() {
                                         </div>
                                         <div className="w-full md:w-24">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center block">Chance (%)</label>
-                                            <input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center text-lg"/>
+                                            <input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-blue-600 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center text-lg"/>
                                         </div>
                                         <button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center">
                                             <Trash2 size={20}/>
@@ -331,158 +374,79 @@ export default function EditGamePage() {
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
-                        {/* 1. IDENTITÉ VISUELLE */}
-                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
-                                <Palette className="text-blue-600" size={24}/> Identité Visuelle
-                            </h3>
+                        {/* DESIGN OPTIMISÉ 2 COLONNES */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             
-                            <div className="space-y-8">
+                            {/* COLONNE GAUCHE */}
+                            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
+                                <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 mb-4"><Palette size={20} className="text-blue-600"/> Identité Visuelle</h3>
+                                
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
-                                        Logo du commerce
-                                    </label>
-                                    <div className="bg-white p-1 rounded-xl border border-slate-200">
-                                        <LogoUploader 
-                                            currentUrl={designData.logo_url} 
-                                            onUrlChange={(url) => setDesignData({...designData, logo_url: url})} 
-                                        />
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Logo du commerce</label>
+                                    <div className="bg-white p-2 rounded-xl border border-slate-200">
+                                        <LogoUploader currentUrl={designData.logo_url} onUrlChange={(url) => setDesignData({...designData, logo_url: url})} />
                                     </div>
+                                    <p className="text-xs text-slate-400 mt-2 ml-1">Conseil : Utilisez un format PNG transparent.</p>
                                 </div>
 
-                                <div className="w-full h-px bg-slate-200"></div>
-
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
-                                        Couleur Principale
-                                    </label>
-                                    <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm w-full md:w-fit">
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Couleur du Bouton (Actions)</label>
+                                    <div className="flex items-center gap-4 p-3 bg-white rounded-xl border border-slate-200">
                                         <div className="relative group cursor-pointer">
-                                            <input 
-                                                type="color" 
-                                                className="absolute inset-0 w-12 h-12 opacity-0 cursor-pointer z-10"
-                                                value={designData.primary_color} 
-                                                onChange={e => setDesignData({...designData, primary_color: e.target.value})}
-                                            />
-                                            <div 
-                                                className="w-12 h-12 rounded-lg shadow-inner border border-slate-200 ring-2 ring-transparent group-hover:ring-blue-200 transition-all" 
-                                                style={{ backgroundColor: designData.primary_color }}
-                                            ></div>
+                                            <input type="color" className="absolute inset-0 w-10 h-10 opacity-0 cursor-pointer z-10" value={designData.primary_color} onChange={e => setDesignData({...designData, primary_color: e.target.value})}/>
+                                            <div className="w-10 h-10 rounded-lg shadow-inner border border-slate-200" style={{ backgroundColor: designData.primary_color }}></div>
                                         </div>
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Code HEX</span>
-                                            <input 
-                                                type="text" 
-                                                className="font-mono font-bold text-slate-800 outline-none uppercase w-24 bg-transparent text-lg" 
-                                                value={designData.primary_color} 
-                                                readOnly
-                                            />
-                                        </div>
+                                        <span className="font-mono font-bold text-slate-800 uppercase">{designData.primary_color}</span>
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* 🔥 DÉPLACEMENT PALETTE ROUE ICI */}
-                                <div className="pt-6 border-t border-slate-200">
-                                    <label className="block text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">Couleurs de la roue</label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+                            {/* COLONNE DROITE */}
+                            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
+                                <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 mb-4"><Sun size={20} className="text-orange-500"/> Style du Jeu</h3>
+                                
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Couleurs de la Roue</label>
+                                    <div className="grid grid-cols-1 gap-2">
                                         {PALETTES.map((p) => (
-                                            <div key={p.id} onClick={() => setDesignData({...designData, wheel_palette: p.id})} className={`cursor-pointer p-3 md:p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3 ${designData.wheel_palette === p.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                                                <div className="flex w-full h-10 rounded-lg overflow-hidden border border-slate-200 shadow-inner">
-                                                    <div className="flex-1" style={{ backgroundColor: p.c1 }}></div>
-                                                    <div className="flex-1" style={{ backgroundColor: p.c2 }}></div>
-                                                </div>
-                                                <span className="font-bold text-xs md:text-sm flex items-center gap-2">{p.label} {designData.wheel_palette === p.id && <Check size={16} className="text-blue-600"/>}</span>
+                                            <div key={p.id} onClick={() => setDesignData({...designData, wheel_palette: p.id})} className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${designData.wheel_palette === p.id ? 'bg-white border-blue-600 shadow-md ring-1 ring-blue-600' : 'bg-transparent border-slate-200'}`}>
+                                                <span className="font-bold text-xs text-slate-700 uppercase">{p.label}</span>
+                                                <div className="flex h-6 w-16 rounded overflow-hidden border border-slate-200"><div className="flex-1" style={{backgroundColor: p.c1}}></div><div className="flex-1" style={{backgroundColor: p.c2}}></div></div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
+
+                                <div>
+                                    {/* TITRE ET ESPACE COMBLÉ */}
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Apparence de la carte</label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${designData.card_style === 'light' ? 'border-blue-600 bg-white text-blue-600 shadow-sm' : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}>Mode Clair</div>
+                                        <div onClick={() => setDesignData({...designData, card_style: 'dark'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 text-white shadow-sm' : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}>Mode Sombre</div>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-2 italic">Définit la couleur de fond de la carte de jeu.</p>
+                                </div>
                             </div>
                         </div>
 
-                        {/* 2. THÈME */}
-                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2">
-                                <Sun className="text-orange-500" size={24}/> Thème au choix
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                                
-                                {/* Colonne Mode Clair */}
-                                <div className="flex flex-col gap-3">
-                                    <span className="text-center font-bold text-slate-700">Mode Clair</span>
-                                    <div 
-                                        onClick={() => setDesignData({...designData, card_style: 'light'})} 
-                                        className={`cursor-pointer p-4 md:p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-blue-50/50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
-                                    >
-                                        <div className="bg-white border border-slate-200 px-6 py-3 rounded-xl shadow-sm">
-                                            <span className="text-slate-900 font-bold">Texte Noir</span>
-                                        </div>
-                                        <span className="text-xs text-slate-400">Recommandé (Standard)</span>
-                                    </div>
-                                </div>
-                                
-                                {/* Colonne Mode Sombre */}
-                                <div className="flex flex-col gap-3">
-                                    <span className="text-center font-bold text-slate-700">Mode Sombre</span>
-                                    <div 
-                                        onClick={() => setDesignData({...designData, card_style: 'dark'})} 
-                                        className={`cursor-pointer p-4 md:p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-800 shadow-md text-white' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
-                                    >
-                                        <div className="bg-slate-900 border border-slate-700 px-6 py-3 rounded-xl shadow-sm">
-                                            <span className="text-white font-bold">Texte Blanc</span>
-                                        </div>
-                                        <span className="text-xs text-slate-400">Élégant & Moderne</span>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-
-                        {/* 3. STYLE DU TITRE */}
-                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            <h3 className="font-black text-xl text-slate-900 mb-6">Style du Titre</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                            <h3 className="font-black text-lg text-slate-800 mb-4">Fond d'écran & Titre</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                                 {TITLE_STYLES.map((style) => (
-                                    <div key={style.id} onClick={() => setDesignData({...designData, title_style: style.id})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all ${designData.title_style === style.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                                        <p className="font-bold text-xs md:text-sm mb-3 text-slate-700">{style.label}</p>
-                                        <div className="text-[10px] md:text-xs bg-slate-900 text-white p-2 rounded-lg font-black italic shadow-inner tracking-wide">
-                                            {style.preview}
-                                        </div>
+                                    <div key={style.id} onClick={() => setDesignData({...designData, title_style: style.id})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all ${designData.title_style === style.id ? 'border-blue-600 bg-white shadow-md' : 'border-slate-200'}`}>
+                                        <p className="font-bold text-[10px] uppercase text-slate-500 mb-2">{style.label}</p>
+                                        <div className="bg-slate-900 text-white p-2 rounded text-[10px] font-black italic">{style.preview}</div>
                                     </div>
                                 ))}
                             </div>
-                        </div>
-
-                        {/* 4. FOND D'ECRAN */}
-                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            <h3 className="font-black text-xl text-slate-900 mb-6">Fond d'écran</h3>
-                            <div className="mb-6">
-                                <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Thèmes prédéfinis</label>
-                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 md:gap-4">
-                                    {BACKGROUNDS.map((bg, index) => (
-                                        <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-70 hover:opacity-100'}`}>
-                                            <img src={bg} className="w-full h-full object-cover" alt="Fond" />
-                                            {(!designData.bg_image_url && designData.bg_choice === index) && (
-                                                <div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center">
-                                                    <div className="bg-white rounded-full p-1.5 shadow-md">
-                                                        <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                                {BACKGROUNDS.map((bg, index) => (
+                                    <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: bg})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) || designData.bg_image_url === bg ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-60 hover:opacity-100'}`}>
+                                        <img src={bg} className="w-full h-full object-cover" alt="Fond" />
+                                    </div>
+                                ))}
                             </div>
-                            <div className="pt-6 border-t border-slate-200 mt-6">
-                                <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Ou image personnalisée</label>
-                                <input 
-                                    type="url" 
-                                    className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" 
-                                    value={designData.bg_image_url || ''} 
-                                    onChange={e => setDesignData({...designData, bg_image_url: e.target.value})} 
-                                    placeholder="https://mon-site.com/mon-fond.jpg" 
-                                />
-                                <p className="text-xs text-slate-400 mt-2 ml-1">L'URL personnalisée remplacera le thème choisi ci-dessus.</p>
-                            </div>
+                            <input type="url" className="w-full p-3 border rounded-xl bg-white mt-6 text-sm" value={designData.bg_image_url || ''} onChange={e => setDesignData({...designData, bg_image_url: e.target.value})} placeholder="Ou URL image personnalisée..." />
                         </div>
                     </div>
                 )}
