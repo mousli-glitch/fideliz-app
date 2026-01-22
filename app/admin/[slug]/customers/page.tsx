@@ -19,7 +19,7 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
   const { slug } = await params
   const supabase = await createClient()
 
-  // 1. DÉTECTION DU RESTAURANT (Code inchangé)
+  // 1. DÉTECTION DU RESTAURANT
   let query = supabase.from("restaurants").select("id, name")
   
   if (isUUID(slug)) {
@@ -28,44 +28,44 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
     query = query.eq("slug", slug)
   }
 
-  // ON RÉCUPÈRE LES DONNÉES BRUTES
   const { data: rawRestaurant, error: restoError } = await query.single()
 
   if (restoError || !rawRestaurant) {
     return notFound()
   }
 
-  // On force TypeScript à accepter que c'est bien un Restaurant.
   const restaurant = rawRestaurant as unknown as Restaurant;
 
-  // 2. RÉCUPÉRATION DES CLIENTS (MODIFIÉ : SOURCE SÉCURISÉE)/customers/page.tsx]
-  // Avant : on lisait 'winners'. Maintenant : on lit 'contacts'.
+  // 2. RÉCUPÉRATION DES CLIENTS (CORRIGÉ)
+  // J'ai ajouté explicitement 'marketing_optin' dans le select pour être sûr de l'avoir
+  // J'ai enlevé le filtre .eq('marketing_optin', true) pour que tu voies TOUT LE MONDE (Oui et Non)
   const { data: rawCustomers } = await supabase
-    .from("contacts") // 🔥 On cible la table permanente
+    .from("contacts") 
     .select(`
-      id, first_name, email, phone, created_at
+      id, first_name, email, phone, created_at, marketing_optin
     `)
-    .eq("marketing_optin", true)
-    .eq("restaurant_id", restaurant.id) // 🔥 Lien direct avec le resto (plus besoin de passer par 'game')
+    .eq("restaurant_id", restaurant.id) 
     .order("created_at", { ascending: false })
 
-  // On force le typage des clients pour le composant
   const customers = (rawCustomers || []) as any[];
+  
+  // Calcul du nombre de vrais opt-in pour l'affichage
+  const optInCount = customers.filter(c => c.marketing_optin).length;
 
   return (
     <div className="min-h-screen bg-slate-50 p-8">
       <div className="max-w-6xl mx-auto">
         
-        {/* EN-TÊTE (Code inchangé) */}
+        {/* EN-TÊTE */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-black text-slate-900">Portefeuille Clients 👥</h1>
             <p className="text-slate-500 mt-1 font-medium">
-              Clients ayant accepté de recevoir des offres : <span className="text-blue-600 font-bold">{customers.length}</span>
+              Clients ayant accepté de recevoir des offres : <span className="text-blue-600 font-bold">{optInCount}</span> / {customers.length}
             </p>
           </div>
           <div className="flex gap-3">
-            {/* BOUTON EXPORT CSV (Code inchangé) */}
+            {/* BOUTON EXPORT CSV */}
             <CsvExportButton 
               data={customers} 
               filename={`clients-${restaurant.name}.csv`} 
@@ -73,7 +73,7 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
           </div>
         </div>
 
-        {/* ACTIONS DE CAMPAGNE (Code inchangé) */}
+        {/* ACTIONS DE CAMPAGNE */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-lg shadow-blue-200 cursor-not-allowed opacity-90">
                 <div className="flex justify-between items-start">
