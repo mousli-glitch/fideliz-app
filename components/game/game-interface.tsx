@@ -20,7 +20,7 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
     firstName: '',
     email: '',
     phone: '',
-    optIn: false // Ajout de l'état pour la checkbox
+    optIn: false 
   })
 
   const supabase = createClient()
@@ -54,7 +54,7 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
             first_name: formData.firstName, 
             phone: formData.phone, 
             status: 'available',
-            // Tu pourras sauvegarder le optIn ici si ta base de données a une colonne pour ça (ex: metadata ou crm_optin)
+            // Note: Tu pourras sauvegarder le optIn ici si ta base de données a une colonne pour ça
           }
         ] as any) 
         .select()
@@ -77,7 +77,6 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
   }
 
   return (
-    // CORRECTION : padding mobile (px-5) et hauteur viewport dynamique (min-h-[100dvh])
     <div className="w-full max-w-md mx-auto relative min-h-[100dvh] flex flex-col items-center justify-center px-5 py-6">
       <AnimatePresence mode="wait">
         
@@ -87,7 +86,6 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            // MODIF : Fond éclairci (bg-black/30 au lieu de 40) pour le design moins sombre
             className="w-full text-center space-y-6 bg-black/30 backdrop-blur-md p-8 rounded-3xl border border-white/10 shadow-2xl"
           >
             <div className="space-y-4">
@@ -147,7 +145,7 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
                 />
               </div>
 
-              {/* NOUVELLE SECTION CRM OPT-IN */}
+              {/* SECTION CRM OPT-IN AVEC NOM DYNAMIQUE */}
               <div className="flex items-start gap-3 px-1 py-2">
                 <div className="relative flex items-center mt-0.5">
                   <input 
@@ -162,7 +160,8 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
                   </svg>
                 </div>
                 <label htmlFor="crm-optin" className="text-xs text-gray-500 leading-snug cursor-pointer select-none">
-                  Je souhaite rejoindre le programme client et recevoir les offres exclusives et actualités de TEST78.
+                  {/* Utilisation de restaurant.name pour rendre le texte dynamique */}
+                  J'accepte d'être contacté par <span className="font-bold">{restaurant.name}</span> pour bénéficier de promotions réservées uniquement aux membres.
                 </label>
               </div>
 
