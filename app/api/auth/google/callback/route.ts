@@ -1,39 +1,86 @@
-import { google } from 'googleapis';
-import { NextResponse } from 'next/server';
-import { createAdminClient } from '@/utils/supabase/server'; // MODIFIÉ : on utilise le client admin
+import { createClient } from "@/utils/supabase/server";
+import { NextResponse } from "next/server";
+import { google } from "googleapis";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const code = searchParams.get('code');
-  const slug = searchParams.get('state'); 
+  const code = searchParams.get("code");
+  const state = searchParams.get("state"); 
 
-  if (!code || !slug) return NextResponse.redirect(new URL('/admin?error=auth_failed', request.url));
+  if (!code) {
+    return NextResponse.json({ error: "No code provided" }, { status: 400 });
+  }
 
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
+  const supabase = await createClient();
+
+  // 1. Vérifier que l'utilisateur est connecté
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
+    // 2. Échanger le code contre des tokens
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    );
+
     const { tokens } = await oauth2Client.getToken(code);
+
+    // 🔥 CORRECTION ICI : On simplifie le calcul pour satisfaire TypeScript
+    // Si expiry_date est présent, on le prend. Sinon, on ajoute 1h (3600s * 1000ms) à maintenant.
+    const expiresAt = tokens.expiry_date || (Date.now() + 3600 * 1000);
+
+    // 3. Identifier le restaurant à mettre à jour
+    let restaurantId = state;
+
+    if (!restaurantId) {
+        // On cherche le restaurant lié à l'utilisateur (owner_id ou user_id selon ta table)
+        // Vérifie bien si ta colonne s'appelle 'user_id' ou 'owner_id' dans ta table restaurants
+        const { data: userResto } = await supabase
+            .from("restaurants")
+            .select("id")
+            .eq("user_id", user.id) 
+            .single();
+        
+        if (userResto) restaurantId = userResto.id;
+    }
+
+    if (!restaurantId) {
+        return NextResponse.json({ error: "Restaurant not found for this user" }, { status: 404 });
+    }
+
+    console.log("✅ Connexion Google réussie pour le restaurant :", restaurantId);
     
-    // MODIFIÉ : On utilise createAdminClient pour contourner les polices RLS
-    const supabase = await createAdminClient();
+    // 4. Sauvegarder les tokens
+    const updateData: any = {
+      google_access_token: tokens.access_token,
+      google_token_expires_at: expiresAt,
+    };
 
-    const { error } = await (supabase
-      .from('restaurants') as any)
-      .update({
-        google_access_token: tokens.access_token,
-        google_refresh_token: tokens.refresh_token,
-      })
-      .eq('slug', slug);
+    if (tokens.refresh_token) {
+      updateData.google_refresh_token = tokens.refresh_token;
+    }
 
-    if (error) throw error;
+    const { error: updateError } = await supabase
+      .from("restaurants")
+      .update(updateData)
+      .eq("id", restaurantId);
 
-    return NextResponse.redirect(new URL(`/admin/${slug}/settings?success=google_connected`, request.url));
-  } catch (err) {
-    console.error("Erreur d'enregistrement Supabase:", err);
-    return NextResponse.redirect(new URL(`/admin/${slug}/settings?error=google_failed`, request.url));
+    if (updateError) {
+      console.error("Erreur sauvegarde tokens:", updateError);
+      throw updateError;
+    }
+
+    // 5. Redirection
+    return NextResponse.redirect(new URL(`/dashboard/settings?google_connected=true`, request.url));
+
+  } catch (error: any) {
+    console.error("🚨 Erreur Callback Google:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
