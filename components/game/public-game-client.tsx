@@ -209,7 +209,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     setWinner(selectedPrize)
     confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
 
-    // 🔥 MODIFICATION 1 : Passage rapide à la page Félicitations (400ms au lieu de 1000ms)
     setTimeout(() => {
       setStep('FORM')
       setSpinning(false)
@@ -222,7 +221,13 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     setIsSubmitting(true)
     try {
       const result = await registerWinnerAction({
-        game_id: game.id, prize_id: winner.id, email: formData.email, phone: formData.phone || "", first_name: formData.firstName, opt_in: formData.optIn
+        game_id: game.id, 
+        prize_id: winner.id, 
+        email: formData.email, 
+        phone: formData.phone || "", 
+        first_name: formData.firstName, 
+        // 🔥 CORRECTION : Envoi du Opt-In CRM à l'action server
+        opt_in: formData.optIn
       })
       if (!result.success || !result.ticket) throw new Error(result.error || "Erreur inconnue")
       setDbWinnerId(result.ticket.qr_code)
@@ -367,7 +372,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         )}
 
         <AnimatePresence mode="wait">
-            
             {step === 'LANDING' && (
             <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
@@ -409,7 +413,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     
                     <div className="mb-8 w-full flex flex-col items-center">
                         <div className={`w-full p-0.5 rounded-xl border border-dashed flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/20' : 'bg-slate-50 border-slate-300'}`}>
-                            {/* 🔥 MODIFICATION 2 : Image corrigée (safari-guide) sans placeholder d'erreur */}
                             <img 
                                 src="/safari-guide.png" 
                                 alt="Instruction onglets" 
@@ -496,7 +499,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
                 <div className="text-center mb-6">
-                    {/* 🔥 MODIFICATION 3 : Titre Félicitations plus gros et flashy */}
                     <h2 className="text-4xl font-black mb-2 uppercase tracking-tighter" style={{ color: primaryColor }}>
                         Félicitations !
                     </h2>
@@ -511,11 +513,11 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     <div className="flex items-start gap-3 mt-4">
                         <input type="checkbox" id="optin" checked={formData.optIn} onChange={(e) => setFormData({...formData, optIn: e.target.checked})} className="mt-1 w-5 h-5 rounded accent-blue-600" />
                         <label htmlFor="optin" className={`text-xs ${subTextClass}`}>
-                            J'accepte de recevoir des offres de {restaurant.name}.
+                            {/* 🔥 PHRASE CORRIGÉE ET DYNAMIQUE ICI */}
+                            J'accepte d'être contacté par <span className="font-bold">{restaurant.name}</span> pour bénéficier de promotions réservées uniquement aux membres.
                         </label>
                     </div>
                    
-                    {/* 🔥 MODIFICATION 4 : Bouton avec état de chargement propre (Spinner + Texte) */}
                     <button 
                         type="submit" 
                         disabled={isSubmitting} 
