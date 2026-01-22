@@ -3,23 +3,26 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, Check, Wand2, AlertCircle, CheckCircle } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, Check, Wand2, CheckCircle, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
 import { updateGameAction } from "@/app/actions/update-game"
+// 🔥 AJOUT IMPORT
+import BackgroundUploader from "@/components/BackgroundUploader"
 
+// --- LES 10 FONDS D'ÉCRAN SUPABASE ---
 const BACKGROUNDS = [
-  "https://i.postimg.cc/VvsZ09Qf/four-slices-pepperoni-pizza-corners-dark-background-top-view-space-copy-text.jpg",
-  "https://i.postimg.cc/2SLcW8tP/triangular-slices-chicago-style-pizza-with-hot-sauce-transparent-background.jpg",
-  "https://i.postimg.cc/1zpvW7s0/drawing-hamburgers-with-toothpick-background.jpg",
-  "https://i.postimg.cc/DZ6BhWW5/background-37.jpg",
-  "https://i.postimg.cc/J0dxy95G/64f68220-f9ae-4dc1-994f-d9f0e972aad4.jpg",
-  "https://i.postimg.cc/448BF9R4/set-sushi-rolls-plate-with-chopsticks.jpg",
-  "https://images.unsplash.com/photo-1517433367423-c7e5b0f35086?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1605806616949-1e87b487bc2a?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?q=80&w=1000&auto=format&fit=crop",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/29bb90d7-ca1b-4953-9142-786b7744f59c.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/64f68220-f9ae-4dc1-994f-d9f0e972aad4.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/acb25ead-177c-4fc4-9ca7-9ba9ad9eb1a3.png",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/closeup-romantic-purple-hearts-glitter-valentines-day-shiny-background-luxury-elegant-style-3d-illustration-holiday.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/drawing-hamburgers-with-toothpick-background.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/neon-circle-smoke-clouds.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/sakura-backgrounds-outdoors-blossom.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/triangular-slices-chicago-style-pizza-with-hot-sauce-transparent-background.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/vibrant-abstract-paint-strokes-bold-colors-creating-dynamic-energetic-artistic-background.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/wallpaper-ios-10.3-ipad-retina.jpg"
 ]
 
 const PALETTES = [
@@ -42,7 +45,7 @@ export default function EditGamePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   
-  // 🔥 AJOUT : États pour les messages (comme dans New Game)
+  // 🔥 AJOUT : États pour les messages
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
@@ -144,7 +147,6 @@ export default function EditGamePage() {
 
 
   const handleUpdate = async () => {
-    // Reset des messages
     setErrorMsg(null)
     setSuccessMsg(null)
 
@@ -370,7 +372,7 @@ export default function EditGamePage() {
                     </div>
                 )}
 
-                {/* --- TAB 3: DESIGN --- */}
+                {/* --- TAB 3: DESIGN (MÊME STRUCTURE QUE NEW PAGE) --- */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
@@ -418,7 +420,7 @@ export default function EditGamePage() {
                                 </div>
 
                                 <div>
-                                    {/* TITRE ET ESPACE COMBLÉ */}
+                                    {/* 🔥 TITRE ET ESPACE COMBLÉ */}
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Apparence de la carte</label>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${designData.card_style === 'light' ? 'border-blue-600 bg-white text-blue-600 shadow-sm' : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}>Mode Clair</div>
@@ -441,12 +443,20 @@ export default function EditGamePage() {
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                                 {BACKGROUNDS.map((bg, index) => (
+                                    // 🔥 CORRECTION BUG AFFICHAGE : On force l'URL (bg_image_url: bg) au clic
                                     <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: bg})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) || designData.bg_image_url === bg ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-60 hover:opacity-100'}`}>
                                         <img src={bg} className="w-full h-full object-cover" alt="Fond" />
                                     </div>
                                 ))}
                             </div>
-                            <input type="url" className="w-full p-3 border rounded-xl bg-white mt-6 text-sm" value={designData.bg_image_url || ''} onChange={e => setDesignData({...designData, bg_image_url: e.target.value})} placeholder="Ou URL image personnalisée..." />
+                            {/* 🔥 REMPLACEMENT PAR LE DROP UPLOADER */}
+                            <div className="mt-6 pt-6 border-t border-slate-200">
+                                <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Ou image personnalisée</label>
+                                <BackgroundUploader 
+                                    currentUrl={designData.bg_image_url} 
+                                    onUrlChange={(url) => setDesignData({...designData, bg_image_url: url})} 
+                                />
+                            </div>
                         </div>
                     </div>
                 )}

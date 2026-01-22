@@ -6,20 +6,22 @@ import { createGameAction } from "@/app/actions/create-game"
 import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Sun, Moon, Rocket, Trash2, Plus, AlertCircle, CheckCircle, Check, Wand2 } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
-import LogoUploader from "@/components/LogoUploader" 
+import LogoUploader from "@/components/LogoUploader"
+// 🔥 AJOUT IMPORT
+import BackgroundUploader from "@/components/BackgroundUploader" 
 
-// --- LES 10 FONDS D'ÉCRAN ---
+// --- LES 10 FONDS D'ÉCRAN SUPABASE ---
 const BACKGROUNDS = [
-  "https://i.postimg.cc/VvsZ09Qf/four-slices-pepperoni-pizza-corners-dark-background-top-view-space-copy-text.jpg",
-  "https://i.postimg.cc/2SLcW8tP/triangular-slices-chicago-style-pizza-with-hot-sauce-transparent-background.jpg",
-  "https://i.postimg.cc/1zpvW7s0/drawing-hamburgers-with-toothpick-background.jpg",
-  "https://i.postimg.cc/DZ6BhWW5/background-37.jpg",
-  "https://i.postimg.cc/J0dxy95G/64f68220-f9ae-4dc1-994f-d9f0e972aad4.jpg",
-  "https://i.postimg.cc/448BF9R4/set-sushi-rolls-plate-with-chopsticks.jpg",
-  "https://images.unsplash.com/photo-1517433367423-c7e5b0f35086?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1503455637927-730bce8583c0?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?q=80&w=1000&auto=format&fit=crop", 
-  "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=1000&auto=format&fit=crop"
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/29bb90d7-ca1b-4953-9142-786b7744f59c.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/64f68220-f9ae-4dc1-994f-d9f0e972aad4.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/acb25ead-177c-4fc4-9ca7-9ba9ad9eb1a3.png",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/closeup-romantic-purple-hearts-glitter-valentines-day-shiny-background-luxury-elegant-style-3d-illustration-holiday.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/drawing-hamburgers-with-toothpick-background.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/neon-circle-smoke-clouds.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/sakura-backgrounds-outdoors-blossom.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/triangular-slices-chicago-style-pizza-with-hot-sauce-transparent-background.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/vibrant-abstract-paint-strokes-bold-colors-creating-dynamic-energetic-artistic-background.jpg",
+  "https://kzeuplszcqjqaqohfbzk.supabase.co/storage/v1/object/public/backgrounds/wallpaper-ios-10.3-ipad-retina.jpg"
 ]
 
 const PALETTES = [
@@ -62,6 +64,7 @@ export default function NewGamePage() {
       wheel_palette: 'MONACO'
   })
 
+  // 🔥 4 Lots par défaut (Total 100%)
   const [prizes, setPrizes] = useState([
     { label: "1 Café Offert", color: "#3b82f6", weight: 40 },
     { label: "-10% addition", color: "#10b981", weight: 30 },
@@ -236,21 +239,19 @@ export default function NewGamePage() {
                     </div>
                 )}
 
+                {/* 🔥 ONGLET DESIGN OPTIMISÉ (2 Colonnes + DropZone + Titre) */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
-                        {/* 🔥 DESIGN OPTIMISÉ 2 COLONNES */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             
-                            {/* COLONNE GAUCHE */}
+                            {/* COLONNE GAUCHE : IDENTITÉ */}
                             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                                 <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 mb-4"><Palette size={20} className="text-blue-600"/> Identité Visuelle</h3>
-                                
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Logo du commerce</label>
                                     <div className="bg-white p-2 rounded-xl border border-slate-200"><LogoUploader currentUrl={designData.logo_url} onUrlChange={(url) => setDesignData({...designData, logo_url: url})} /></div>
                                     <p className="text-xs text-slate-400 mt-2 ml-1">Conseil : Utilisez un format PNG transparent.</p>
                                 </div>
-
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Couleur du Bouton (Actions)</label>
                                     <div className="flex items-center gap-4 p-3 bg-white rounded-xl border border-slate-200">
@@ -263,10 +264,9 @@ export default function NewGamePage() {
                                 </div>
                             </div>
 
-                            {/* COLONNE DROITE */}
+                            {/* COLONNE DROITE : STYLE JEU */}
                             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                                 <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 mb-4"><Sun size={20} className="text-orange-500"/> Style du Jeu</h3>
-                                
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Couleurs de la Roue</label>
                                     <div className="grid grid-cols-1 gap-2">
@@ -278,9 +278,8 @@ export default function NewGamePage() {
                                         ))}
                                     </div>
                                 </div>
-
                                 <div>
-                                    {/* 🔥 AJOUT DU TITRE ET DE L'ESPACE COMBLÉ */}
+                                    {/* 🔥 Ajout du titre manquant */}
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Apparence de la carte</label>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${designData.card_style === 'light' ? 'border-blue-600 bg-white text-blue-600 shadow-sm' : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}>Mode Clair</div>
@@ -303,12 +302,20 @@ export default function NewGamePage() {
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                                 {BACKGROUNDS.map((bg, index) => (
+                                    // 🔥 CORRECTION BUG AFFICHAGE : On force l'URL (bg_image_url: bg) au clic
                                     <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: bg})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) || designData.bg_image_url === bg ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-60 hover:opacity-100'}`}>
                                         <img src={bg} className="w-full h-full object-cover" alt="Fond" />
                                     </div>
                                 ))}
                             </div>
-                            <input type="url" className="w-full p-3 border rounded-xl bg-white mt-6 text-sm" value={designData.bg_image_url || ''} onChange={e => setDesignData({...designData, bg_image_url: e.target.value})} placeholder="Ou URL image personnalisée..." />
+                            {/* 🔥 REMPLACEMENT PAR LE DROP UPLOADER */}
+                            <div className="mt-6 pt-6 border-t border-slate-200">
+                                <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Ou image personnalisée</label>
+                                <BackgroundUploader 
+                                    currentUrl={designData.bg_image_url} 
+                                    onUrlChange={(url) => setDesignData({...designData, bg_image_url: url})} 
+                                />
+                            </div>
                         </div>
                     </div>
                 )}
