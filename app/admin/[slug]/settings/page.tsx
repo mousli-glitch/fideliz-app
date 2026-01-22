@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { updateRestaurantAction } from "@/app/actions/admin" 
-import { Loader2, Save, Store, Globe, Mail, Copy, Check, Star, MessageSquare } from "lucide-react"
-import { useParams } from "next/navigation"
+import { getGoogleLocationsAction, saveGoogleLocationAction } from "@/app/actions/google-business"
+import { Loader2, Save, Store, Globe, Mail, Copy, Check, MessageSquare, MapPin, AlertCircle } from "lucide-react"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import Link from "next/link" 
 
@@ -13,7 +14,14 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
   
+  // États pour Google Locations
+  const [locations, setLocations] = useState<any[]>([])
+  const [loadingLocs, setLoadingLocs] = useState(false)
+  const [selectedLocation, setSelectedLocation] = useState("")
+  
   const params = useParams()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
   // 1. Chargement sécurisé via le SLUG
@@ -28,13 +36,58 @@ export default function AdminSettingsPage() {
         .eq('slug', slugSecurise)
         .single()
 
-      if (data) setRestaurant(data)
+      if (data) {
+        setRestaurant(data)
+        // Si Google est connecté mais pas de lieu choisi, on lance le chargement
+        if (data.google_access_token && !data.google_location_id) {
+            handleLoadLocations(data.id)
+        }
+      }
       setLoading(false)
     }
     load()
   }, [params.slug])
 
-  // 2. Sauvegarde
+  // Détection retour callback Google (paramètre ?google_connected=true)
+  useEffect(() => {
+    if (searchParams.get("google_connected") === "true" && restaurant?.id) {
+      handleLoadLocations(restaurant.id)
+    }
+  }, [searchParams, restaurant])
+
+  // --- NOUVELLES FONCTIONS GOOGLE ---
+
+  const handleLinkGoogle = () => {
+    const state = restaurant.slug || restaurant.id;
+    window.location.href = `/api/auth/google?state=${state}`
+  }
+
+  const handleLoadLocations = async (id: string) => {
+    setLoadingLocs(true)
+    const res = await getGoogleLocationsAction(id)
+    if (res.success) {
+        // CORRECTION ICI : Ajout de "|| []" pour garantir que ce n'est jamais undefined
+        setLocations(res.locations || [])
+    } else {
+        alert("Erreur Google: " + res.error)
+    }
+    setLoadingLocs(false)
+  }
+
+  const handleSaveLocation = async () => {
+    if (!selectedLocation) return
+    const res = await saveGoogleLocationAction(restaurant.id, selectedLocation)
+    if (res.success) {
+        alert("Établissement lié avec succès ! 🎉")
+        setRestaurant((prev: any) => ({ ...prev, google_location_id: selectedLocation }))
+        router.refresh()
+    } else {
+        alert("Erreur sauvegarde")
+    }
+  }
+
+  // --- FIN FONCTIONS GOOGLE ---
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -42,7 +95,6 @@ export default function AdminSettingsPage() {
       await updateRestaurantAction(restaurant.id, {
         name: restaurant.name,
         contact_email: restaurant.contact_email,
-        // On ne sauvegarde plus theme et background_url ici
         ai_tone: restaurant.ai_tone
       })
       alert("✅ Paramètres mis à jour !")
@@ -60,7 +112,6 @@ export default function AdminSettingsPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // Liste des tons IA
   const aiTones = [
     { id: 'amical', name: 'Amical', desc: 'Chaleureux & Emojis', icon: '😊' },
     { id: 'professionnel', name: 'Pro', desc: 'Sérieux & Carré', icon: '💼' },
@@ -137,28 +188,76 @@ export default function AdminSettingsPage() {
                     </div>
                 </div>
 
-                {/* 2. Connexion Google */}
-                <div className="pt-6 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
-                    <div>
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5" alt="Google"/>
-                            Fiche Google Business
-                        </h3>
-                        <p className="text-sm text-slate-500 font-medium">Connectez votre établissement pour gérer vos avis.</p>
-                    </div>
-                    
-                    {restaurant.google_refresh_token ? (
-                        <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-full border border-green-200 font-bold text-sm">
-                            <Check size={16}/> Compte connecté
+                {/* 2. Connexion Google & Sélection Établissement */}
+                <div className="pt-6 border-t border-slate-100 flex flex-col items-start gap-4">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-6 w-full">
+                        <div>
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5" alt="Google"/>
+                                Fiche Google Business
+                            </h3>
+                            <p className="text-sm text-slate-500 font-medium">Connectez votre établissement pour gérer vos avis.</p>
                         </div>
-                    ) : (
-                        <Link 
-                            href={`/api/auth/google?slug=${restaurant.slug}`}
-                            className="bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center gap-3 shadow-sm active:scale-95"
-                        >
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5" alt="Google"/>
-                            Lier ma fiche Google
-                        </Link>
+                        
+                        {!restaurant.google_access_token ? (
+                             <button 
+                                type="button"
+                                onClick={handleLinkGoogle}
+                                className="bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-xl font-bold hover:bg-slate-50 transition-all flex items-center gap-3 shadow-sm active:scale-95"
+                            >
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5" alt="Google"/>
+                                Lier ma fiche Google
+                            </button>
+                        ) : restaurant.google_location_id ? (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-full border border-green-200 font-bold text-sm">
+                                <Check size={16}/> Compte connecté & Lié
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 text-yellow-700 rounded-full border border-yellow-200 font-bold text-sm">
+                                ⚠️ Action requise ci-dessous
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ZONE DE SÉLECTION DE L'ÉTABLISSEMENT */}
+                    {restaurant.google_access_token && !restaurant.google_location_id && (
+                        <div className="w-full bg-slate-50 p-6 rounded-xl border border-slate-200 mt-2 animate-in fade-in slide-in-from-top-4">
+                            <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-800">
+                                <MapPin className="text-blue-600"/> 
+                                Sélectionnez votre établissement exact
+                            </h3>
+                            
+                            {loadingLocs ? (
+                                <div className="flex items-center gap-2 text-slate-500 py-4"><Loader2 className="animate-spin"/> Recherche des lieux sur votre compte...</div>
+                            ) : locations.length > 0 ? (
+                                <div className="space-y-4">
+                                    <select 
+                                        className="w-full p-4 border rounded-xl bg-white font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+                                        onChange={(e) => setSelectedLocation(e.target.value)}
+                                        value={selectedLocation}
+                                    >
+                                        <option value="">-- Choisir dans la liste --</option>
+                                        {locations.map((loc: any) => (
+                                            <option key={loc.id} value={loc.id}>
+                                                {loc.title} ({loc.address})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button 
+                                        type="button"
+                                        onClick={handleSaveLocation}
+                                        disabled={!selectedLocation}
+                                        className="w-full bg-black text-white py-4 rounded-xl font-bold disabled:opacity-50 hover:bg-slate-900 transition-colors"
+                                    >
+                                        Valider cet établissement
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-red-500 flex items-center gap-2 bg-red-50 p-4 rounded-lg border border-red-100">
+                                    <AlertCircle/> Aucun établissement trouvé sur ce compte Google.
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
@@ -185,7 +284,7 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* Bouton Sauvegarder */}
-        <div className="flex justify-end">
+        <div className="flex justify-end pb-10">
           <button 
             type="submit" 
             disabled={saving}

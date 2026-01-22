@@ -1,67 +1,83 @@
 "use server"
 
-import { google } from 'googleapis';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from "@/utils/supabase/server"
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
-);
+// Récupérer la liste des établissements depuis Google
+export async function getGoogleLocationsAction(restaurantId: string) {
+  const supabase = await createClient()
 
-export async function getGoogleReviews(slug: string) {
-  const supabase = await createClient();
+  // 1. Récupérer le token stocké en base
+  const { data: restaurant } = await supabase
+    .from("restaurants")
+    .select("google_access_token")
+    .eq("id", restaurantId)
+    .single()
 
-  const { data: restaurant } = await (supabase
-    .from('restaurants') as any)
-    .select('google_access_token, google_refresh_token, google_location_id')
-    .eq('slug', slug)
-    .single();
-
-  if (!restaurant?.google_refresh_token) {
-    throw new Error("Compte Google non lié.");
+  if (!restaurant?.google_access_token) {
+    return { success: false, error: "Pas de token Google. Veuillez reconnecter le compte." }
   }
 
-  oauth2Client.setCredentials({
-    access_token: restaurant.google_access_token,
-    refresh_token: restaurant.google_refresh_token,
-  });
+  const accessToken = restaurant.google_access_token
 
   try {
-    const mybusinessbusinessinformation = google.mybusinessbusinessinformation('v1');
-    const mybusinessaccountmanagement = google.mybusinessaccountmanagement('v1');
-
-    let locationId = restaurant.google_location_id;
+    // 2. D'abord, il faut l'ID du compte Google ("Account ID")
+    // Google My Business fonctionne en hiérarchie : Compte -> Etablissements
+    const accountsResponse = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    })
     
-    if (!locationId) {
-      const accountsRes = await mybusinessaccountmanagement.accounts.list();
-      const accountName = accountsRes.data.accounts?.[0]?.name;
-      
-      // Correction 1 : On vérifie que accountName existe bien avant de l'utiliser
-      if (!accountName) throw new Error("Aucun compte Google Business trouvé.");
+    if (!accountsResponse.ok) throw new Error("Impossible de récupérer les comptes Google.")
+    
+    const accountsData = await accountsResponse.json()
+    const accounts = accountsData.accounts || []
 
-      // Correction 2 : On utilise "as any" sur l'appel pour éviter le conflit de type de Promise
-      const locationsRes: any = await mybusinessbusinessinformation.accounts.locations.list({
-        parent: accountName,
-        readMask: 'name,title',
-      });
-      
-      locationId = locationsRes.data.locations?.[0]?.name;
-      
-      if (!locationId) throw new Error("Aucune fiche trouvée.");
+    if (accounts.length === 0) return { success: false, error: "Aucun compte Google Business trouvé." }
 
-      await (supabase.from('restaurants') as any)
-        .update({ google_location_id: locationId })
-        .eq('slug', slug);
+    // 3. Pour chaque compte, on récupère les établissements (Locations)
+    let allLocations: any[] = []
+
+    for (const account of accounts) {
+      // API v1 Business Information
+      // readMask est obligatoire pour savoir quels champs récupérer
+      const locationsUrl = `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title,storeCode,metadata,formattedAddress`
+      
+      const locResponse = await fetch(locationsUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      })
+
+      if (locResponse.ok) {
+        const locData = await locResponse.json()
+        if (locData.locations) {
+          allLocations = [...allLocations, ...locData.locations]
+        }
+      }
     }
 
-    // Récupération des avis via l'URL directe (plus fiable)
-    const url = `https://mybusiness.googleapis.com/v4/${locationId}/reviews`;
-    const reviewsRes = await oauth2Client.request({ url });
-    
-    return (reviewsRes.data as any).reviews || [];
-  } catch (error) {
-    console.error("Erreur Google API:", error);
-    return [];
+    // 4. On formate pour le frontend
+    const formattedLocations = allLocations.map((loc: any) => ({
+      id: loc.name, // Format: "accounts/X/locations/Y"
+      title: loc.title,
+      address: loc.formattedAddress || "Adresse non spécifiée",
+      storeCode: loc.storeCode || "N/A"
+    }))
+
+    return { success: true, locations: formattedLocations }
+
+  } catch (error: any) {
+    console.error("Erreur Google API:", error)
+    return { success: false, error: error.message }
   }
+}
+
+// Sauvegarder l'établissement choisi
+export async function saveGoogleLocationAction(restaurantId: string, googleLocationId: string) {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from("restaurants")
+    .update({ google_location_id: googleLocationId })
+    .eq("id", restaurantId)
+
+  if (error) return { success: false, error: error.message }
+  return { success: true }
 }
