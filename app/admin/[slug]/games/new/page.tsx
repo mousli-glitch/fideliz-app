@@ -64,10 +64,12 @@ export default function NewGamePage() {
       wheel_palette: 'MONACO'
   })
 
+  // 🔥 MODIFICATION ICI : 4 Lots par défaut totalisant 100%
   const [prizes, setPrizes] = useState([
-    { label: "1 Café Offert", color: "#3b82f6", weight: 50 },
+    { label: "1 Café Offert", color: "#3b82f6", weight: 40 },
     { label: "-10% addition", color: "#10b981", weight: 30 },
-    { label: "Dessert Offert", color: "#f59e0b", weight: 20 }
+    { label: "Dessert Offert", color: "#f59e0b", weight: 20 },
+    { label: "Surprise !", color: "#8b5cf6", weight: 10 }
   ])
 
   // 🔥 AJOUT : LOGIQUE 100%
@@ -273,6 +275,7 @@ export default function NewGamePage() {
                             </div>
                         </div>
 
+                        {/* LISTE DES LOTS */}
                         <div className="space-y-6">
                             <div className="bg-blue-50 border border-blue-100 text-blue-800 p-4 rounded-xl text-xs md:text-sm flex items-center gap-3">
                                 <Gift size={20} className="shrink-0"/> 
@@ -285,15 +288,19 @@ export default function NewGamePage() {
                                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nom du lot</label>
                                             <input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/>
                                         </div>
-                                        <div className="w-full md:w-24 text-center">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Chance (%)</label>
+                                        <div className="w-full md:w-24">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center block">Chance (%)</label>
                                             <input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center"/>
                                         </div>
-                                        <button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center"><Trash2 size={20}/></button>
+                                        <button onClick={() => setPrizes(prizes.filter((_, i) => i !== index))} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-3 rounded-xl transition-colors self-end md:self-center">
+                                            <Trash2 size={20}/>
+                                        </button>
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", color: "#000000", weight: 10 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2"><Plus size={20}/> Ajouter un lot</button>
+                            <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", color: "#000000", weight: 10 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2">
+                                <Plus size={20}/> Ajouter un lot
+                            </button>
                         </div>
                     </div>
                 )}
@@ -302,83 +309,74 @@ export default function NewGamePage() {
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
-                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2"><Palette className="text-blue-600" size={24}/> Identité Visuelle</h3>
+                        {/* 🔥 DESIGN OPTIMISÉ 2 COLONNES */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             
-                            <div className="space-y-8">
+                            {/* COLONNE GAUCHE */}
+                            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
+                                <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 mb-4"><Palette size={20} className="text-blue-600"/> Identité Visuelle</h3>
+                                
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Logo du commerce</label>
-                                    <LogoUploader currentUrl={designData.logo_url} onUrlChange={(url) => setDesignData({...designData, logo_url: url})} />
-                                    <p className="text-xs text-slate-400 mt-2 ml-1">Conseil : Utilisez un format PNG transparent pour un meilleur rendu.</p>
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Logo du commerce</label>
+                                    <div className="bg-white p-2 rounded-xl border border-slate-200">
+                                        <LogoUploader currentUrl={designData.logo_url} onUrlChange={(url) => setDesignData({...designData, logo_url: url})} />
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-2 ml-1">Conseil : Utilisez un format PNG transparent.</p>
                                 </div>
 
-                                <div className="w-full h-px bg-slate-200"></div>
-
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Couleur Principale</label>
-                                    <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm w-full md:w-fit">
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Couleur du Bouton (Actions)</label>
+                                    <div className="flex items-center gap-4 p-3 bg-white rounded-xl border border-slate-200">
                                         <div className="relative group cursor-pointer">
-                                            <input type="color" className="absolute inset-0 w-12 h-12 opacity-0 cursor-pointer z-10" value={designData.primary_color} onChange={e => setDesignData({...designData, primary_color: e.target.value})} />
-                                            <div className="w-12 h-12 rounded-lg shadow-inner border border-slate-200" style={{ backgroundColor: designData.primary_color }}></div>
+                                            <input type="color" className="absolute inset-0 w-10 h-10 opacity-0 cursor-pointer z-10" value={designData.primary_color} onChange={e => setDesignData({...designData, primary_color: e.target.value})} />
+                                            <div className="w-10 h-10 rounded-lg shadow-inner border border-slate-200" style={{ backgroundColor: designData.primary_color }}></div>
                                         </div>
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Code HEX</span>
-                                            <input type="text" className="font-mono font-bold text-slate-800 outline-none uppercase w-24 bg-transparent text-lg" value={designData.primary_color} readOnly />
-                                        </div>
+                                        <span className="font-mono font-bold text-slate-800 uppercase">{designData.primary_color}</span>
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* 🔥 DÉPLACEMENT PALETTE ROUE ICI */}
-                                <div className="pt-6 border-t border-slate-200">
-                                    <label className="block text-sm font-bold text-slate-700 mb-4 uppercase tracking-wider">Couleurs de la roue</label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+                            {/* COLONNE DROITE */}
+                            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
+                                <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 mb-4"><Sun size={20} className="text-orange-500"/> Style du Jeu</h3>
+                                
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Couleurs de la Roue</label>
+                                    <div className="grid grid-cols-1 gap-2">
                                         {PALETTES.map((p) => (
-                                            <div key={p.id} onClick={() => setDesignData({...designData, wheel_palette: p.id})} className={`cursor-pointer p-3 md:p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-3 ${designData.wheel_palette === p.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                                                <div className="flex w-full h-10 rounded-lg overflow-hidden border border-slate-200 shadow-inner">
-                                                    <div className="flex-1" style={{ backgroundColor: p.c1 }}></div>
-                                                    <div className="flex-1" style={{ backgroundColor: p.c2 }}></div>
-                                                </div>
-                                                <span className="font-bold text-xs md:text-sm flex items-center gap-2">{p.label} {designData.wheel_palette === p.id && <Check size={16} className="text-blue-600"/>}</span>
+                                            <div key={p.id} onClick={() => setDesignData({...designData, wheel_palette: p.id})} className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${designData.wheel_palette === p.id ? 'bg-white border-blue-600 shadow-md ring-1 ring-blue-600' : 'bg-transparent border-slate-200'}`}>
+                                                <span className="font-bold text-xs text-slate-700 uppercase">{p.label}</span>
+                                                <div className="flex h-6 w-16 rounded overflow-hidden border border-slate-200"><div className="flex-1" style={{backgroundColor: p.c1}}></div><div className="flex-1" style={{backgroundColor: p.c2}}></div></div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold ${designData.card_style === 'light' ? 'border-blue-600 bg-white text-blue-600' : 'border-slate-200 text-slate-400'}`}>Mode Clair</div>
+                                    <div onClick={() => setDesignData({...designData, card_style: 'dark'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 text-white' : 'border-slate-200 text-slate-400'}`}>Mode Sombre</div>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            <h3 className="font-black text-xl text-slate-900 mb-6 flex items-center gap-2"><Sun className="text-orange-500" size={24}/> Thème au choix</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-                                <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-4 md:p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 ${designData.card_style !== 'dark' ? 'border-blue-600 bg-blue-50/50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}>Mode Clair</div>
-                                <div onClick={() => setDesignData({...designData, card_style: 'dark'})} className={`cursor-pointer p-4 md:p-6 rounded-2xl border-2 text-center transition-all flex flex-col items-center justify-center gap-4 ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-800 shadow-md text-white' : 'border-slate-200 bg-white hover:border-slate-300'}`}>Mode Sombre</div>
-                            </div>
-                        </div>
-
-                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            <h3 className="font-black text-xl text-slate-900 mb-6">Style du Titre</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                            <h3 className="font-black text-lg text-slate-800 mb-4">Fond d'écran & Titre</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                                 {TITLE_STYLES.map((style) => (
-                                    <div key={style.id} onClick={() => setDesignData({...designData, title_style: style.id})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all ${designData.title_style === style.id ? 'border-blue-600 bg-blue-50 shadow-md ring-1 ring-blue-600' : 'border-slate-200 bg-white'}`}>
-                                        <p className="font-bold text-xs md:text-sm mb-3 text-slate-700">{style.label}</p>
-                                        <div className="text-[10px] md:text-xs bg-slate-900 text-white p-2 rounded-lg font-black italic">{style.preview}</div>
+                                    <div key={style.id} onClick={() => setDesignData({...designData, title_style: style.id})} className={`cursor-pointer p-4 rounded-xl border-2 text-center transition-all ${designData.title_style === style.id ? 'border-blue-600 bg-white shadow-md' : 'border-slate-200'}`}>
+                                        <p className="font-bold text-[10px] uppercase text-slate-500 mb-2">{style.label}</p>
+                                        <div className="bg-slate-900 text-white p-2 rounded text-[10px] font-black italic">{style.preview}</div>
                                     </div>
                                 ))}
                             </div>
-                        </div>
-
-                        <div className="bg-slate-50 p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            <h3 className="font-black text-xl text-slate-900 mb-6">Fond d'écran</h3>
-                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 md:gap-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                                 {BACKGROUNDS.map((bg, index) => (
-                                    <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-70 hover:opacity-100'}`}>
+                                    <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: ''})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-60 hover:opacity-100'}`}>
                                         <img src={bg} className="w-full h-full object-cover" alt="Fond" />
                                     </div>
                                 ))}
                             </div>
-                            <div className="pt-6 border-t border-slate-200 mt-6">
-                                <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Ou image personnalisée</label>
-                                <input type="url" className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" value={designData.bg_image_url || ''} onChange={e => setDesignData({...designData, bg_image_url: e.target.value})} placeholder="https://..." />
-                            </div>
+                            <input type="url" className="w-full p-3 border rounded-xl bg-white mt-6 text-sm" value={designData.bg_image_url || ''} onChange={e => setDesignData({...designData, bg_image_url: e.target.value})} placeholder="Ou URL image personnalisée..." />
                         </div>
                     </div>
                 )}

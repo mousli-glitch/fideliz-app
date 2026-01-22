@@ -40,21 +40,27 @@ export async function createGameAction(data: any) {
       logo_url: data.design.logo_url,
     }).eq("id", restaurantId)
 
-    // 🔥 FIX CRITIQUE : On crée le jeu en 'archived' pour ne pas violer la contrainte d'unicité
-    // L'utilisateur devra l'activer manuellement depuis la liste.
+    // 4. DÉSACTIVER LES ANCIENS JEUX (AUTOMATIQUE)
+    await supabaseAdmin
+        .from("games")
+        .update({ status: 'ended' }) 
+        .eq("restaurant_id", restaurantId)
+        .eq("status", "active")
+
+    // 5. CRÉER LE NOUVEAU JEU (DIRECTEMENT ACTIF)
     const { data: game, error: gameError } = await supabaseAdmin.from("games").insert({
       restaurant_id: restaurantId,
       name: data.form.name,
-      status: "archived", // <--- ICI : On évite le conflit avec le jeu actif actuel
+      status: "active",
       active_action: data.form.active_action,
       action_url: data.form.action_url,
       validity_days: data.form.validity_days,
-      min_spend: String(data.form.min_spend), // <--- ICI : Conversion explicite en TEXTE
+      min_spend: String(data.form.min_spend),
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
       card_style: data.design.card_style || 'light',
-      wheel_palette: data.design.wheel_palette // Ajout de la palette
+      wheel_palette: data.design.wheel_palette
     }).select().single()
 
     if (gameError) throw new Error("Erreur création jeu: " + gameError.message)
@@ -65,12 +71,12 @@ export async function createGameAction(data: any) {
           game_id: game.id,
           label: p.label,
           color: p.color || "#000000",
-          weight: Number(p.weight) // Conversion explicite en NOMBRE
+          weight: Number(p.weight)
         }))
         await supabaseAdmin.from("prizes").insert(prizesToInsert)
     }
 
-    return { success: true, message: "Le jeu a été créé (en attente d'activation)." }
+    return { success: true, message: "Le jeu a été créé et activé avec succès !" }
 
   } catch (error: any) {
     console.error("🚨 ERREUR CRITIQUE:", error.message)
