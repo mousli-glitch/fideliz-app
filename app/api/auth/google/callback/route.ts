@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const state = searchParams.get("state"); 
+  const state = searchParams.get("state"); // Contient "test78" (le slug) ou un ID
 
   if (!code) {
     return NextResponse.json({ error: "No code provided" }, { status: 400 });
@@ -31,30 +31,49 @@ export async function GET(request: Request) {
 
     const { tokens } = await oauth2Client.getToken(code);
 
-    // 🔥 CORRECTION ICI : On simplifie le calcul pour satisfaire TypeScript
-    // Si expiry_date est présent, on le prend. Sinon, on ajoute 1h (3600s * 1000ms) à maintenant.
+    // Si expiry_date est présent, on le prend. Sinon, on ajoute 1h.
     const expiresAt = tokens.expiry_date || (Date.now() + 3600 * 1000);
 
-    // 3. Identifier le restaurant à mettre à jour
-    let restaurantId = state;
+    // 3. Identifier le restaurant (Correction UUID vs Slug)
+    let restaurantId = null;
+    const rawIdentifier = state; // ex: "test78"
 
+    // Petit utilitaire pour vérifier si c'est un UUID
+    const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+    if (rawIdentifier) {
+        if (isUUID(rawIdentifier)) {
+            // C'est déjà un ID, parfait
+            restaurantId = rawIdentifier;
+        } else {
+            // C'est un SLUG (ex: "test78"), il faut trouver l'ID correspondant
+            console.log("🔄 Conversion Slug -> ID pour :", rawIdentifier);
+            const { data: foundResto } = await supabase
+                .from("restaurants")
+                .select("id")
+                .eq("slug", rawIdentifier)
+                .single();
+            
+            if (foundResto) restaurantId = foundResto.id;
+        }
+    }
+
+    // Fallback : Si on n'a rien trouvé via le state, on cherche via l'user connecté
     if (!restaurantId) {
-        // On cherche le restaurant lié à l'utilisateur (owner_id ou user_id selon ta table)
-        // Vérifie bien si ta colonne s'appelle 'user_id' ou 'owner_id' dans ta table restaurants
         const { data: userResto } = await supabase
             .from("restaurants")
             .select("id")
-            .eq("user_id", user.id) 
+            .eq("user_id", user.id) // Vérifie bien que c'est 'user_id' ou 'owner_id' dans ta table
             .single();
         
         if (userResto) restaurantId = userResto.id;
     }
 
     if (!restaurantId) {
-        return NextResponse.json({ error: "Restaurant not found for this user" }, { status: 404 });
+        return NextResponse.json({ error: "Restaurant introuvable pour cet identifiant." }, { status: 404 });
     }
 
-    console.log("✅ Connexion Google réussie pour le restaurant :", restaurantId);
+    console.log("✅ Connexion Google pour l'ID :", restaurantId);
     
     // 4. Sauvegarder les tokens
     const updateData: any = {
@@ -69,7 +88,7 @@ export async function GET(request: Request) {
     const { error: updateError } = await supabase
       .from("restaurants")
       .update(updateData)
-      .eq("id", restaurantId);
+      .eq("id", restaurantId); // Maintenant c'est sûr, c'est un UUID !
 
     if (updateError) {
       console.error("Erreur sauvegarde tokens:", updateError);
@@ -77,7 +96,14 @@ export async function GET(request: Request) {
     }
 
     // 5. Redirection
-    return NextResponse.redirect(new URL(`/dashboard/settings?google_connected=true`, request.url));
+    // On redirige vers l'URL des réglages (en utilisant le slug d'origine s'il était passé dans state, sinon on laisse le dashboard gérer)
+    const redirectSlug = rawIdentifier && !isUUID(rawIdentifier) ? rawIdentifier : 'dashboard';
+    
+    // Si c'est "dashboard", l'app redirigera probablement mal si elle attend un slug, 
+    // donc on essaie de renvoyer vers la page d'où l'utilisateur venait probablement.
+    // Idéalement : /admin/[slug]/settings
+    
+    return NextResponse.redirect(new URL(`/admin/${rawIdentifier || 'dashboard'}/settings?google_connected=true`, request.url));
 
   } catch (error: any) {
     console.error("🚨 Erreur Callback Google:", error);
