@@ -1,10 +1,9 @@
 import { createClient } from "@supabase/supabase-js" 
 import { PublicGameClient } from "@/components/game/public-game-client"
 
-// 👇 Force le rafraîchissement des données à chaque visite (évite les bugs de cache couleur)
+// Force le rafraîchissement
 export const revalidate = 0 
 
-// Connexion Admin (Service Role) pour contourner le RLS et être sûr de trouver les données
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY! 
@@ -13,17 +12,13 @@ const supabase = createClient(
 export default async function PlayPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
 
-  // Vérifie si c'est un format UUID (ID compliqué) ou un texte (Slug simple)
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)
 
   let game = null
   let restaurant = null
 
-  // ---------------------------------------------------------
-  // SCÉNARIO 1 : C'est un ID de JEU (Cas du QR Code)
-  // ---------------------------------------------------------
+  // SCÉNARIO 1 : ID JEU
   if (isUUID) {
-    // On essaie de trouver le JEU directement avec cet ID
     const { data: foundGame } = await (supabase.from('games') as any)
       .select('*')
       .eq('id', slug)
@@ -31,7 +26,6 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
 
     if (foundGame) {
       game = foundGame
-      // Si on a le jeu, on récupère le restaurant associé
       const { data: foundResto } = await (supabase.from('restaurants') as any)
         .select('*')
         .eq('id', foundGame.restaurant_id)
@@ -40,25 +34,16 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     }
   }
 
-  // ---------------------------------------------------------
-  // SCÉNARIO 2 : C'est un SLUG de RESTAURANT (Cas du lien manuel)
-  // Ou si le Scénario 1 n'a rien donné
-  // ---------------------------------------------------------
+  // SCÉNARIO 2 : SLUG RESTO
   if (!restaurant) {
     let query = (supabase.from('restaurants') as any).select('*')
-    
-    // Si c'est un UUID mais pas un jeu, c'est peut-être l'ID du resto
     if (isUUID) { 
         query = query.eq('id', slug) 
     } else { 
-        // Sinon c'est le slug texte (ex: "testmicroo")
         query = query.eq('slug', slug) 
     }
-
     const { data: foundResto } = await query.single()
     restaurant = foundResto
-
-    // Si on a trouvé le resto, on cherche son jeu actif
     if (restaurant) {
         const { data: activeGame } = await (supabase.from('games') as any)
             .select('*')
@@ -69,43 +54,16 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     }
   }
 
-  // ---------------------------------------------------------
-  // VERDICT FINAL
-  // ---------------------------------------------------------
-  
-  // 1. Si le restaurant n'existe pas
-  if (!restaurant) {
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-10 font-sans">
-            <div className="text-center max-w-md">
-                <div className="text-4xl mb-4">🤔</div>
-                <h1 className="text-xl font-bold mb-2">Restaurant introuvable</h1>
-                <p className="text-slate-400 text-sm">L'identifiant <code className="bg-slate-800 p-1 rounded text-yellow-500">{slug}</code> ne correspond à aucun établissement.</p>
-            </div>
-        </div>
-    )
-  }
+  // Gestion des erreurs (Resto ou Jeu introuvable)
+  if (!restaurant) return <ErrorScreen title="Restaurant introuvable" code={slug} />
+  if (!game) return <ErrorScreen title="Pas de jeu en cours" message={`Le restaurant ${restaurant.name} n'a pas de campagne active.`} />
 
-  // 2. Si le restaurant existe mais n'a pas de jeu actif
-  if (!game) {
-     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white font-sans">
-           <div className="text-center">
-              <div className="text-4xl mb-4">😴</div>
-              <h1 className="text-xl font-bold mb-2">Pas de jeu en cours</h1>
-              <p className="text-slate-400">Le restaurant <span className="text-blue-400 font-bold">{restaurant.name}</span> n'a pas de campagne active pour le moment.</p>
-           </div>
-        </div>
-     )
-  }
-
-  // 3. Tout est bon, on charge les lots
+  // Récupération des lots
   const { data: prizes } = await (supabase.from('prizes') as any)
     .select('*')
     .eq('game_id', game.id)
     .order('weight', { ascending: false })
 
-  // 🔥 4. CORRECTION : Synchronisation sur card_style physique
   const gameWithDesign = {
     ...game,
     card_style: game.card_style || 'dark'
@@ -118,12 +76,43 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     }
   }
 
-  // 5. On lance le jeu avec l'objet fusionné
   return (
-    <PublicGameClient 
-      game={gameWithDesign} 
-      prizes={prizes || []} 
-      restaurant={restaurantWithDesign} 
-    />
+    // UTILISATION DE 100dvh pour le mobile (évite le saut de la barre d'adresse)
+    <div className="relative min-h-[100dvh] w-full overflow-hidden bg-black font-sans">
+        
+        {/* 1. IMAGE DE FOND (Fixe et Cover) */}
+        {game.bg_image_url && (
+            <div 
+                className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat z-0"
+                style={{ backgroundImage: `url('${game.bg_image_url}')` }}
+            />
+        )}
+
+        {/* 2. OVERLAY MODIFIÉ : Opacité réduite à 30% (bg-black/30) pour éclaircir le fond */}
+        <div className="absolute inset-0 bg-black/30 z-10" />
+
+        {/* 3. CONTENU (Au-dessus de tout) */}
+        <div className="relative z-20 w-full min-h-[100dvh] flex flex-col">
+            <PublicGameClient 
+                game={gameWithDesign} 
+                prizes={prizes || []} 
+                restaurant={restaurantWithDesign} 
+            />
+        </div>
+    </div>
   )
+}
+
+// Petit composant utilitaire pour les erreurs
+function ErrorScreen({ title, message, code }: { title: string, message?: string, code?: string }) {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6 font-sans text-center">
+            <div className="max-w-md space-y-4">
+                <div className="text-5xl">🤔</div>
+                <h1 className="text-2xl font-bold">{title}</h1>
+                {message && <p className="text-slate-400">{message}</p>}
+                {code && <p className="text-slate-500 text-sm font-mono bg-slate-900 p-2 rounded inline-block">{code}</p>}
+            </div>
+        </div>
+    )
 }
