@@ -54,7 +54,7 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     }
   }
 
-  // Gestion des erreurs (Resto ou Jeu introuvable)
+  // Gestion des erreurs
   if (!restaurant) return <ErrorScreen title="Restaurant introuvable" code={slug} />
   if (!game) return <ErrorScreen title="Pas de jeu en cours" message={`Le restaurant ${restaurant.name} n'a pas de campagne active.`} />
 
@@ -77,21 +77,21 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
   }
 
   return (
-    // UTILISATION DE 100dvh pour le mobile (évite le saut de la barre d'adresse)
-    <div className="relative min-h-[100dvh] w-full overflow-hidden bg-black font-sans">
+    // CORRECTION MAJEURE ICI : overflow-y-auto (au lieu de hidden) pour permettre le scroll
+    <div className="relative min-h-[100dvh] w-full overflow-y-auto bg-black font-sans">
         
-        {/* 1. IMAGE DE FOND (Fixe et Cover) */}
+        {/* 1. IMAGE DE FOND (Mise en FIXED pour qu'elle ne bouge pas au scroll) */}
         {game.bg_image_url && (
             <div 
-                className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat z-0"
+                className="fixed inset-0 w-full h-full bg-cover bg-center bg-no-repeat z-0"
                 style={{ backgroundImage: `url('${game.bg_image_url}')` }}
             />
         )}
 
-        {/* 2. OVERLAY MODIFIÉ : Opacité réduite à 30% (bg-black/30) pour éclaircir le fond */}
-        <div className="absolute inset-0 bg-black/30 z-10" />
+        {/* 2. OVERLAY (Fixe aussi) */}
+        <div className="fixed inset-0 bg-black/30 z-10" />
 
-        {/* 3. CONTENU (Au-dessus de tout) */}
+        {/* 3. CONTENU */}
         <div className="relative z-20 w-full min-h-[100dvh] flex flex-col">
             <PublicGameClient 
                 game={gameWithDesign} 
@@ -103,7 +103,6 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
   )
 }
 
-// Petit composant utilitaire pour les erreurs
 function ErrorScreen({ title, message, code }: { title: string, message?: string, code?: string }) {
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6 font-sans text-center">

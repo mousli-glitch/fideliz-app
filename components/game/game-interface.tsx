@@ -44,17 +44,18 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
     setPrize(prizeLabel)
     
     try {
+      // CORRECTION BDD : On utilise les noms de colonnes valides (prize_label_snapshot & marketing_optin)
       const { data, error } = await supabase
         .from('winners')
         .insert([
           {
             restaurant_id: restaurant.id,
-            prize: prizeLabel,
+            prize_label_snapshot: prizeLabel, // C'est le nom correct dans ta base
             email: formData.email, 
             first_name: formData.firstName, 
             phone: formData.phone, 
             status: 'available',
-            // Note: Tu pourras sauvegarder le optIn ici si ta base de données a une colonne pour ça
+            marketing_optin: formData.optIn // On sauvegarde le choix CRM
           }
         ] as any) 
         .select()
@@ -145,7 +146,7 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
                 />
               </div>
 
-              {/* SECTION CRM OPT-IN AVEC NOM DYNAMIQUE */}
+              {/* SECTION CRM OPT-IN */}
               <div className="flex items-start gap-3 px-1 py-2">
                 <div className="relative flex items-center mt-0.5">
                   <input 
@@ -159,9 +160,9 @@ export default function GameInterface({ restaurant }: GameInterfaceProps) {
                     <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>
                 </div>
+                {/* SECURITÉ : Utilisation d'un fallback si restaurant.name est vide */}
                 <label htmlFor="crm-optin" className="text-xs text-gray-500 leading-snug cursor-pointer select-none">
-                  {/* Utilisation de restaurant.name pour rendre le texte dynamique */}
-                  J'accepte d'être contacté par <span className="font-bold">{restaurant.name}</span> pour bénéficier de promotions réservées uniquement aux membres.
+                  J'accepte d'être contacté par <span className="font-bold">{restaurant.name || 'le restaurant'}</span> pour bénéficier de promotions réservées uniquement aux membres.
                 </label>
               </div>
 
