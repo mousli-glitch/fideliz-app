@@ -147,7 +147,7 @@ export type Database = {
           wheel_palette: string | null
           created_at: string | null
           end_date: string | null
-          // 🔥 AJOUTS ICI
+          // 🔥 NOUVEAUX CHAMPS AJOUTÉS POUR DÉBLOQUER
           start_date: string | null
           is_date_limit_active: boolean | null
           is_stock_limit_active: boolean | null
@@ -168,7 +168,7 @@ export type Database = {
           wheel_palette?: string | null
           created_at?: string | null
           end_date?: string | null
-          // 🔥 AJOUTS ICI
+          // 🔥 NOUVEAUX CHAMPS
           start_date?: string | null
           is_date_limit_active?: boolean | null
           is_stock_limit_active?: boolean | null
@@ -189,7 +189,7 @@ export type Database = {
           wheel_palette?: string | null
           created_at?: string | null
           end_date?: string | null
-          // 🔥 AJOUTS ICI
+          // 🔥 NOUVEAUX CHAMPS
           start_date?: string | null
           is_date_limit_active?: boolean | null
           is_stock_limit_active?: boolean | null

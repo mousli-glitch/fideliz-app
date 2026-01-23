@@ -3,12 +3,11 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, Check, Wand2, CheckCircle, AlertCircle } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, CheckCircle, AlertCircle, Calendar, Package, Wand2 } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
 import { updateGameAction } from "@/app/actions/update-game"
-// 🔥 AJOUT IMPORT
 import BackgroundUploader from "@/components/BackgroundUploader"
 
 // --- LES 10 FONDS D'ÉCRAN SUPABASE ---
@@ -45,7 +44,6 @@ export default function EditGamePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   
-  // 🔥 AJOUT : États pour les messages
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
@@ -54,13 +52,19 @@ export default function EditGamePage() {
   const [gameId, setGameId] = useState<string>("")
   const [restaurantId, setRestaurantId] = useState<string>("") 
   
+  // 🔥 AJOUT DES NOUVEAUX CHAMPS DANS FORM DATA
   const [formData, setFormData] = useState<any>({
     name: "",
     active_action: "GOOGLE_REVIEW",
     action_url: "",
     validity_days: 30, 
     min_spend: 0,
-    has_min_spend: false
+    has_min_spend: false,
+    // Nouveaux champs
+    is_date_limit_active: false,
+    start_date: "",
+    end_date: "",
+    is_stock_limit_active: false
   })
 
   const [designData, setDesignData] = useState<any>({
@@ -118,7 +122,12 @@ export default function EditGamePage() {
                 action_url: game.action_url || "",
                 validity_days: game.validity_days || 30,
                 min_spend: game.min_spend ? Number(game.min_spend) : 0,
-                has_min_spend: Number(game.min_spend) > 0
+                has_min_spend: Number(game.min_spend) > 0,
+                // Chargement des nouveaux champs
+                is_date_limit_active: game.is_date_limit_active || false,
+                start_date: game.start_date ? game.start_date.split('T')[0] : "",
+                end_date: game.end_date ? game.end_date.split('T')[0] : "",
+                is_stock_limit_active: game.is_stock_limit_active || false
             })
 
             const isDark = restaurant?.text_color === '#FFFFFF'
@@ -178,12 +187,16 @@ export default function EditGamePage() {
             restaurant_id: restaurantId,
             form: formData,
             design: designData,
-            prizes: prizes.map(p => ({ ...p, weight: Number(p.weight) }))
+            prizes: prizes.map((p: any) => ({ 
+                ...p, 
+                weight: Number(p.weight),
+                // On assure que quantity est un nombre si activé, sinon null/0
+                quantity: formData.is_stock_limit_active ? (p.quantity ? Number(p.quantity) : 0) : null
+            }))
         })
 
         if (!res.success) throw new Error(res.error)
 
-        // 🔥 SUCCÈS : Affiche l'overlay vert et redirige
         setSuccessMsg("Le jeu a bien été modifié ! Redirection...")
         
         setTimeout(() => {
@@ -198,7 +211,6 @@ export default function EditGamePage() {
     }
   }
 
-  // 🔥 ECRAN DE SUCCÈS (OVERLAY)
   if (successMsg) {
     return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-green-50 animate-in fade-in zoom-in duration-300 p-6 text-center">
@@ -223,7 +235,6 @@ export default function EditGamePage() {
                 <Link href={`/admin/${params.slug}/games`} className="flex items-center gap-2 text-slate-500 mb-2 hover:text-slate-800 text-sm font-bold"><ArrowLeft size={16}/> Retour</Link>
                 <h1 className="text-2xl md:text-3xl font-black text-slate-900 flex items-center gap-2">Modifier le Jeu ✏️</h1>
             </div>
-            {/* BOUTON CONDITIONNÉ PAR LE 100% */}
             <button 
                 onClick={handleUpdate} 
                 disabled={saving || !isWeightValid} 
@@ -234,7 +245,6 @@ export default function EditGamePage() {
             </button>
         </div>
 
-        {/* 🔥 BANDEAU D'ERREUR */}
         {errorMsg && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 flex items-center gap-3 animate-in slide-in-from-top-2">
                 <AlertCircle size={20} className="shrink-0" />
@@ -251,6 +261,7 @@ export default function EditGamePage() {
 
             <div className="p-4 md:p-8">
                 
+                {/* --- TAB 1: INFOS --- */}
                 {activeTab === 'INFOS' && (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
@@ -271,6 +282,46 @@ export default function EditGamePage() {
                                     <option value="TIKTOK">🎵 S'abonner TikTok</option>
                                 </select>
                             </div>
+                        </div>
+
+                        {/* --- BLOC DATES & PÉRIODE --- */}
+                        <div className="bg-slate-50 p-4 md:p-6 rounded-xl border border-slate-200 transition-all">
+                            <div className="flex items-center gap-3 mb-4">
+                                <input 
+                                    type="checkbox" 
+                                    id="date_limit_toggle" 
+                                    className="w-5 h-5 accent-blue-600 rounded" 
+                                    checked={formData.is_date_limit_active} 
+                                    onChange={e => setFormData({...formData, is_date_limit_active: e.target.checked})}
+                                />
+                                <label htmlFor="date_limit_toggle" className="text-sm font-bold text-slate-800 flex items-center gap-2 cursor-pointer">
+                                    <Calendar size={18} className="text-blue-600"/> 
+                                    Activer une période de validité (Dates)
+                                </label>
+                            </div>
+
+                            {formData.is_date_limit_active && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in slide-in-from-top-2">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Date de début</label>
+                                        <input 
+                                            type="date" 
+                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" 
+                                            value={formData.start_date} 
+                                            onChange={e => setFormData({...formData, start_date: e.target.value})}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Date de fin</label>
+                                        <input 
+                                            type="date" 
+                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" 
+                                            value={formData.end_date} 
+                                            onChange={e => setFormData({...formData, end_date: e.target.value})}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="bg-slate-50 p-4 md:p-6 rounded-xl border border-slate-200 transition-all">
@@ -306,7 +357,7 @@ export default function EditGamePage() {
                         </div>
 
                         <div className="border-t border-slate-100 pt-6 mt-6">
-                            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité</h3>
+                            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité des Lots</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                                 <div><label className="block text-sm font-bold text-slate-700 mb-2">Validité du Gain (Jours)</label><input type="number" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}/></div>
                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -322,6 +373,21 @@ export default function EditGamePage() {
                 {activeTab === 'LOTS' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
+                        {/* OPTIONS STOCKS */}
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center gap-3">
+                            <input 
+                                type="checkbox" 
+                                id="stock_limit_toggle" 
+                                className="w-5 h-5 accent-purple-600 rounded" 
+                                checked={formData.is_stock_limit_active} 
+                                onChange={e => setFormData({...formData, is_stock_limit_active: e.target.checked})}
+                            />
+                            <label htmlFor="stock_limit_toggle" className="text-sm font-bold text-slate-800 flex items-center gap-2 cursor-pointer">
+                                <Package size={18} className="text-purple-600"/> 
+                                Activer la gestion des stocks (Quantités limitées)
+                            </label>
+                        </div>
+
                         {/* BARRE DE PROGRESSION 100% */}
                         <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">
                             <div className="flex justify-between items-center mb-4">
@@ -355,6 +421,22 @@ export default function EditGamePage() {
                                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nom du lot</label>
                                             <input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/>
                                         </div>
+                                        
+                                        {/* GESTION STOCK SI ACTIVÉE */}
+                                        {formData.is_stock_limit_active && (
+                                            <div className="w-full md:w-24">
+                                                <label className="text-[10px] font-bold text-purple-500 uppercase tracking-wider text-center block">Stock</label>
+                                                <input 
+                                                    type="number" 
+                                                    min="0" 
+                                                    placeholder="∞"
+                                                    value={prize.quantity || ""} 
+                                                    onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].quantity = parseInt(e.target.value) || 0; setPrizes(newPrizes); }} 
+                                                    className="w-full p-2 font-bold text-purple-700 border-b border-purple-200 focus:border-purple-500 outline-none bg-purple-50/50 text-center text-lg"
+                                                />
+                                            </div>
+                                        )}
+
                                         <div className="w-full md:w-24">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center block">Chance (%)</label>
                                             <input type="number" min="1" value={prize.weight} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].weight = parseInt(e.target.value) || 1; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-blue-600 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent text-center text-lg"/>
@@ -365,21 +447,18 @@ export default function EditGamePage() {
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", weight: 10 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2">
+                            <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", weight: 10, quantity: 0 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2">
                                 <Plus size={20}/> Ajouter un lot
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* --- TAB 3: DESIGN (MÊME STRUCTURE QUE NEW PAGE) --- */}
+                {/* --- TAB 3: DESIGN (INCHANGÉ) --- */}
                 {activeTab === 'DESIGN' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
-                        
-                        {/* DESIGN OPTIMISÉ 2 COLONNES */}
+                        {/* MÊME CONTENU QUE PRÉCÉDEMMENT POUR LE DESIGN */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            
-                            {/* COLONNE GAUCHE */}
                             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                                 <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 mb-4"><Palette size={20} className="text-blue-600"/> Identité Visuelle</h3>
                                 
@@ -403,7 +482,6 @@ export default function EditGamePage() {
                                 </div>
                             </div>
 
-                            {/* COLONNE DROITE */}
                             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                                 <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 mb-4"><Sun size={20} className="text-orange-500"/> Style du Jeu</h3>
                                 
@@ -420,7 +498,6 @@ export default function EditGamePage() {
                                 </div>
 
                                 <div>
-                                    {/* 🔥 TITRE ET ESPACE COMBLÉ */}
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Apparence de la carte</label>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div onClick={() => setDesignData({...designData, card_style: 'light'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${designData.card_style === 'light' ? 'border-blue-600 bg-white text-blue-600 shadow-sm' : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}>Mode Clair</div>
@@ -443,13 +520,11 @@ export default function EditGamePage() {
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                                 {BACKGROUNDS.map((bg, index) => (
-                                    // 🔥 CORRECTION BUG AFFICHAGE : On force l'URL (bg_image_url: bg) au clic
                                     <div key={index} onClick={() => setDesignData({...designData, bg_choice: index, bg_image_url: bg})} className={`relative aspect-[9/16] cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${(!designData.bg_image_url && designData.bg_choice === index) || designData.bg_image_url === bg ? 'border-blue-600 shadow-lg scale-105 z-10' : 'border-transparent opacity-60 hover:opacity-100'}`}>
                                         <img src={bg} className="w-full h-full object-cover" alt="Fond" />
                                     </div>
                                 ))}
                             </div>
-                            {/* 🔥 REMPLACEMENT PAR LE DROP UPLOADER */}
                             <div className="mt-6 pt-6 border-t border-slate-200">
                                 <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Ou image personnalisée</label>
                                 <BackgroundUploader 
