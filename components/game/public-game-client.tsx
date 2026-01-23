@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { registerWinnerAction } from "@/app/actions/register-winner"
-import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle } from "lucide-react"
+import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle, CalendarDays } from "lucide-react"
 import confetti from "canvas-confetti"
 import { motion, AnimatePresence, Variants, useAnimation } from "framer-motion"
 import QRCode from "react-qr-code"
@@ -259,6 +259,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }
     
     // 4. Retrouver l'index de ce lot sur la roue (pour l'animation)
+    // Attention : On doit trouver l'index dans le tableau ORIGINAL `prizes`
     const selectedPrizeIndex = prizes.findIndex(p => p.id === selectedPrize.id);
     
     const numSegments = prizes.length
@@ -310,8 +311,10 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       setStep('TICKET')
     } catch (err: any) {
       console.error("Erreur:", err)
+      // Si erreur stock épuisé au moment de valider
       if (err.message.includes('stock')) {
           alert("Désolé, le dernier lot vient de partir ! Voici un lot de consolation.");
+          // Ici on pourrait rediriger ou donner un lot par défaut
       }
       setDbWinnerId("ERREUR-CONTACT-STAFF") 
       setStep('TICKET')
@@ -436,21 +439,38 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             <div className={`relative z-10 ${dynamicCardClass} max-w-sm`}>
                 <div className="flex justify-center mb-6">
                     {gameState === 'NOT_STARTED' && <Clock className="w-16 h-16 text-blue-500" />}
-                    {gameState === 'ENDED' && <Clock className="w-16 h-16 text-red-500" />}
+                    
+                    {/* 🔥 MODIFICATION POUR LE JEU TERMINÉ */}
+                    {gameState === 'ENDED' && <CalendarDays className="w-16 h-16 text-purple-400 animate-pulse" />}
+                    
                     {gameState === 'SOLD_OUT' && <AlertTriangle className="w-16 h-16 text-yellow-500" />}
                 </div>
 
-                <h1 className="text-2xl font-black mb-4 uppercase">
-                    {gameState === 'NOT_STARTED' && "Le jeu n'a pas commencé"}
-                    {gameState === 'ENDED' && "Le jeu est terminé"}
-                    {gameState === 'SOLD_OUT' && "Rupture de Stock !"}
-                </h1>
+                {/* 🔥 AFFICHAGE CONDITIONNEL DU TEXTE MARKETING */}
+                {gameState === 'ENDED' ? (
+                    <>
+                        <h1 className="text-2xl font-black mb-4 uppercase text-purple-200">
+                            C'est terminé !
+                        </h1>
+                        <p className={`mb-6 text-sm font-medium ${subTextClass}`}>
+                            Mais ce n'est que partie remise !<br/>
+                            <span className="text-white font-bold block mt-2">Une nouvelle chance arrive bientôt.</span>
+                            Restez connecté pour ne pas rater le prochain jeu ! 🚀
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <h1 className="text-2xl font-black mb-4 uppercase">
+                            {gameState === 'NOT_STARTED' && "Le jeu n'a pas commencé"}
+                            {gameState === 'SOLD_OUT' && "Rupture de Stock !"}
+                        </h1>
 
-                <p className={`mb-6 text-sm font-medium ${subTextClass}`}>
-                    {gameState === 'NOT_STARTED' && `Revenez le ${new Date(game.start_date!).toLocaleDateString('fr-FR')} pour tenter votre chance !`}
-                    {gameState === 'ENDED' && "Désolé, cette campagne est terminée. Merci de votre fidélité !"}
-                    {gameState === 'SOLD_OUT' && "Wow ! Vous avez dévalisé la boutique ! Tous les lots ont été remportés. Le jeu reviendra très vite."}
-                </p>
+                        <p className={`mb-6 text-sm font-medium ${subTextClass}`}>
+                            {gameState === 'NOT_STARTED' && `Revenez le ${new Date(game.start_date!).toLocaleDateString('fr-FR')} pour tenter votre chance !`}
+                            {gameState === 'SOLD_OUT' && "Wow ! Vous avez dévalisé la boutique ! Tous les lots ont été remportés. Le jeu reviendra très vite."}
+                        </p>
+                    </>
+                )}
 
                 {restaurant.logo_url && (
                     <img src={restaurant.logo_url} className="h-12 w-auto mx-auto opacity-50" alt="Logo" />
