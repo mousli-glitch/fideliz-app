@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { registerWinnerAction } from "@/app/actions/register-winner"
-import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler } from "lucide-react"
+import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle } from "lucide-react"
 import confetti from "canvas-confetti"
 import { motion, AnimatePresence, Variants, useAnimation } from "framer-motion"
 import QRCode from "react-qr-code"
@@ -52,12 +52,59 @@ type Props = {
     bg_image_url?: string;
     card_style?: string; 
     wheel_palette?: 'MONACO' | 'GATSBY' | 'EMERALD';
+    // Nouveaux champs
+    is_date_limit_active?: boolean;
+    start_date?: string;
+    end_date?: string;
+    is_stock_limit_active?: boolean;
   }
-  prizes: { id: string; label: string; color: string; weight: number }[]
+  prizes: { id: string; label: string; color: string; weight: number; quantity?: number | null }[]
   restaurant: { name: string; logo_url?: string; primary_color?: string; design?: any }
 }
 
 export function PublicGameClient({ game, prizes, restaurant }: Props) {
+  // --- VÉRIFICATION DATES ET VALIDITÉ ---
+  const [gameState, setGameState] = useState<'OPEN' | 'NOT_STARTED' | 'ENDED' | 'SOLD_OUT'>('OPEN')
+
+  useEffect(() => {
+    // 1. Check Dates (Correction Robuste)
+    if (game.is_date_limit_active) {
+        const now = new Date();
+        
+        if (game.start_date) {
+            const startDate = new Date(game.start_date);
+            if (startDate > now) {
+                setGameState('NOT_STARTED');
+                return;
+            }
+        }
+        
+        if (game.end_date) {
+            const endDate = new Date(game.end_date);
+            if (endDate < now) {
+                setGameState('ENDED');
+                return;
+            }
+        }
+    }
+
+    // 2. Check Global Stock (Si tous les lots sont à 0)
+    // CORRECTION TS : On utilise Number() pour être sûr de comparer des nombres
+    if (game.is_stock_limit_active) {
+        const availablePrizes = prizes.filter(p => 
+            p.quantity === null || 
+            p.quantity === undefined || 
+            Number(p.quantity) > 0
+        );
+        
+        if (availablePrizes.length === 0) {
+            setGameState('SOLD_OUT');
+            return;
+        }
+    }
+  }, [game, prizes]);
+
+
   const [step, setStep] = useState<'LANDING' | 'INSTRUCTIONS' | 'VERIFYING' | 'WHEEL' | 'FORM' | 'TICKET'>('LANDING')
   const [spinning, setSpinning] = useState(false)
   const [winner, setWinner] = useState<any>(null)
@@ -173,24 +220,54 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }
   };
 
+  // 🔥 ALGORITHME DE TIRAGE SÉCURISÉ (STOCKS)
   const handleSpin = async () => {
     if (spinning) return
     setSpinning(true)
     setLightMode('SPIN')
 
-    const totalWeight = prizes.reduce((sum, p) => sum + p.weight, 0)
-    let random = Math.random() * totalWeight
-    let selectedPrizeIndex = 0
-    for (let i = 0; i < prizes.length; i++) {
-        if (random < prizes[i].weight) { selectedPrizeIndex = i; break }
-        random -= prizes[i].weight
+    // 1. Filtrer les lots disponibles (Stock > 0 ou Infini)
+    // CORRECTION TS : On vérifie explicitement null ET undefined
+    const availablePrizes = prizes.filter(p => 
+        !game.is_stock_limit_active || 
+        p.quantity === null || 
+        p.quantity === undefined || 
+        Number(p.quantity) > 0
+    );
+
+    // Sécurité ultime : Si tout est épuisé pendant qu'il joue
+    if (availablePrizes.length === 0) {
+        alert("Oups ! Tous les lots viennent d'être remportés à l'instant !");
+        setGameState('SOLD_OUT');
+        setSpinning(false);
+        return;
     }
-    const selectedPrize = prizes[selectedPrizeIndex]
+
+    // 2. Calculer le poids total des lots DISPONIBLES SEULEMENT
+    const totalWeight = availablePrizes.reduce((sum, p) => sum + p.weight, 0)
+    
+    // 3. Tirage au sort pondéré
+    let random = Math.random() * totalWeight
+    let selectedPrize = availablePrizes[0]
+    
+    for (const prize of availablePrizes) {
+        if (random < prize.weight) {
+            selectedPrize = prize
+            break
+        }
+        random -= prize.weight
+    }
+    
+    // 4. Retrouver l'index de ce lot sur la roue (pour l'animation)
+    const selectedPrizeIndex = prizes.findIndex(p => p.id === selectedPrize.id);
     
     const numSegments = prizes.length
     const segmentAngle = 360 / numSegments
     const winningSegmentCenter = (selectedPrizeIndex * segmentAngle) + (segmentAngle / 2)
-    const finalRotation = 1800 - winningSegmentCenter
+    
+    // On ajoute des tours aléatoires (entre 5 et 10 tours complets)
+    const extraSpins = 360 * (5 + Math.floor(Math.random() * 5)); 
+    const finalRotation = extraSpins + (360 - winningSegmentCenter);
     
     await wheelControls.start({
         rotate: finalRotation,
@@ -206,7 +283,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     setLightMode('WIN')
     setWinFlash(true) 
     setTimeout(() => setWinFlash(false), 200); 
-    setWinner(selectedPrize)
+    setWinner(selectedPrize) // On stocke le gagnant
     confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
 
     setTimeout(() => {
@@ -226,7 +303,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         email: formData.email, 
         phone: formData.phone || "", 
         first_name: formData.firstName, 
-        // 🔥 CORRECTION : Envoi du Opt-In CRM à l'action server
         opt_in: formData.optIn
       })
       if (!result.success || !result.ticket) throw new Error(result.error || "Erreur inconnue")
@@ -234,6 +310,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       setStep('TICKET')
     } catch (err: any) {
       console.error("Erreur:", err)
+      if (err.message.includes('stock')) {
+          alert("Désolé, le dernier lot vient de partir ! Voici un lot de consolation.");
+      }
       setDbWinnerId("ERREUR-CONTACT-STAFF") 
       setStep('TICKET')
     } finally {
@@ -269,7 +348,19 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             <g key={index}>
                 <path d={pathData} fill={sliceColor} />
                 <line x1="0" y1="0" x2={x1} y2={y1} stroke="url(#goldStroke)" strokeWidth="0.015" />
-                <text x={textTranslateX} y="0" fill="white" fontSize={numSegments > 10 ? "0.045" : "0.06"} fontWeight="900" textAnchor="middle" alignmentBaseline="middle" fontFamily="Arial Black, sans-serif" transform={`rotate(${textRotateAngle})`} style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.9)' }} dominantBaseline="central">
+                <text 
+                    x={textTranslateX} 
+                    y="0" 
+                    fill="white" 
+                    fontSize={numSegments > 10 ? "0.045" : "0.06"} 
+                    fontWeight="900" 
+                    textAnchor="middle" 
+                    alignmentBaseline="middle" 
+                    fontFamily="Arial Black, sans-serif" 
+                    transform={`rotate(${textRotateAngle})`} 
+                    style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.9)' }} 
+                    dominantBaseline="central"
+                >
                     {prize.label.length > 18 ? prize.label.substring(0, 16) + '..' : prize.label}
                 </text>
             </g>
@@ -335,6 +426,41 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }
   }
 
+  // --- GESTION DES ÉCRANS DE BLOCAGE (DATES/STOCKS) ---
+  if (gameState !== 'OPEN') {
+    return (
+        <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
+             style={{ backgroundImage: `url(${currentBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+            <div className="absolute inset-0 bg-black/80 z-0"></div>
+            
+            <div className={`relative z-10 ${dynamicCardClass} max-w-sm`}>
+                <div className="flex justify-center mb-6">
+                    {gameState === 'NOT_STARTED' && <Clock className="w-16 h-16 text-blue-500" />}
+                    {gameState === 'ENDED' && <Clock className="w-16 h-16 text-red-500" />}
+                    {gameState === 'SOLD_OUT' && <AlertTriangle className="w-16 h-16 text-yellow-500" />}
+                </div>
+
+                <h1 className="text-2xl font-black mb-4 uppercase">
+                    {gameState === 'NOT_STARTED' && "Le jeu n'a pas commencé"}
+                    {gameState === 'ENDED' && "Le jeu est terminé"}
+                    {gameState === 'SOLD_OUT' && "Rupture de Stock !"}
+                </h1>
+
+                <p className={`mb-6 text-sm font-medium ${subTextClass}`}>
+                    {gameState === 'NOT_STARTED' && `Revenez le ${new Date(game.start_date!).toLocaleDateString('fr-FR')} pour tenter votre chance !`}
+                    {gameState === 'ENDED' && "Désolé, cette campagne est terminée. Merci de votre fidélité !"}
+                    {gameState === 'SOLD_OUT' && "Wow ! Vous avez dévalisé la boutique ! Tous les lots ont été remportés. Le jeu reviendra très vite."}
+                </p>
+
+                {restaurant.logo_url && (
+                    <img src={restaurant.logo_url} className="h-12 w-auto mx-auto opacity-50" alt="Logo" />
+                )}
+            </div>
+        </div>
+    )
+  }
+
+  // --- RENDU NORMAL DU JEU ---
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 overflow-hidden relative" 
         style={{ backgroundImage: `url(${currentBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
@@ -493,98 +619,97 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                 </button>
             </motion.div>
             )}
-        </AnimatePresence>
 
-        {step === 'FORM' && winner && (
-        <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100] animate-in fade-in duration-300">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
-                <div className="text-center mb-6">
-                    <h2 className="text-4xl font-black mb-2 uppercase tracking-tighter" style={{ color: primaryColor }}>
-                        Félicitations !
-                    </h2>
-                    <p className={`${subTextClass} font-bold`}>Vous avez gagné :</p>
-                    <div className="mt-3 bg-yellow-100 text-yellow-800 py-3 px-6 rounded-xl inline-block font-black text-xl border-2 border-yellow-200">{winner.label}</div>
-                </div>
-                <form onSubmit={handleFormSubmit} className="space-y-4">
-                    <input required placeholder="Prénom" value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
-                    <input required type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
-                    <input type="tel" placeholder="Mobile" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
-                   
-                    <div className="flex items-start gap-3 mt-4">
-                        <input type="checkbox" id="optin" checked={formData.optIn} onChange={(e) => setFormData({...formData, optIn: e.target.checked})} className="mt-1 w-5 h-5 rounded accent-blue-600" />
-                        <label htmlFor="optin" className={`text-xs ${subTextClass}`}>
-                            {/* 🔥 PHRASE CORRIGÉE ET DYNAMIQUE ICI */}
-                            J'accepte d'être contacté par <span className="font-bold">{restaurant.name}</span> pour bénéficier de promotions réservées uniquement aux membres.
-                        </label>
+            {step === 'FORM' && winner && (
+            <motion.div key="form" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm z-[100]">
+                <div className={`w-full max-w-sm rounded-3xl p-8 shadow-2xl relative border ${cardBgClass}`}>
+                    <div className="text-center mb-6">
+                        <h2 className="text-4xl font-black mb-2 uppercase tracking-tighter" style={{ color: primaryColor }}>
+                            Félicitations !
+                        </h2>
+                        <p className={`${subTextClass} font-bold`}>Vous avez gagné :</p>
+                        <div className="mt-3 bg-yellow-100 text-yellow-800 py-3 px-6 rounded-xl inline-block font-black text-xl border-2 border-yellow-200">{winner.label}</div>
                     </div>
-                   
-                    <button 
-                        type="submit" 
-                        disabled={isSubmitting} 
-                        className={`w-full text-white font-bold text-lg py-4 rounded-xl mt-4 shadow-md transition-all flex items-center justify-center gap-3 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`} 
-                        style={{ backgroundColor: primaryColor }}
-                    >
-                        {isSubmitting && (
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        )}
-                        {isSubmitting ? "TRAITEMENT EN COURS..." : "RÉCUPÉRER MON LOT"}
-                    </button>
-                </form>
+                    <form onSubmit={handleFormSubmit} className="space-y-4">
+                        <input required placeholder="Prénom" value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
+                        <input required type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
+                        <input type="tel" placeholder="Mobile" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
+                       
+                        <div className="flex items-start gap-3 mt-4">
+                            <input type="checkbox" id="optin" checked={formData.optIn} onChange={(e) => setFormData({...formData, optIn: e.target.checked})} className="mt-1 w-5 h-5 rounded accent-blue-600" />
+                            <label htmlFor="optin" className={`text-xs ${subTextClass}`}>
+                                J'accepte d'être contacté par <span className="font-bold">{restaurant.name}</span> pour bénéficier de promotions réservées uniquement aux membres.
+                            </label>
+                        </div>
+                       
+                        <button 
+                            type="submit" 
+                            disabled={isSubmitting} 
+                            className={`w-full text-white font-bold text-lg py-4 rounded-xl mt-4 shadow-md transition-all flex items-center justify-center gap-3 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`} 
+                            style={{ backgroundColor: primaryColor }}
+                        >
+                            {isSubmitting && (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            )}
+                            {isSubmitting ? "TRAITEMENT EN COURS..." : "RÉCUPÉRER MON LOT"}
+                        </button>
+                    </form>
+                </div>
             </motion.div>
-        </div>
-        )}
+            )}
 
-        {step === 'TICKET' && winner && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300">
-             <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
-                  
-              <div className="bg-gray-900 p-6 border-b border-dashed border-gray-700 relative flex items-center justify-center gap-4 text-left pb-10">
-                  <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
-                  <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
-                   
-                  {restaurant.logo_url && (
-                      <img src={restaurant.logo_url} alt={restaurant.name} className="w-24 h-24 object-contain bg-white/5 rounded-lg p-1" />
-                  )}
-                   
-                  <div>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">À présenter chez</p>
-                      <h2 className="text-xl font-black text-white leading-tight">{restaurant.name}</h2>
-                  </div>
-              </div>
-
-              <div className="bg-gray-900 p-4 text-center relative z-20 -mt-8">
-                  <div className="bg-green-100 text-green-800 px-6 py-3 rounded-xl inline-block border border-green-200 shadow-sm">
-                      <p className="text-lg font-black">{winner.label}</p>
-                  </div>
-              </div>
-
-              <div className="p-8 flex flex-col items-center bg-black">
-                  <div className="bg-white p-3 rounded-xl mb-6 shadow-lg">
-                      {dbWinnerId ? (
-                        <QRCode value={`${window.location.origin}/verify/${dbWinnerId}`} size={150} bgColor="#ffffff" fgColor="#000000" />
-                      ) : (
-                        <div className="w-[150px] h-[150px] bg-gray-800 animate-pulse rounded"></div>
+            {step === 'TICKET' && winner && (
+            <motion.div key="ticket" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+                 <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
+                      
+                  <div className="bg-gray-900 p-6 border-b border-dashed border-gray-700 relative flex items-center justify-center gap-4 text-left pb-10">
+                      <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
+                      <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
+                       
+                      {restaurant.logo_url && (
+                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-24 h-24 object-contain bg-white/5 rounded-lg p-1" />
                       )}
+                       
+                      <div>
+                          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">À présenter chez</p>
+                          <h2 className="text-xl font-black text-white leading-tight">{restaurant.name}</h2>
+                      </div>
                   </div>
-                  <p className="text-xs font-bold text-gray-400 mb-6 uppercase tracking-wider">Code Unique</p>
-                   
-                  <div className="w-full text-left bg-gray-900 p-4 rounded-xl border border-gray-800 mb-6">
-                      <div className="flex justify-between mb-2"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
-                      <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
+
+                  <div className="bg-gray-900 p-4 text-center relative z-20 -mt-8">
+                      <div className="bg-green-100 text-green-800 px-6 py-3 rounded-xl inline-block border border-green-200 shadow-sm">
+                          <p className="text-lg font-black">{winner.label}</p>
+                      </div>
                   </div>
-                   
-                  <div className="grid grid-cols-2 gap-3 w-full" data-html2canvas-ignore="true">
-                      <button onClick={handleDownloadTicket} className="flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors">
-                          <Download size={16}/> Enregistrer
-                      </button>
-                      <button onClick={handleShareTicket} className="flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl text-sm hover:opacity-90 transition-opacity" style={{ backgroundColor: primaryColor }}>
-                          <Share2 size={16}/> Offrir
-                      </button>
+
+                  <div className="p-8 flex flex-col items-center bg-black">
+                      <div className="bg-white p-3 rounded-xl mb-6 shadow-lg">
+                          {dbWinnerId ? (
+                            <QRCode value={`${window.location.origin}/verify/${dbWinnerId}`} size={150} bgColor="#ffffff" fgColor="#000000" />
+                          ) : (
+                            <div className="w-[150px] h-[150px] bg-gray-800 animate-pulse rounded"></div>
+                          )}
+                      </div>
+                      <p className="text-xs font-bold text-gray-400 mb-6 uppercase tracking-wider">Code Unique</p>
+                       
+                      <div className="w-full text-left bg-gray-900 p-4 rounded-xl border border-gray-800 mb-6">
+                          <div className="flex justify-between mb-2"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
+                          <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
+                      </div>
+                       
+                      <div className="grid grid-cols-2 gap-3 w-full" data-html2canvas-ignore="true">
+                          <button onClick={handleDownloadTicket} className="flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors">
+                              <Download size={16}/> Enregistrer
+                          </button>
+                          <button onClick={handleShareTicket} className="flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl text-sm hover:opacity-90 transition-opacity" style={{ backgroundColor: primaryColor }}>
+                              <Share2 size={16}/> Offrir
+                          </button>
+                      </div>
                   </div>
-              </div>
-           </div>
-        </div>
-        )}
+               </div>
+            </motion.div>
+            )}
+        </AnimatePresence>
       </div>
     </div>
   )

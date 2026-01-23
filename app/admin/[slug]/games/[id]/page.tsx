@@ -52,7 +52,7 @@ export default function EditGamePage() {
   const [gameId, setGameId] = useState<string>("")
   const [restaurantId, setRestaurantId] = useState<string>("") 
   
-  // 🔥 AJOUT DES NOUVEAUX CHAMPS DANS FORM DATA
+  // Données du formulaire
   const [formData, setFormData] = useState<any>({
     name: "",
     active_action: "GOOGLE_REVIEW",
@@ -60,7 +60,6 @@ export default function EditGamePage() {
     validity_days: 30, 
     min_spend: 0,
     has_min_spend: false,
-    // Nouveaux champs
     is_date_limit_active: false,
     start_date: "",
     end_date: "",
@@ -123,7 +122,6 @@ export default function EditGamePage() {
                 validity_days: game.validity_days || 30,
                 min_spend: game.min_spend ? Number(game.min_spend) : 0,
                 has_min_spend: Number(game.min_spend) > 0,
-                // Chargement des nouveaux champs
                 is_date_limit_active: game.is_date_limit_active || false,
                 start_date: game.start_date ? game.start_date.split('T')[0] : "",
                 end_date: game.end_date ? game.end_date.split('T')[0] : "",
@@ -190,8 +188,8 @@ export default function EditGamePage() {
             prizes: prizes.map((p: any) => ({ 
                 ...p, 
                 weight: Number(p.weight),
-                // On assure que quantity est un nombre si activé, sinon null/0
-                quantity: formData.is_stock_limit_active ? (p.quantity ? Number(p.quantity) : 0) : null
+                // 🔥 CORRECTION DU ZÉRO ICI : Si null ou vide -> null, sinon le nombre (même 0)
+                quantity: formData.is_stock_limit_active ? (p.quantity === null || p.quantity === "" ? null : Number(p.quantity)) : null
             }))
         })
 
@@ -210,6 +208,29 @@ export default function EditGamePage() {
         setSaving(false)
     }
   }
+
+  // --- NOUVEAU COMPOSANT TOGGLE SWITCH PRO ---
+  const ToggleSwitch = ({ checked, onChange, label, subLabel, icon: Icon }: any) => (
+    <div 
+        onClick={() => onChange(!checked)} 
+        className={`group cursor-pointer rounded-xl border p-4 transition-all duration-200 flex items-center justify-between shadow-sm ${
+            checked ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200 hover:border-slate-300'
+        }`}
+    >
+        <div className="flex items-center gap-4">
+            <div className={`p-2.5 rounded-lg transition-colors ${checked ? 'bg-blue-200 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>
+                <Icon size={22} />
+            </div>
+            <div>
+                <p className={`text-sm font-bold ${checked ? 'text-blue-900' : 'text-slate-700'}`}>{label}</p>
+                {subLabel && <p className="text-xs text-slate-400 mt-0.5 font-medium">{subLabel}</p>}
+            </div>
+        </div>
+        <div className={`w-12 h-7 flex items-center rounded-full p-1 transition-colors duration-300 ${checked ? 'bg-blue-600' : 'bg-slate-200'}`}>
+            <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-300 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+        </div>
+    </div>
+  )
 
   if (successMsg) {
     return (
@@ -284,38 +305,32 @@ export default function EditGamePage() {
                             </div>
                         </div>
 
-                        {/* --- BLOC DATES & PÉRIODE --- */}
-                        <div className="bg-slate-50 p-4 md:p-6 rounded-xl border border-slate-200 transition-all">
-                            <div className="flex items-center gap-3 mb-4">
-                                <input 
-                                    type="checkbox" 
-                                    id="date_limit_toggle" 
-                                    className="w-5 h-5 accent-blue-600 rounded" 
-                                    checked={formData.is_date_limit_active} 
-                                    onChange={e => setFormData({...formData, is_date_limit_active: e.target.checked})}
-                                />
-                                <label htmlFor="date_limit_toggle" className="text-sm font-bold text-slate-800 flex items-center gap-2 cursor-pointer">
-                                    <Calendar size={18} className="text-blue-600"/> 
-                                    Activer une période de validité (Dates)
-                                </label>
-                            </div>
+                        {/* --- BLOC DATES & PÉRIODE (Design PRO) --- */}
+                        <div className="space-y-4 pt-2">
+                            <ToggleSwitch 
+                                checked={formData.is_date_limit_active} 
+                                onChange={(val: boolean) => setFormData({...formData, is_date_limit_active: val})}
+                                label="Programmer la disponibilité"
+                                subLabel="Définir une date de début et de fin pour cette campagne."
+                                icon={Calendar}
+                            />
 
                             {formData.is_date_limit_active && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in slide-in-from-top-2">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 bg-slate-50 rounded-xl border border-slate-200 animate-in slide-in-from-top-2 shadow-inner">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Date de début</label>
+                                        <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Date de début</label>
                                         <input 
                                             type="date" 
-                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" 
+                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
                                             value={formData.start_date} 
                                             onChange={e => setFormData({...formData, start_date: e.target.value})}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Date de fin</label>
+                                        <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Date de fin</label>
                                         <input 
                                             type="date" 
-                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500" 
+                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
                                             value={formData.end_date} 
                                             onChange={e => setFormData({...formData, end_date: e.target.value})}
                                         />
@@ -324,7 +339,7 @@ export default function EditGamePage() {
                             )}
                         </div>
 
-                        <div className="bg-slate-50 p-4 md:p-6 rounded-xl border border-slate-200 transition-all">
+                        <div className="bg-slate-50 p-4 md:p-6 rounded-xl border border-slate-200 transition-all mt-4">
                             <label className="block text-sm font-bold text-slate-700 mb-2">
                                 {formData.active_action === 'GOOGLE_REVIEW' ? 'Rechercher votre établissement :' : 'Lien URL de votre page :'}
                             </label>
@@ -356,7 +371,7 @@ export default function EditGamePage() {
                             )}
                         </div>
 
-                        <div className="border-t border-slate-100 pt-6 mt-6">
+                        <div className="border-t border-slate-100 pt-6 mt-2">
                             <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité des Lots</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                                 <div><label className="block text-sm font-bold text-slate-700 mb-2">Validité du Gain (Jours)</label><input type="number" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}/></div>
@@ -373,20 +388,14 @@ export default function EditGamePage() {
                 {activeTab === 'LOTS' && (
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
-                        {/* OPTIONS STOCKS */}
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center gap-3">
-                            <input 
-                                type="checkbox" 
-                                id="stock_limit_toggle" 
-                                className="w-5 h-5 accent-purple-600 rounded" 
-                                checked={formData.is_stock_limit_active} 
-                                onChange={e => setFormData({...formData, is_stock_limit_active: e.target.checked})}
-                            />
-                            <label htmlFor="stock_limit_toggle" className="text-sm font-bold text-slate-800 flex items-center gap-2 cursor-pointer">
-                                <Package size={18} className="text-purple-600"/> 
-                                Activer la gestion des stocks (Quantités limitées)
-                            </label>
-                        </div>
+                        {/* OPTIONS STOCKS (Switch PRO) */}
+                        <ToggleSwitch 
+                            checked={formData.is_stock_limit_active} 
+                            onChange={(val: boolean) => setFormData({...formData, is_stock_limit_active: val})}
+                            label="Limiter les quantités (Stocks)"
+                            subLabel="Définir un nombre maximum de gagnants par lot."
+                            icon={Package}
+                        />
 
                         {/* BARRE DE PROGRESSION 100% */}
                         <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">
@@ -422,7 +431,7 @@ export default function EditGamePage() {
                                             <input type="text" maxLength={15} value={prize.label} onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].label = e.target.value; setPrizes(newPrizes); }} className="w-full p-2 font-bold text-slate-800 border-b border-slate-200 focus:border-blue-500 outline-none bg-transparent"/>
                                         </div>
                                         
-                                        {/* GESTION STOCK SI ACTIVÉE */}
+                                        {/* GESTION STOCK (Correction du 0 avec ??) */}
                                         {formData.is_stock_limit_active && (
                                             <div className="w-full md:w-24">
                                                 <label className="text-[10px] font-bold text-purple-500 uppercase tracking-wider text-center block">Stock</label>
@@ -430,8 +439,14 @@ export default function EditGamePage() {
                                                     type="number" 
                                                     min="0" 
                                                     placeholder="∞"
-                                                    value={prize.quantity || ""} 
-                                                    onChange={(e) => { const newPrizes = [...prizes]; newPrizes[index].quantity = parseInt(e.target.value) || 0; setPrizes(newPrizes); }} 
+                                                    value={prize.quantity ?? ""} 
+                                                    onChange={(e) => { 
+                                                        const newPrizes = [...prizes]; 
+                                                        const val = e.target.value;
+                                                        // 🔥 Si vide -> null (infini). Sinon -> Nombre
+                                                        newPrizes[index].quantity = val === "" ? null : Number(val); 
+                                                        setPrizes(newPrizes); 
+                                                    }} 
                                                     className="w-full p-2 font-bold text-purple-700 border-b border-purple-200 focus:border-purple-500 outline-none bg-purple-50/50 text-center text-lg"
                                                 />
                                             </div>
@@ -447,7 +462,7 @@ export default function EditGamePage() {
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", weight: 10, quantity: 0 }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2">
+                            <button onClick={() => setPrizes([...prizes, { label: "Nouveau lot", weight: 10, quantity: null }])} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2">
                                 <Plus size={20}/> Ajouter un lot
                             </button>
                         </div>
