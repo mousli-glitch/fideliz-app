@@ -13,10 +13,10 @@ export async function registerWinnerAction(data: any) {
   console.log("🚀 Action registerWinnerAction lancée avec :", data)
 
   try {
-    // 1. On vérifie le jeu
+    // 1. On vérifie le jeu et ses paramètres (Stocks activés ?)
     const { data: game, error: gameError } = await supabaseAdmin
       .from('games')
-      .select('validity_days, min_spend, restaurant_id') 
+      .select('validity_days, min_spend, restaurant_id, is_stock_limit_active') 
       .eq('id', data.game_id)
       .single()
     
@@ -25,19 +25,44 @@ export async function registerWinnerAction(data: any) {
         return { success: false, error: "Jeu introuvable: " + gameError.message }
     }
 
-    // 🔥 ÉTAPE 3 : RÉCUPÉRATION DU LOT POUR LE SNAPSHOT 🔥
-    // On va chercher le nom actuel du lot pour le graver dans la ligne du gagnant
-    const { data: prizeData } = await supabaseAdmin
+    // 2. On récupère le Lot pour vérifier le stock et le nom
+    const { data: prize, error: prizeError } = await supabaseAdmin
       .from('prizes')
-      .select('label')
+      .select('id, label, quantity')
       .eq('id', data.prize_id)
       .single()
     
-    const labelSnapshot = prizeData?.label || "Lot inconnu"
+    if (prizeError) {
+        return { success: false, error: "Lot introuvable" }
+    }
 
+    const labelSnapshot = prize?.label || "Lot inconnu"
     console.log("✅ Jeu trouvé et nom du lot récupéré :", labelSnapshot)
 
-    // --- 🔥 DÉBUT AJOUT CRM (SÉCURISÉ) ---
+    // 🔥 ÉTAPE CRITIQUE : DÉCRÉMENTATION DU STOCK 🔥
+    if (game.is_stock_limit_active) {
+        // Si le stock est géré (pas null)
+        if (prize.quantity !== null) {
+            // Sécurité ultime : Si stock vide, on bloque tout
+            if (prize.quantity <= 0) {
+                return { success: false, error: "stock_empty" }
+            }
+
+            // On retire 1 au stock
+            const { error: updateStockError } = await supabaseAdmin
+                .from('prizes')
+                .update({ quantity: prize.quantity - 1 })
+                .eq('id', prize.id)
+
+            if (updateStockError) {
+                console.error("❌ Erreur mise à jour stock:", updateStockError)
+                return { success: false, error: "Erreur stock" }
+            }
+            console.log("📉 Stock décrémenté avec succès. Nouveau stock théorique :", prize.quantity - 1)
+        }
+    }
+
+    // --- DÉBUT AJOUT CRM (SÉCURISÉ) ---
     if (game.restaurant_id) {
        try {
          await supabaseAdmin.from('contacts').upsert({
@@ -54,25 +79,25 @@ export async function registerWinnerAction(data: any) {
     }
     // --- FIN AJOUT CRM ---
 
-    // 2. Calcul date (Code d'origine)
+    // 3. Calcul date validité
     const days = game.validity_days || 30
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + days)
 
-    // 3. Insertion (MODIFIÉE POUR LE SNAPSHOT)
+    // 4. Création du Ticket Gagnant
     console.log("💾 Tentative d'insertion dans 'winners'...")
     const { data: winner, error: insertError } = await supabaseAdmin
       .from('winners')
       .insert({
         game_id: data.game_id,
         prize_id: data.prize_id,
-        prize_label_snapshot: labelSnapshot, // 🔥 ICI ON ENREGISTRE LE NOM EN DUR
+        prize_label_snapshot: labelSnapshot, // Nom gravé
         email: data.email,
         phone: data.phone || "Non renseigné",
         first_name: data.first_name,
         marketing_optin: data.opt_in,
         expires_at: expiresAt.toISOString(),
-        status: 'available'
+        status: 'available' // Le statut par défaut est 'disponible'
       })
       .select()
       .single()
@@ -88,7 +113,7 @@ export async function registerWinnerAction(data: any) {
       success: true,
       ticket: {
         winner_id: winner.id,
-        qr_code: winner.id,
+        qr_code: winner.id, // On utilise l'ID comme QR code pour l'instant
         expires_at: winner.expires_at,
         min_spend: game.min_spend || 0
       }

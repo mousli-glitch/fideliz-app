@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, CheckCircle, AlertCircle, Calendar, Package, Wand2 } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, CheckCircle, AlertCircle, Calendar, Package, Wand2, Euro, Timer } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
@@ -52,7 +52,7 @@ export default function EditGamePage() {
   const [gameId, setGameId] = useState<string>("")
   const [restaurantId, setRestaurantId] = useState<string>("") 
   
-  // Données du formulaire
+  // 🔥 AJOUT DES NOUVEAUX CHAMPS DANS FORM DATA
   const [formData, setFormData] = useState<any>({
     name: "",
     active_action: "GOOGLE_REVIEW",
@@ -60,6 +60,7 @@ export default function EditGamePage() {
     validity_days: 30, 
     min_spend: 0,
     has_min_spend: false,
+    // Nouveaux champs
     is_date_limit_active: false,
     start_date: "",
     end_date: "",
@@ -122,6 +123,7 @@ export default function EditGamePage() {
                 validity_days: game.validity_days || 30,
                 min_spend: game.min_spend ? Number(game.min_spend) : 0,
                 has_min_spend: Number(game.min_spend) > 0,
+                // Chargement des nouveaux champs
                 is_date_limit_active: game.is_date_limit_active || false,
                 start_date: game.start_date ? game.start_date.split('T')[0] : "",
                 end_date: game.end_date ? game.end_date.split('T')[0] : "",
@@ -188,7 +190,7 @@ export default function EditGamePage() {
             prizes: prizes.map((p: any) => ({ 
                 ...p, 
                 weight: Number(p.weight),
-                // 🔥 CORRECTION DU ZÉRO ICI : Si null ou vide -> null, sinon le nombre (même 0)
+                // 🔥 CORRECTION DU ZÉRO : On accepte le 0 explicitement, sinon null
                 quantity: formData.is_stock_limit_active ? (p.quantity === null || p.quantity === "" ? null : Number(p.quantity)) : null
             }))
         })
@@ -209,23 +211,25 @@ export default function EditGamePage() {
     }
   }
 
-  // --- NOUVEAU COMPOSANT TOGGLE SWITCH PRO ---
+  // 🔥 NOUVEAU COMPOSANT SWITCH PRO (DESIGN IPHONE)
   const ToggleSwitch = ({ checked, onChange, label, subLabel, icon: Icon }: any) => (
     <div 
         onClick={() => onChange(!checked)} 
-        className={`group cursor-pointer rounded-xl border p-4 transition-all duration-200 flex items-center justify-between shadow-sm ${
-            checked ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200 hover:border-slate-300'
+        className={`group cursor-pointer rounded-2xl border p-4 transition-all duration-300 flex items-center justify-between shadow-sm hover:shadow-md ${
+            checked ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-slate-300'
         }`}
     >
         <div className="flex items-center gap-4">
-            <div className={`p-2.5 rounded-lg transition-colors ${checked ? 'bg-blue-200 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>
-                <Icon size={22} />
+            <div className={`p-3 rounded-xl transition-colors duration-300 ${checked ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                <Icon size={20} />
             </div>
             <div>
                 <p className={`text-sm font-bold ${checked ? 'text-blue-900' : 'text-slate-700'}`}>{label}</p>
                 {subLabel && <p className="text-xs text-slate-400 mt-0.5 font-medium">{subLabel}</p>}
             </div>
         </div>
+        
+        {/* Le bouton switch animé */}
         <div className={`w-12 h-7 flex items-center rounded-full p-1 transition-colors duration-300 ${checked ? 'bg-blue-600' : 'bg-slate-200'}`}>
             <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-300 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
         </div>
@@ -305,8 +309,8 @@ export default function EditGamePage() {
                             </div>
                         </div>
 
-                        {/* --- BLOC DATES & PÉRIODE (Design PRO) --- */}
-                        <div className="space-y-4 pt-2">
+                        {/* --- BLOC DATES & PÉRIODE (Nouveau Design PRO) --- */}
+                        <div className="space-y-4 pt-2 border-t border-slate-100">
                             <ToggleSwitch 
                                 checked={formData.is_date_limit_active} 
                                 onChange={(val: boolean) => setFormData({...formData, is_date_limit_active: val})}
@@ -316,12 +320,12 @@ export default function EditGamePage() {
                             />
 
                             {formData.is_date_limit_active && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 bg-slate-50 rounded-xl border border-slate-200 animate-in slide-in-from-top-2 shadow-inner">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-200 animate-in slide-in-from-top-2 shadow-inner">
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Date de début</label>
                                         <input 
                                             type="date" 
-                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
+                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-medium text-slate-700" 
                                             value={formData.start_date} 
                                             onChange={e => setFormData({...formData, start_date: e.target.value})}
                                         />
@@ -330,7 +334,7 @@ export default function EditGamePage() {
                                         <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Date de fin</label>
                                         <input 
                                             type="date" 
-                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
+                                            className="w-full p-3 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 shadow-sm font-medium text-slate-700" 
                                             value={formData.end_date} 
                                             onChange={e => setFormData({...formData, end_date: e.target.value})}
                                         />
@@ -371,13 +375,46 @@ export default function EditGamePage() {
                             )}
                         </div>
 
-                        <div className="border-t border-slate-100 pt-6 mt-2">
-                            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Validité des Lots</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                                <div><label className="block text-sm font-bold text-slate-700 mb-2">Validité du Gain (Jours)</label><input type="number" className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500" value={formData.validity_days} onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}/></div>
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                    <div className="flex items-center gap-3 mb-3"><input type="checkbox" id="min_spend_toggle" className="w-5 h-5 accent-blue-600" checked={formData.has_min_spend} onChange={e => setFormData({...formData, has_min_spend: e.target.checked})}/><label htmlFor="min_spend_toggle" className="text-sm font-bold text-slate-700 cursor-pointer">Activer minimum commande</label></div>
-                                    {formData.has_min_spend && (<div className="flex items-center gap-2"><span className="text-slate-400 font-bold">Min:</span><input type="number" className="w-full p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500" value={formData.min_spend} onChange={e => setFormData({...formData, min_spend: parseInt(e.target.value) || 0})}/><span className="text-slate-400 font-bold">€</span></div>)}
+                        {/* --- BLOC CONDITIONS (Optimisé & Regroupé) --- */}
+                        <div className="border-t border-slate-100 pt-6 mt-4 space-y-6">
+                            <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800"><Clock size={20} className="text-slate-400"/> Conditions du Gain</h3>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Validité Gain */}
+                                <div className="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col justify-center shadow-sm">
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider flex items-center gap-2">
+                                        <Timer size={14} className="text-blue-500"/> Validité du ticket (Jours)
+                                    </label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-lg font-bold text-slate-800" 
+                                        value={formData.validity_days} 
+                                        onChange={e => setFormData({...formData, validity_days: parseInt(e.target.value) || 0})}
+                                    />
+                                </div>
+
+                                {/* Min Commande Switch */}
+                                <div className="space-y-3">
+                                    <ToggleSwitch 
+                                        checked={formData.has_min_spend} 
+                                        onChange={(val: boolean) => setFormData({...formData, has_min_spend: val})}
+                                        label="Minimum de commande"
+                                        subLabel="Le client doit dépenser un montant minimum pour utiliser son gain."
+                                        icon={Euro}
+                                    />
+                                    {formData.has_min_spend && (
+                                        <div className="animate-in slide-in-from-top-1 fade-in">
+                                            <div className="relative">
+                                                <input 
+                                                    type="number" 
+                                                    className="w-full p-3 pl-4 pr-12 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 text-lg font-bold shadow-sm" 
+                                                    value={formData.min_spend} 
+                                                    onChange={e => setFormData({...formData, min_spend: parseInt(e.target.value) || 0})}
+                                                />
+                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">€</span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -439,11 +476,12 @@ export default function EditGamePage() {
                                                     type="number" 
                                                     min="0" 
                                                     placeholder="∞"
+                                                    // 🔥 ICI : Utilisation de ?? pour gérer le null/undefined proprement
                                                     value={prize.quantity ?? ""} 
                                                     onChange={(e) => { 
                                                         const newPrizes = [...prizes]; 
                                                         const val = e.target.value;
-                                                        // 🔥 Si vide -> null (infini). Sinon -> Nombre
+                                                        // 🔥 ICI : Si vide -> null (infini). Sinon -> Nombre (même 0)
                                                         newPrizes[index].quantity = val === "" ? null : Number(val); 
                                                         setPrizes(newPrizes); 
                                                     }} 
