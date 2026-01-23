@@ -23,31 +23,37 @@ export async function updateGameAction(gameId: string, data: any) {
       active_action: data.form.active_action,
       action_url: data.form.action_url,
       validity_days: data.form.validity_days,
-      min_spend: String(data.form.min_spend), // <--- ICI : Conversion en TEXTE
+      min_spend: data.form.min_spend, // Laisse Supabase gérer le type (numeric)
+      
+      // NOUVEAUX CHAMPS DATES & STOCKS
+      is_date_limit_active: data.form.is_date_limit_active,
+      start_date: data.form.is_date_limit_active && data.form.start_date ? new Date(data.form.start_date).toISOString() : null,
+      end_date: data.form.is_date_limit_active && data.form.end_date ? new Date(data.form.end_date).toISOString() : null,
+      is_stock_limit_active: data.form.is_stock_limit_active,
+
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
       card_style: data.design.card_style,
-      wheel_palette: data.design.wheel_palette // Ajout de la palette
+      wheel_palette: data.design.wheel_palette 
     }).eq("id", gameId)
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)
 
-    // 3. Gestion des lots (Upsert sécurisé)
-    const prizesToUpsert = data.prizes.map((p: any) => {
-        const prize: any = {
-            game_id: gameId,
-            label: p.label,
-            color: "#000000", 
-            weight: Number(p.weight)
-        };
-        // Si l'ID existe, on le met pour faire un UPDATE, sinon ce sera un INSERT
-        if (p.id) prize.id = p.id;
-        return prize;
-    })
+    // 3. Gestion des lots (Suppression + Insertion propre)
+    // On supprime d'abord pour éviter les doublons ou orphelins
+    await supabaseAdmin.from('prizes').delete().eq('game_id', gameId)
     
-    if (prizesToUpsert.length > 0) {
-        const { error: prizeError } = await supabaseAdmin.from('prizes').upsert(prizesToUpsert)
+    const prizesToInsert = data.prizes.map((p: any) => ({
+        game_id: gameId,
+        label: p.label,
+        color: "#000000", 
+        weight: Number(p.weight),
+        quantity: data.form.is_stock_limit_active ? (Number(p.quantity) || 0) : null // Sauvegarde du Stock !
+    }))
+    
+    if (prizesToInsert.length > 0) {
+        const { error: prizeError } = await supabaseAdmin.from('prizes').insert(prizesToInsert)
         if (prizeError) throw prizeError
     }
 
