@@ -9,7 +9,7 @@ const supabaseAdmin = createClient(
 
 export async function updateGameAction(gameId: string, data: any) {
   try {
-    // 1. Sauvegarde Resto (Inchangé)
+    // 1. Sauvegarde Resto
     const { error: restoError } = await supabaseAdmin.from("restaurants").update({
       primary_color: data.design.primary_color, 
       logo_url: data.design.logo_url,
@@ -17,17 +17,20 @@ export async function updateGameAction(gameId: string, data: any) {
 
     if (restoError) throw new Error("Erreur sauvegarde resto: " + restoError.message)
 
-    // 2. Sauvegarde Jeu (Inchangé)
+    // 2. Sauvegarde Jeu
     const { error: gameError } = await supabaseAdmin.from("games").update({
       name: data.form.name,
       active_action: data.form.active_action,
       action_url: data.form.action_url,
       validity_days: data.form.validity_days,
-      min_spend: data.form.min_spend,
+      min_spend: data.form.min_spend, // Laisse Supabase gérer le type (numeric)
+      
+      // NOUVEAUX CHAMPS DATES & STOCKS
       is_date_limit_active: data.form.is_date_limit_active,
       start_date: data.form.is_date_limit_active && data.form.start_date ? new Date(data.form.start_date).toISOString() : null,
       end_date: data.form.is_date_limit_active && data.form.end_date ? new Date(data.form.end_date).toISOString() : null,
       is_stock_limit_active: data.form.is_stock_limit_active,
+
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
@@ -37,36 +40,20 @@ export async function updateGameAction(gameId: string, data: any) {
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)
 
-    // 3. Gestion des lots (Version Sécurisée avec UPSERT)
-    // On récupère les IDs des lots actuels pour savoir lesquels supprimer si besoin
-    const currentPrizesIds = data.prizes
-      .filter((p: any) => p.id)
-      .map((p: any) => p.id)
-
-    // Étape A : On supprime UNIQUEMENT les lots qui ne sont plus dans le formulaire
-    if (currentPrizesIds.length > 0) {
-      await supabaseAdmin
-        .from('prizes')
-        .delete()
-        .eq('game_id', gameId)
-        .not('id', 'in', `(${currentPrizesIds.join(',')})`)
-    }
-
-    // Étape B : On met à jour les existants ET on ajoute les nouveaux
-    const prizesToUpsert = data.prizes.map((p: any) => ({
-        ...(p.id && { id: p.id }), // On garde l'ID s'il existe (important pour mabl !)
+    // 3. Gestion des lots (Suppression + Insertion propre)
+    // On supprime d'abord pour éviter les doublons ou orphelins
+    await supabaseAdmin.from('prizes').delete().eq('game_id', gameId)
+    
+    const prizesToInsert = data.prizes.map((p: any) => ({
         game_id: gameId,
         label: p.label,
         color: "#000000", 
         weight: Number(p.weight),
-        quantity: data.form.is_stock_limit_active ? (p.quantity === null || p.quantity === "" ? null : Number(p.quantity)) : null
+        quantity: data.form.is_stock_limit_active ? (Number(p.quantity) || 0) : null // Sauvegarde du Stock !
     }))
     
-    if (prizesToUpsert.length > 0) {
-        const { error: prizeError } = await supabaseAdmin
-            .from('prizes')
-            .upsert(prizesToUpsert, { onConflict: 'id' }) 
-        
+    if (prizesToInsert.length > 0) {
+        const { error: prizeError } = await supabaseAdmin.from('prizes').insert(prizesToInsert)
         if (prizeError) throw prizeError
     }
 
