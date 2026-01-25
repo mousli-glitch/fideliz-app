@@ -38,9 +38,12 @@ export default async function VerifyPage({
       .eq('id', user.id)
       .single()
     
-    // Si c'est un admin ou owner, c'est gagné
-    if (profile && ['admin', 'owner'].includes(profile.role)) {
-      isStaff = true
+    // MODIFICATION CHIRURGICALE : Inclusion de staff, root et ton UID personnel
+    if (profile) {
+      const authorizedRoles = ['admin', 'owner', 'staff', 'root'];
+      if (authorizedRoles.includes(profile.role) || user.id === '04eb7091-6876-41e0-84c6-5891658a5768') {
+        isStaff = true
+      }
     }
   }
   // =========================================================================
@@ -68,9 +71,6 @@ export default async function VerifyPage({
   }
 
   // 4. CALCULS SERVEUR (Code INCHANGÉ)
-  // On garde précieusement votre logique de dates et de labels
-  
-  // A. Calcul expiration
   const validityDays = winner.games?.validity_days || 30
   let isExpired = false
   let expirationDateString = ""
@@ -84,7 +84,6 @@ export default async function VerifyPage({
     expirationDateString = expirationDate.toLocaleDateString('fr-FR')
   }
 
-  // B. Calcul date utilisation
   let redeemedDateString = ""
   if (winner.redeemed_at) {
     redeemedDateString = new Date(winner.redeemed_at).toLocaleString('fr-FR', {
@@ -96,7 +95,6 @@ export default async function VerifyPage({
     })
   }
 
-  // C. Gestion du label
   const prizeData = Array.isArray(winner.prizes) ? winner.prizes[0] : winner.prizes
   const prizeLabel = prizeData?.label || "Lot Surprise"
   
@@ -107,14 +105,12 @@ export default async function VerifyPage({
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <Card className="max-w-md w-full p-6 shadow-2xl bg-white border-t-8 border-blue-600 relative overflow-hidden">
         
-        {/* En-tête (Inchangé) */}
         <div className="text-center mb-8 relative z-10">
           <p className="text-xs text-slate-400 uppercase tracking-widest font-bold">Vérification Staff</p>
           <h1 className="text-3xl font-black mt-2 text-slate-800">{prizeLabel}</h1>
           <p className="text-slate-600 font-medium mt-1">Gagnant : {winner.first_name}</p>
         </div>
 
-        {/* AJOUT : On passe la prop isStaff au composant client */}
         <VerifyClient 
             winnerId={winner.id}
             initialStatus={winner.status}
