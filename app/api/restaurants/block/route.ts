@@ -1,3 +1,4 @@
+// app/api/restaurants/block/route.ts
 import { NextResponse } from "next/server"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { createClient as createAuthClient } from "@/utils/supabase/server"
@@ -55,7 +56,6 @@ export async function PATCH(req: Request) {
 
     // 5) Si sales : vérifier assignation (mapping OU created_by)
     if (profile.role === "sales") {
-      // 5.1 mapping table
       const { data: assignment, error: assignErr } = await supabaseAdmin
         .from("sales_restaurants")
         .select("sales_user_id, restaurant_id")
@@ -72,17 +72,20 @@ export async function PATCH(req: Request) {
     }
 
     // 6) UPDATE restaurant (source de vérité)
+    // ✅ On synchronise aussi is_active pour que l’UI root/sales reste cohérente partout
     const { error: rErr } = await supabaseAdmin
       .from("restaurants")
-      .update({ is_blocked })
+      .update({
+        is_blocked,
+        is_active: !is_blocked
+      })
       .eq("id", restaurant_id)
 
     if (rErr) {
       return NextResponse.json({ error: "Erreur update restaurants." }, { status: 500 })
     }
 
-    // 7) Synchroniser les comptes restaurant
-    //    ✅ On évite root/sales, on touche uniquement les utilisateurs "restaurant"
+    // 7) Synchroniser les comptes restaurant (jamais root/sales)
     const { error: pErr } = await supabaseAdmin
       .from("profiles")
       .update({ is_active: !is_blocked })

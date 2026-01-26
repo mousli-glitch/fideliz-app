@@ -1,3 +1,4 @@
+// app/super-admin/root/restaurants-management/page.tsx
 "use client"
 
 import { useEffect, useState } from 'react'
@@ -72,7 +73,7 @@ export default function RestaurantsManagement() {
     return resto?.is_blocked === true || resto?.is_active === false
   }
 
-  // --- 2. ACTION : BLOQUER / DÉBLOQUER (SOURCE DE VÉRITÉ = restaurants.is_blocked) ---
+  // --- 2. ACTION : BLOQUER / DÉBLOQUER (via API = même logique que Sales) ---
   const toggleBlock = async (id: string, currentBlocked: boolean) => {
     const nextBlocked = !currentBlocked
 
@@ -83,17 +84,29 @@ export default function RestaurantsManagement() {
         : r
     ))
 
-    const { error } = await (supabase.from('restaurants') as any)
-      .update({
-        is_blocked: nextBlocked,
-        // ✅ on synchronise is_active si ce champ est encore utilisé ailleurs
-        is_active: nextBlocked ? false : true
+    try {
+      const res = await fetch("/api/restaurants/block", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          restaurant_id: id,
+          is_blocked: nextBlocked
+        })
       })
-      .eq('id', id)
 
-    if (error) {
-      alert("Erreur update : " + error.message)
-      fetchData() // Revert si erreur
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert(err?.error || "Erreur blocage restaurant.")
+        fetchData() // revert
+        return
+      }
+
+      // ✅ Re-sync total (évite tout décalage UI)
+      fetchData()
+    } catch (e) {
+      console.error(e)
+      alert("Erreur réseau.")
+      fetchData()
     }
   }
 
