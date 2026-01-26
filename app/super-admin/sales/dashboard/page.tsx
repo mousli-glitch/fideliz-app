@@ -24,25 +24,67 @@ export default function SalesDashboard() {
   const supabase = createClient();
   const router = useRouter();
 
-  // 1. CHARGEMENT
+  // ✅ RELOAD (source de vérité = /api/sales/dashboard)
+  const reloadDashboard = async () => {
+    try {
+      const res = await fetch("/api/sales/dashboard", { cache: "no-store" });
+      if (res.status === 401) { router.push("/login"); return; }
+      const json = await res.json();
+      if (!res.ok) return;
+
+      setProfile(json.profile);
+      setRestaurants(json.restaurants || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // 1) CHARGEMENT + ✅ SYNC (focus + realtime)
   useEffect(() => {
+    let isMounted = true;
+
     async function load() {
+      setLoading(true);
       try {
         const res = await fetch("/api/sales/dashboard", { cache: "no-store" });
         if (res.status === 401) { router.push("/login"); return; }
         const json = await res.json();
-        if (!res.ok) { setLoading(false); return; }
+        if (!res.ok) return;
 
+        if (!isMounted) return;
         setProfile(json.profile);
         setRestaurants(json.restaurants || []);
       } catch (e) {
         console.error(e);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
+
     load();
-  }, [router]);
+
+    // ✅ refresh quand tu reviens sur l’onglet
+    const onFocus = () => reloadDashboard();
+    window.addEventListener("focus", onFocus);
+
+    // ✅ realtime : update dès qu’un restaurant change (block/unblock, etc.)
+    const channel = supabase
+      .channel("sales-restaurants-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "restaurants" },
+        () => {
+          reloadDashboard();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("focus", onFocus);
+      supabase.removeChannel(channel);
+    };
+  }, [router]); // on garde la même dépendance que toi
 
   // LOGIQUE EXISTANTE
   const getAtRiskStatus = (resto: any) => {
@@ -79,7 +121,8 @@ export default function SalesDashboard() {
         throw new Error(json?.error || "Erreur maj statut");
       }
 
-      // Refresh pour être sûr que tout est synchro (RPC/login/etc.)
+      // ✅ Refresh local sûr (au lieu de dépendre de router.refresh uniquement)
+      await reloadDashboard();
       router.refresh();
     } catch (e: any) {
       alert(e?.message || "Erreur maj statut");
