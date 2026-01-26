@@ -118,7 +118,8 @@ export default function RootDashboard() {
         </div>
 
         {/* 2. VITALS (KPIs) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* ✅ MODIF : on passe à 5 colonnes max si grand écran */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* KPI 1: PARC TOTAL */}
             <div className="bg-[#0f172a] border border-slate-800 p-5 rounded-2xl relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Store size={64} /></div>
@@ -164,6 +165,17 @@ export default function RootDashboard() {
                 </div>
                 <div className="mt-2 text-[10px] font-mono text-slate-500">
                     DB: {systemHealth.db.toUpperCase()} • ORPHANS: {data?.orphans?.length || 0}
+                </div>
+            </div>
+
+            {/* ✅ KPI 5: RESTOS BLOQUÉS (NOUVEAU) */}
+            <div className="bg-[#0f172a] border border-slate-800 p-5 rounded-2xl relative overflow-hidden group">
+                <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Restaurants Bloqués</div>
+                <div className="text-3xl font-black text-red-500">
+                    {loading ? "..." : (data?.blocked_count ?? 0)}
+                </div>
+                <div className="mt-2 text-[10px] text-slate-500 font-bold">
+                    Source: restaurants.is_blocked
                 </div>
             </div>
         </div>
