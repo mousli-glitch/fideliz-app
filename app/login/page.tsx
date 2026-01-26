@@ -13,7 +13,7 @@ function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [checkingSession, setCheckingSession] = useState(true)
-  
+
   const router = useRouter()
   const searchParams = useSearchParams() // <--- C'est lui qui posait problème sans Suspense
   const supabase = createClient()
@@ -48,16 +48,19 @@ function LoginForm() {
         router.push('/super-admin/root')
         break
       case 'sales':
-        router.push('/super-admin/sales/dashboard') 
+        router.push('/super-admin/sales/dashboard')
         break
+
+      // ✅ MODIF ICI : owner est un restaurateur, même destination que admin
       case 'admin':
+      case 'owner':
         if (profile.restaurant_id) {
           const { data: resto } = await (supabase
             .from('restaurants')
             .select('slug')
             .eq('id', profile.restaurant_id)
             .single() as any)
-          
+
           if (resto?.slug) {
             router.push(`/admin/${resto.slug}`)
           } else {
@@ -69,6 +72,7 @@ function LoginForm() {
           router.push('/admin/setup')
         }
         break
+
       default:
         router.push('/')
     }
@@ -82,14 +86,14 @@ function LoginForm() {
       }
 
       const { data: { session } } = await supabase.auth.getSession()
-      
+
       if (session?.user) {
         await routeUser(session.user.id)
       } else {
         setCheckingSession(false)
       }
     }
-    
+
     checkSession()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isBlocked])
@@ -139,13 +143,13 @@ function LoginForm() {
 
         {isBlocked && (
           <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl mb-6 flex flex-col gap-2 animate-pulse">
-             <div className="flex items-center gap-3 text-red-400 text-sm font-bold">
-                <Ban size={20} />
-                <span>ACCÈS SUSPENDU</span>
-             </div>
-             <p className="text-red-400/80 text-xs ml-8 leading-relaxed">
-               Votre établissement a été désactivé. Veuillez contacter votre responsable commercial pour régulariser la situation.
-             </p>
+            <div className="flex items-center gap-3 text-red-400 text-sm font-bold">
+              <Ban size={20} />
+              <span>ACCÈS SUSPENDU</span>
+            </div>
+            <p className="text-red-400/80 text-xs ml-8 leading-relaxed">
+              Votre établissement a été désactivé. Veuillez contacter votre responsable commercial pour régulariser la situation.
+            </p>
           </div>
         )}
 
@@ -159,8 +163,8 @@ function LoginForm() {
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="relative group">
             <Mail className="absolute left-4 top-4 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={20} />
-            <input 
-              type="email" 
+            <input
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-slate-800 border border-slate-700 text-white pl-12 pr-4 py-4 rounded-2xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-medium placeholder:text-slate-600"
@@ -168,11 +172,11 @@ function LoginForm() {
               required
             />
           </div>
-          
+
           <div className="relative group">
             <Lock className="absolute left-4 top-4 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={20} />
-            <input 
-              type="password" 
+            <input
+              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-slate-800 border border-slate-700 text-white pl-12 pr-4 py-4 rounded-2xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-medium placeholder:text-slate-600"
@@ -181,7 +185,7 @@ function LoginForm() {
             />
           </div>
 
-          <button 
+          <button
             disabled={loading}
             className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-4"
           >
