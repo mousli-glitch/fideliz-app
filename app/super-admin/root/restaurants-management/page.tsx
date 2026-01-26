@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Navbar from '@/components/Navbar'
-import { Store, MapPin, ArrowLeft, Search, Loader2, Power, Trash2, ExternalLink, User, Briefcase } from 'lucide-react'
+import { Store, MapPin, ArrowLeft, Search, Loader2, Power, Trash2, ExternalLink, User, Briefcase, Ban } from 'lucide-react'
 import Link from 'next/link'
 // 👇 IMPORT DE L'ACTION DE SUPPRESSION TOTALE (Ton fichier validé)
 import { deleteRestaurantFullAction } from '@/app/actions/delete-restaurant-full'
@@ -12,9 +12,9 @@ export default function RestaurantsManagement() {
   const [restaurants, setRestaurants] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  
+
   // On renomme 'owners' en 'userMap' car on va stocker les Owners ET les Commerciaux
-  const [userMap, setUserMap] = useState<Record<string, string>>({}) 
+  const [userMap, setUserMap] = useState<Record<string, string>>({})
 
   // Loader spécifique pour les actions
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -24,7 +24,7 @@ export default function RestaurantsManagement() {
   // --- 1. CHARGEMENT DES DONNÉES ---
   const fetchData = async () => {
     setLoading(true)
-    
+
     // A. Récupérer tous les restaurants
     const { data: restos, error } = await (supabase
       .from('restaurants') as any)
@@ -42,17 +42,17 @@ export default function RestaurantsManagement() {
     // B. Récupérer TOUS les IDs utiles (Propriétaires ET Créateurs)
     const allUserIds = new Set<string>()
     restos?.forEach((r: any) => {
-        if (r.owner_id) allUserIds.add(r.owner_id)
-        if (r.created_by) allUserIds.add(r.created_by)
+      if (r.owner_id) allUserIds.add(r.owner_id)
+      if (r.created_by) allUserIds.add(r.created_by)
     })
-    
+
     // C. Charger les emails correspondants en une seule fois
     if (allUserIds.size > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, email')
         .in('id', Array.from(allUserIds))
-      
+
       const mapping: Record<string, string> = {}
       profiles?.forEach((p: any) => {
         mapping[p.id] = p.email
@@ -67,15 +67,28 @@ export default function RestaurantsManagement() {
     fetchData()
   }, [])
 
-  // --- 2. ACTION : DÉSACTIVER / ACTIVER (Disjoncteur) ---
-  const toggleStatus = async (id: string, currentStatus: boolean) => {
-    // Optimistic UI update
-    setRestaurants(restaurants.map(r => 
-      r.id === id ? { ...r, is_active: !currentStatus } : r
+  // ✅ Helper unique : vrai statut "bloqué" (source de vérité)
+  const isRestaurantBlocked = (resto: any) => {
+    return resto?.is_blocked === true || resto?.is_active === false
+  }
+
+  // --- 2. ACTION : BLOQUER / DÉBLOQUER (SOURCE DE VÉRITÉ = restaurants.is_blocked) ---
+  const toggleBlock = async (id: string, currentBlocked: boolean) => {
+    const nextBlocked = !currentBlocked
+
+    // Optimistic UI update (on garde is_active synchro aussi pour éviter incohérences UI existantes)
+    setRestaurants(restaurants.map(r =>
+      r.id === id
+        ? { ...r, is_blocked: nextBlocked, is_active: nextBlocked ? false : true }
+        : r
     ))
 
     const { error } = await (supabase.from('restaurants') as any)
-      .update({ is_active: !currentStatus })
+      .update({
+        is_blocked: nextBlocked,
+        // ✅ on synchronise is_active si ce champ est encore utilisé ailleurs
+        is_active: nextBlocked ? false : true
+      })
       .eq('id', id)
 
     if (error) {
@@ -87,7 +100,7 @@ export default function RestaurantsManagement() {
   // --- 3. ACTION : SUPPRESSION TOTALE (Nettoyage Email) ---
   const handleDelete = async (id: string, ownerId: string, name: string) => {
     const confirmMessage = `⚠️ SUPPRESSION DÉFINITIVE\n\nVous allez supprimer "${name}".\n\nCela va :\n1. Supprimer le restaurant et toutes ses données.\n2. SUPPRIMER LE COMPTE UTILISATEUR (L'email sera libéré).\n\nContinuer ?`
-    
+
     if (!confirm(confirmMessage)) return
 
     setActionLoading(id)
@@ -102,13 +115,13 @@ export default function RestaurantsManagement() {
     } else {
       alert("❌ Erreur critique lors de la suppression : " + result.error)
     }
-    
+
     setActionLoading(null)
   }
 
   // --- 4. FILTRAGE ---
-  const filteredRestos = restaurants.filter(r => 
-    r.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filteredRestos = restaurants.filter(r =>
+    r.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     r.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     r.slug?.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -130,13 +143,13 @@ export default function RestaurantsManagement() {
               {restaurants.length} Établissements installés
             </p>
           </div>
-          
+
           {/* BARRE RECHERCHE */}
           <div className="relative w-full md:w-96">
             <Search className="absolute left-4 top-3.5 text-slate-500" size={20} />
-            <input 
-              type="text" 
-              placeholder="Rechercher (Nom, Ville, Slug)..." 
+            <input
+              type="text"
+              placeholder="Rechercher (Nom, Ville, Slug)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-slate-800 border border-slate-700 text-white pl-12 pr-4 py-3 rounded-2xl outline-none focus:border-blue-500 transition-all font-bold"
@@ -153,88 +166,104 @@ export default function RestaurantsManagement() {
               <p className="text-slate-500 italic">Aucun restaurant trouvé.</p>
             </div>
           ) : (
-            filteredRestos.map((resto) => (
-              <div key={resto.id} className={`border p-6 rounded-3xl flex flex-col lg:flex-row items-center justify-between transition-all gap-6 ${resto.is_active !== false ? 'bg-slate-800/50 border-slate-700' : 'bg-red-900/10 border-red-900/30'}`}>
-                
-                {/* INFO GAUCHE */}
-                <div className="flex items-center gap-6 w-full lg:w-auto">
-                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg ${resto.is_active !== false ? 'bg-blue-600 text-white shadow-blue-900/20' : 'bg-red-600 text-white shadow-red-900/20'}`}>
-                    <Store size={32} />
-                  </div>
-                  
-                  <div>
-                    <h3 className={`font-black text-xl uppercase ${resto.is_active !== false ? 'text-white' : 'text-slate-400 line-through'}`}>
-                      {resto.name}
-                    </h3>
-                    
-                    <div className="flex flex-wrap items-center gap-3 mt-2 text-xs font-bold text-slate-500">
-                      <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg">
-                        <MapPin size={12} /> {resto.city || 'Ville N/A'}
-                      </div>
-                      <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg text-blue-400">
-                        <ExternalLink size={12} /> /{resto.slug}
-                      </div>
+            filteredRestos.map((resto) => {
+              const blocked = isRestaurantBlocked(resto)
+
+              return (
+                <div
+                  key={resto.id}
+                  className={`border p-6 rounded-3xl flex flex-col lg:flex-row items-center justify-between transition-all gap-6 ${
+                    !blocked ? 'bg-slate-800/50 border-slate-700' : 'bg-red-900/10 border-red-900/30'
+                  }`}
+                >
+
+                  {/* INFO GAUCHE */}
+                  <div className="flex items-center gap-6 w-full lg:w-auto">
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg ${
+                      !blocked ? 'bg-blue-600 text-white shadow-blue-900/20' : 'bg-red-600 text-white shadow-red-900/20'
+                    }`}>
+                      {blocked ? <Ban size={32} /> : <Store size={32} />}
                     </div>
-                    
-                    {/* --- ZONES D'INFORMATION RESPONSABLES --- */}
-                    <div className="flex flex-col gap-1 mt-3 pt-3 border-t border-slate-700/50">
-                        
+
+                    <div>
+                      <h3 className={`font-black text-xl uppercase ${!blocked ? 'text-white' : 'text-slate-300'}`}>
+                        {resto.name}
+                        {blocked && (
+                          <span className="ml-3 text-[10px] font-black uppercase px-2 py-1 rounded-full bg-red-500/20 text-red-400">
+                            BLOQUÉ
+                          </span>
+                        )}
+                      </h3>
+
+                      <div className="flex flex-wrap items-center gap-3 mt-2 text-xs font-bold text-slate-500">
+                        <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg">
+                          <MapPin size={12} /> {resto.city || 'Ville N/A'}
+                        </div>
+                        <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg text-blue-400">
+                          <ExternalLink size={12} /> /{resto.slug}
+                        </div>
+                      </div>
+
+                      {/* --- ZONES D'INFORMATION RESPONSABLES --- */}
+                      <div className="flex flex-col gap-1 mt-3 pt-3 border-t border-slate-700/50">
+
                         {/* 1. Géré par (Propriétaire actuel) */}
                         <div className="flex items-center gap-2 text-[10px] text-slate-300 uppercase tracking-wider font-bold">
-                            <User size={12} className="text-blue-400" />
-                            Géré par : <span className="text-white">{userMap[resto.owner_id] || 'Inconnu / Supprimé'}</span>
+                          <User size={12} className="text-blue-400" />
+                          Géré par : <span className="text-white">{userMap[resto.owner_id] || 'Inconnu / Supprimé'}</span>
                         </div>
 
                         {/* 2. Apporté par (Créateur d'origine) - S'affiche uniquement si différent du gérant */}
                         {resto.created_by && resto.created_by !== resto.owner_id && (
-                             <div className="flex items-center gap-2 text-[10px] text-slate-500 uppercase tracking-wider font-medium">
-                                <Briefcase size={12} className="text-slate-600" />
-                                Apporté par : {userMap[resto.created_by] || 'Utilisateur Supprimé'}
-                            </div>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500 uppercase tracking-wider font-medium">
+                            <Briefcase size={12} className="text-slate-600" />
+                            Apporté par : {userMap[resto.created_by] || 'Utilisateur Supprimé'}
+                          </div>
                         )}
+                      </div>
+
                     </div>
+                  </div>
+
+                  {/* ACTIONS DROITE */}
+                  <div className="flex flex-wrap justify-center lg:justify-end gap-3 w-full lg:w-auto">
+
+                    <Link
+                      href={`/admin/${resto.slug}`}
+                      target="_blank"
+                      className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold text-xs uppercase flex items-center gap-2 transition-all"
+                    >
+                      <ExternalLink size={16} /> Voir
+                    </Link>
+
+                    <div className="w-px h-10 bg-slate-700 hidden lg:block mx-2"></div>
+
+                    {/* ✅ Bouton basé sur is_blocked (source de vérité) */}
+                    <button
+                      onClick={() => toggleBlock(resto.id, resto.is_blocked === true)}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-xs uppercase transition-all shadow-lg ${
+                        !blocked
+                          ? 'bg-slate-700 text-slate-200 hover:bg-red-600 hover:text-white'
+                          : 'bg-green-600 text-white hover:bg-green-500'
+                      }`}
+                    >
+                      <Power size={16} />
+                      {!blocked ? 'Bloquer' : 'Débloquer'}
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(resto.id, resto.owner_id, resto.name)}
+                      disabled={actionLoading === resto.id}
+                      className="bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-white px-4 py-3 rounded-xl transition-all shadow-lg shadow-red-900/0 hover:shadow-red-900/40 disabled:opacity-50"
+                    >
+                      {actionLoading === resto.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                    </button>
 
                   </div>
-                </div>
-
-                {/* ACTIONS DROITE */}
-                <div className="flex flex-wrap justify-center lg:justify-end gap-3 w-full lg:w-auto">
-                  
-                  <Link 
-                    href={`/admin/${resto.slug}`}
-                    target="_blank"
-                    className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold text-xs uppercase flex items-center gap-2 transition-all"
-                  >
-                    <ExternalLink size={16} /> Voir
-                  </Link>
-
-                  <div className="w-px h-10 bg-slate-700 hidden lg:block mx-2"></div>
-
-                  <button 
-                    onClick={() => toggleStatus(resto.id, resto.is_active)}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-xs uppercase transition-all shadow-lg ${
-                      resto.is_active !== false
-                      ? 'bg-slate-700 text-slate-400 hover:bg-amber-500 hover:text-white'
-                      : 'bg-green-600 text-white hover:bg-green-500'
-                    }`}
-                  >
-                    <Power size={16} />
-                    {resto.is_active !== false ? 'Désactiver' : 'Réactiver'}
-                  </button>
-
-                  <button 
-                    // 👇 ICI : On passe aussi l'owner_id pour la suppression totale
-                    onClick={() => handleDelete(resto.id, resto.owner_id, resto.name)}
-                    disabled={actionLoading === resto.id}
-                    className="bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-white px-4 py-3 rounded-xl transition-all shadow-lg shadow-red-900/0 hover:shadow-red-900/40 disabled:opacity-50"
-                  >
-                    {actionLoading === resto.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                  </button>
 
                 </div>
-
-              </div>
-            ))
+              )
+            })
           )}
         </div>
 
