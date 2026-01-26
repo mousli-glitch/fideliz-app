@@ -1,13 +1,13 @@
 "use server"
 
-// 1. On garde l'import standard pour l'ADMIN (Lecture)
+// 1. On garde l'import standard pour l'ADMIN (Lecture + écriture sécurisée côté serveur)
 import { createClient as createAdminClient } from '@supabase/supabase-js'
-// 2. On ajoute l'import pour l'UTILISATEUR (Écriture sécurisée)
+// 2. On garde l'import pour l'UTILISATEUR (session)
 import { createClient as createAuthClient } from '@/utils/supabase/server'
 
 import { revalidatePath } from 'next/cache'
 
-// On garde votre instance Admin globale pour la lecture
+// Instance Admin (Service Role) côté serveur
 const supabaseAdmin = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -18,7 +18,7 @@ export async function validateWinAction(winnerId: string) {
     console.log("🔍 Tentative de validation pour l'ID gagnant :", winnerId)
 
     // =========================================================================
-    // ÉTAPE 1 : LECTURE & VÉRIFICATION (Code INCHANGÉ)
+    // ÉTAPE 1 : LECTURE & VÉRIFICATION (INCHANGÉ)
     // =========================================================================
     const { data: win, error: fetchError } = await supabaseAdmin
       .from("winners")
@@ -26,9 +26,10 @@ export async function validateWinAction(winnerId: string) {
         id,
         status,
         redeemed_at,
+        game_id,
         prizes (
-            label,
-            color
+          label,
+          color
         )
       `)
       .eq("id", winnerId)
@@ -42,7 +43,7 @@ export async function validateWinAction(winnerId: string) {
     const prizeData = Array.isArray(win.prizes) ? win.prizes[0] : win.prizes
 
     // =========================================================================
-    // ÉTAPE 2 : LOGIQUE DÉJÀ UTILISÉ (Code INCHANGÉ)
+    // ÉTAPE 2 : LOGIQUE DÉJÀ UTILISÉ (INCHANGÉ)
     // =========================================================================
     if (win.status === 'redeemed') {
       console.warn("⚠️ Tentative de réutilisation du gain :", winnerId)
@@ -60,54 +61,86 @@ export async function validateWinAction(winnerId: string) {
     }
 
     // =========================================================================
-    // ÉTAPE 3 : VALIDATION SÉCURISÉE (PATCH ICI)
+    // ÉTAPE 3 : VALIDATION SÉCURISÉE (PATCH : on ne dépend plus de la RLS)
+    // Objectif : seul le restaurant qui a généré le ticket peut valider.
     // =========================================================================
     const supabaseAuth = await createAuthClient()
 
-    // ✅ AJOUT 1 : Vérifie que la Server Action a bien une session (sinon update refusé)
+    // 3.1 Vérifier qu'il y a une session utilisateur
     const { data: userData, error: userErr } = await supabaseAuth.auth.getUser()
     if (userErr || !userData?.user) {
-      console.error("⛔ Pas de session utilisateur côté server action :", userErr)
-      return {
-        success: false,
-        message: "⛔ Vous devez être connecté au dashboard du restaurant pour valider ce ticket."
+      console.error("⛔ Pas de session utilisateur :", userErr)
+      return { success: false, message: "⛔ Connexion au dashboard du restaurant requise." }
+    }
+
+    const userId = userData.user.id
+
+    // 3.2 Charger le profil (Service Role pour éviter les soucis RLS)
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id, role, restaurant_id, is_active")
+      .eq("id", userId)
+      .single()
+
+    if (profileErr || !profile) {
+      console.error("❌ Profil introuvable :", profileErr)
+      return { success: false, message: "Impossible de charger le profil utilisateur." }
+    }
+
+    if (profile.is_active === false) {
+      return { success: false, message: "⛔ Compte désactivé. Contactez l’administrateur." }
+    }
+
+    // 3.3 Autoriser uniquement l’équipe restaurant
+    const allowedRoles = ['admin', 'owner', 'staff', 'root']
+    if (!allowedRoles.includes(profile.role)) {
+      return { success: false, message: "⛔ Accès refusé : compte restaurant requis." }
+    }
+
+    // 3.4 Vérifier l’étanchéité : winner.restaurant === profile.restaurant
+    const { data: game, error: gameErr } = await supabaseAdmin
+      .from("games")
+      .select("id, restaurant_id")
+      .eq("id", win.game_id)
+      .single()
+
+    if (gameErr || !game) {
+      console.error("❌ Game introuvable :", gameErr)
+      return { success: false, message: "Erreur : jeu introuvable pour ce ticket." }
+    }
+
+    // Root passe tout (optionnel) ; sinon on impose la même enseigne
+    if (profile.role !== 'root') {
+      if (!profile.restaurant_id || profile.restaurant_id !== game.restaurant_id) {
+        return { success: false, message: "⛔ Accès refusé : ce ticket ne correspond pas à votre restaurant." }
       }
     }
 
-    const { data: updated, error: updateError } = await supabaseAuth
+    // 3.5 Update réel (Service Role) + sécurité anti double validation
+    const { data: updated, error: updateError } = await supabaseAdmin
       .from("winners")
       .update({
         status: 'redeemed',
         redeemed_at: new Date().toISOString()
       })
       .eq("id", winnerId)
-      .eq("status", "available") // ✅ évite double validation + détecte incohérences
-      .select("id,status,redeemed_at") // ✅ force un retour pour savoir si une ligne a été modifiée
+      .eq("status", "available")
+      .select("id,status,redeemed_at")
 
     if (updateError) {
       console.error("❌ Erreur lors de la validation :", updateError)
-
-      if (
-        updateError.code === '42501' ||
-        updateError.message?.toLowerCase().includes('row-level security')
-      ) {
-        // ✅ AJOUT 2 : Message plus clair (même logique)
-        return { success: false, message: "⛔ ACCÈS REFUSÉ : connexion au dashboard du restaurant requise." }
-      }
-
       return { success: false, message: "Erreur technique lors de la validation." }
     }
 
-    // ✅ Cas critique : aucune ligne n’a été modifiée (RLS / mauvais ID / status != available)
     if (!updated || updated.length === 0) {
       return {
         success: false,
-        message: "⛔ Aucune ligne validée (déjà utilisé, ID invalide, ou droits insuffisants)."
+        message: "⛔ Aucune ligne validée (déjà utilisé, ID invalide, ou état du ticket incompatible)."
       }
     }
 
     // =========================================================================
-    // ÉTAPE 4 : SUCCÈS (Code INCHANGÉ)
+    // ÉTAPE 4 : SUCCÈS (INCHANGÉ)
     // =========================================================================
     console.log("✅ Gain validé avec succès !")
 
