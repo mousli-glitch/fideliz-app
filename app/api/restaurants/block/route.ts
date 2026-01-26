@@ -19,31 +19,24 @@ export async function PATCH(req: Request) {
     const supabaseAuth = await createAuthClient()
     const { data: userData } = await supabaseAuth.auth.getUser()
     const user = userData?.user
-    if (!user) {
-      return NextResponse.json({ error: "Non authentifié." }, { status: 401 })
-    }
+    if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 })
 
-    // 2) Charger profil (service role pour éviter RLS)
+    // 2) Profil (service role)
     const { data: profile, error: profileErr } = await supabaseAdmin
       .from("profiles")
       .select("id, role, is_active")
       .eq("id", user.id)
       .single()
 
-    if (profileErr || !profile) {
-      return NextResponse.json({ error: "Profil introuvable." }, { status: 404 })
-    }
+    if (profileErr || !profile) return NextResponse.json({ error: "Profil introuvable." }, { status: 404 })
+    if (profile.is_active === false) return NextResponse.json({ error: "Compte désactivé." }, { status: 403 })
 
-    if (profile.is_active === false) {
-      return NextResponse.json({ error: "Compte désactivé." }, { status: 403 })
-    }
-
-    // 3) Autorisation : root ou sales
+    // 3) Autorisation
     if (!["root", "sales"].includes(profile.role)) {
       return NextResponse.json({ error: "Accès refusé." }, { status: 403 })
     }
 
-    // 4) Si sales : vérifier assignment
+    // 4) Si sales : vérifier mapping
     if (profile.role === "sales") {
       const { data: assignment } = await supabaseAdmin
         .from("sales_restaurants")
@@ -57,18 +50,25 @@ export async function PATCH(req: Request) {
       }
     }
 
-    // 5) Update restaurant
-    const { error: updateErr } = await supabaseAdmin
+    // 5) UPDATE restaurant (source de vérité)
+    const { error: rErr } = await supabaseAdmin
       .from("restaurants")
       .update({ is_blocked })
       .eq("id", restaurant_id)
 
-    if (updateErr) {
-      return NextResponse.json({ error: "Erreur update restaurant." }, { status: 500 })
-    }
+    if (rErr) return NextResponse.json({ error: "Erreur update restaurants." }, { status: 500 })
+
+    // 6) OPTIONNEL mais recommandé : synchroniser les comptes restaurant
+    const { error: pErr } = await supabaseAdmin
+      .from("profiles")
+      .update({ is_active: !is_blocked })
+      .eq("restaurant_id", restaurant_id)
+      .eq("role", "restaurant")
+
+    if (pErr) return NextResponse.json({ error: "Erreur update profiles." }, { status: 500 })
 
     return NextResponse.json({ success: true, restaurant_id, is_blocked })
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Erreur serveur." }, { status: 500 })
   }
 }
