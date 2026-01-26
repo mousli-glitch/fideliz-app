@@ -64,6 +64,16 @@ export async function validateWinAction(winnerId: string) {
     // =========================================================================
     const supabaseAuth = await createAuthClient()
 
+    // ✅ AJOUT 1 : Vérifie que la Server Action a bien une session (sinon update refusé)
+    const { data: userData, error: userErr } = await supabaseAuth.auth.getUser()
+    if (userErr || !userData?.user) {
+      console.error("⛔ Pas de session utilisateur côté server action :", userErr)
+      return {
+        success: false,
+        message: "⛔ Vous devez être connecté au dashboard du restaurant pour valider ce ticket."
+      }
+    }
+
     const { data: updated, error: updateError } = await supabaseAuth
       .from("winners")
       .update({
@@ -81,7 +91,8 @@ export async function validateWinAction(winnerId: string) {
         updateError.code === '42501' ||
         updateError.message?.toLowerCase().includes('row-level security')
       ) {
-        return { success: false, message: "⛔ ACCÈS REFUSÉ : Connexion Staff requise." }
+        // ✅ AJOUT 2 : Message plus clair (même logique)
+        return { success: false, message: "⛔ ACCÈS REFUSÉ : connexion au dashboard du restaurant requise." }
       }
 
       return { success: false, message: "Erreur technique lors de la validation." }
