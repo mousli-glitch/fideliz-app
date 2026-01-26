@@ -51,9 +51,8 @@ function LoginForm() {
         router.push('/super-admin/sales/dashboard')
         break
 
-      // ✅ MODIF ICI : owner est un restaurateur, même destination que admin
-      case 'admin':
-      case 'owner':
+      // ✅ MODIF ICI : restaurant = restaurateur (unique rôle restaurant)
+      case 'restaurant':
         if (profile.restaurant_id) {
           const { data: resto } = await (supabase
             .from('restaurants')
