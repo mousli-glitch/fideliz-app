@@ -17,9 +17,11 @@ export async function PATCH(req: Request) {
 
     // 1) Session obligatoire
     const supabaseAuth = await createAuthClient()
-    const { data: userData } = await supabaseAuth.auth.getUser()
+    const { data: userData, error: authErr } = await supabaseAuth.auth.getUser()
     const user = userData?.user
-    if (!user) return NextResponse.json({ error: "Non authentifié." }, { status: 401 })
+    if (authErr || !user) {
+      return NextResponse.json({ error: "Non authentifié." }, { status: 401 })
+    }
 
     // 2) Profil (service role)
     const { data: profile, error: profileErr } = await supabaseAdmin
@@ -28,47 +30,72 @@ export async function PATCH(req: Request) {
       .eq("id", user.id)
       .single()
 
-    if (profileErr || !profile) return NextResponse.json({ error: "Profil introuvable." }, { status: 404 })
-    if (profile.is_active === false) return NextResponse.json({ error: "Compte désactivé." }, { status: 403 })
+    if (profileErr || !profile) {
+      return NextResponse.json({ error: "Profil introuvable." }, { status: 404 })
+    }
+    if (profile.is_active === false) {
+      return NextResponse.json({ error: "Compte désactivé." }, { status: 403 })
+    }
 
-    // 3) Autorisation
+    // 3) Autorisation rôle
     if (!["root", "sales"].includes(profile.role)) {
       return NextResponse.json({ error: "Accès refusé." }, { status: 403 })
     }
 
-    // 4) Si sales : vérifier mapping
+    // 4) Charger le restaurant (pour vérifs)
+    const { data: resto, error: restoErr } = await supabaseAdmin
+      .from("restaurants")
+      .select("id, created_by, is_blocked")
+      .eq("id", restaurant_id)
+      .single()
+
+    if (restoErr || !resto) {
+      return NextResponse.json({ error: "Restaurant introuvable." }, { status: 404 })
+    }
+
+    // 5) Si sales : vérifier assignation (mapping OU created_by)
     if (profile.role === "sales") {
-      const { data: assignment } = await supabaseAdmin
+      // 5.1 mapping table
+      const { data: assignment, error: assignErr } = await supabaseAdmin
         .from("sales_restaurants")
         .select("sales_user_id, restaurant_id")
         .eq("sales_user_id", user.id)
         .eq("restaurant_id", restaurant_id)
         .maybeSingle()
 
-      if (!assignment) {
+      const allowedByMapping = !!assignment && !assignErr
+      const allowedByCreatedBy = resto.created_by === user.id
+
+      if (!allowedByMapping && !allowedByCreatedBy) {
         return NextResponse.json({ error: "Restaurant non assigné à ce commercial." }, { status: 403 })
       }
     }
 
-    // 5) UPDATE restaurant (source de vérité)
+    // 6) UPDATE restaurant (source de vérité)
     const { error: rErr } = await supabaseAdmin
       .from("restaurants")
       .update({ is_blocked })
       .eq("id", restaurant_id)
 
-    if (rErr) return NextResponse.json({ error: "Erreur update restaurants." }, { status: 500 })
+    if (rErr) {
+      return NextResponse.json({ error: "Erreur update restaurants." }, { status: 500 })
+    }
 
-    // 6) OPTIONNEL mais recommandé : synchroniser les comptes restaurant
+    // 7) Synchroniser les comptes restaurant
+    //    ✅ On évite root/sales, on touche uniquement les utilisateurs "restaurant"
     const { error: pErr } = await supabaseAdmin
       .from("profiles")
       .update({ is_active: !is_blocked })
       .eq("restaurant_id", restaurant_id)
-      .eq("role", "restaurant")
+      .not("role", "in", '("root","sales")')
 
-    if (pErr) return NextResponse.json({ error: "Erreur update profiles." }, { status: 500 })
+    if (pErr) {
+      return NextResponse.json({ error: "Erreur update profiles." }, { status: 500 })
+    }
 
     return NextResponse.json({ success: true, restaurant_id, is_blocked })
-  } catch {
+  } catch (e) {
+    console.error(e)
     return NextResponse.json({ error: "Erreur serveur." }, { status: 500 })
   }
 }
