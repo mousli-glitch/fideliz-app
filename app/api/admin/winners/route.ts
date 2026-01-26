@@ -9,14 +9,24 @@ const supabaseAdmin = createClient(
 export async function PATCH(request: Request) {
   try {
     const { id } = await request.json()
-    const { error } = await supabaseAdmin
+
+    const { data, error } = await supabaseAdmin
       .from('winners')
       .update({ status: 'redeemed', redeemed_at: new Date().toISOString() })
       .eq('id', id)
       .eq('status', 'available') // Sécurité
-    
+      .select('id,status,redeemed_at') // ✅ permet de savoir si update réel
+
     if (error) throw error
-    return NextResponse.json({ success: true })
+
+    if (!data || data.length === 0) {
+      return NextResponse.json(
+        { success: false, message: "Aucune ligne mise à jour (status != 'available' ou id invalide)." },
+        { status: 409 }
+      )
+    }
+
+    return NextResponse.json({ success: true, data: data[0] })
   } catch (e) {
     return NextResponse.json({ error: "Erreur" }, { status: 500 })
   }
