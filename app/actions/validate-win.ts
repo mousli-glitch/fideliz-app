@@ -91,10 +91,10 @@ export async function validateWinAction(winnerId: string) {
       return { success: false, message: "⛔ Compte désactivé. Contactez l’administrateur." }
     }
 
-    // 3.3 Autoriser uniquement l’équipe restaurant
-    const allowedRoles = ['admin', 'owner', 'staff', 'root']
+    // 3.3 Autoriser uniquement l’équipe restaurant (NOUVEAU MODÈLE 3 RÔLES)
+    const allowedRoles = ['restaurant', 'root']
     if (!allowedRoles.includes(profile.role)) {
-      return { success: false, message: "⛔ Accès refusé : compte restaurant requis." }
+      return { success: false, message: "⛔ Accès refusé : connexion restaurant requise." }
     }
 
     // 3.4 Vérifier l’étanchéité : winner.restaurant === profile.restaurant
