@@ -30,17 +30,52 @@ export async function GET() {
     // 3) Admin client (bypass RLS)
     const admin = createAdminClient();
 
-    // 4) Restaurants créés par ce sales
-    const { data: restosData, error: rErr } = await admin
-      .from("restaurants")
-      .select(
-        "id,name,city,is_active,google_clicks,tiktok_clicks,instagram_clicks,facebook_clicks,internal_notes,alert_threshold_days,is_retention_alert_enabled,created_at,created_by"
-      )
-      .eq("created_by", user.id)
-      .order("created_at", { ascending: false });
+    // 4) ✅ Récupérer aussi les restaurants assignés via sales_restaurants
+    const { data: assignedRows, error: aErr } = await admin
+      .from("sales_restaurants")
+      .select("restaurant_id")
+      .eq("sales_user_id", user.id);
 
-    if (rErr) {
-      return NextResponse.json({ error: rErr.message }, { status: 500 });
+    if (aErr) {
+      return NextResponse.json({ error: aErr.message }, { status: 500 });
+    }
+
+    const assignedIds = (assignedRows ?? [])
+      .map((x: any) => x.restaurant_id)
+      .filter(Boolean);
+
+    // 5) Restaurants visibles par ce sales :
+    //    - créés par lui (created_by)
+    //    - OU assignés via sales_restaurants
+    let restosData: any[] = [];
+    if (assignedIds.length > 0) {
+      const { data, error: rErr } = await admin
+        .from("restaurants")
+        .select(
+          // ✅ IMPORTANT: on renvoie is_blocked (source de vérité)
+          "id,name,city,is_blocked,is_active,google_clicks,tiktok_clicks,instagram_clicks,facebook_clicks,internal_notes,alert_threshold_days,is_retention_alert_enabled,created_at,created_by"
+        )
+        .or(`created_by.eq.${user.id},id.in.(${assignedIds.join(",")})`)
+        .order("created_at", { ascending: false });
+
+      if (rErr) {
+        return NextResponse.json({ error: rErr.message }, { status: 500 });
+      }
+      restosData = data ?? [];
+    } else {
+      const { data, error: rErr } = await admin
+        .from("restaurants")
+        .select(
+          // ✅ IMPORTANT: on renvoie is_blocked (source de vérité)
+          "id,name,city,is_blocked,is_active,google_clicks,tiktok_clicks,instagram_clicks,facebook_clicks,internal_notes,alert_threshold_days,is_retention_alert_enabled,created_at,created_by"
+        )
+        .eq("created_by", user.id)
+        .order("created_at", { ascending: false });
+
+      if (rErr) {
+        return NextResponse.json({ error: rErr.message }, { status: 500 });
+      }
+      restosData = data ?? [];
     }
 
     const restos = (restosData ?? []) as any[];
@@ -50,7 +85,7 @@ export async function GET() {
       return NextResponse.json({ profile, restaurants: [] });
     }
 
-    // 5) Games des restos
+    // 6) Games des restos
     const { data: gamesData, error: gErr } = await admin
       .from("games")
       .select("id,restaurant_id")
@@ -63,7 +98,7 @@ export async function GET() {
     const games = (gamesData ?? []) as any[];
     const gameIds = games.map((g) => g.id).filter(Boolean);
 
-    // 6) Winners (pour compter + last_winner_at)
+    // 7) Winners (pour compter + last_winner_at)
     let winnersRows: any[] = [];
     if (gameIds.length > 0) {
       const { data: wData, error: wErr } = await admin
@@ -78,11 +113,11 @@ export async function GET() {
       winnersRows = (wData ?? []) as any[];
     }
 
-    // 7) Map game_id -> resto_id
+    // 8) Map game_id -> resto_id
     const gameToResto = new Map<string, string>();
     games.forEach((g) => gameToResto.set(g.id, g.restaurant_id));
 
-    // 8) Aggregate par resto
+    // 9) Aggregate par resto
     const agg = new Map<string, { count: number; last_winner_at: string | null }>();
     restoIds.forEach((id) => agg.set(id, { count: 0, last_winner_at: null }));
 
@@ -99,6 +134,9 @@ export async function GET() {
 
     const restaurants = restos.map((r) => ({
       ...r,
+      // ✅ On force la cohérence côté front :
+      // si is_blocked=true => considéré bloqué même si is_active est encore true quelque part
+      is_blocked: r.is_blocked === true,
       winners: agg.get(r.id) ?? { count: 0, last_winner_at: null },
     }));
 

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import {
@@ -24,8 +24,16 @@ export default function SalesDashboard() {
   const supabase = createClient();
   const router = useRouter();
 
+  // ✅ Normalisation UI (évite le “retour au vert” si l’API ne renvoie pas is_blocked)
+  const normalizeRestaurants = (list: any[]) => {
+    return (list || []).map((r: any) => ({
+      ...r,
+      is_blocked: r.is_blocked ?? (r.is_active === false),
+    }));
+  };
+
   // ✅ RELOAD (source de vérité = /api/sales/dashboard)
-  const reloadDashboard = async () => {
+  const reloadDashboard = useCallback(async () => {
     try {
       const res = await fetch("/api/sales/dashboard", { cache: "no-store" });
       if (res.status === 401) { router.push("/login"); return; }
@@ -33,11 +41,11 @@ export default function SalesDashboard() {
       if (!res.ok) return;
 
       setProfile(json.profile);
-      setRestaurants(json.restaurants || []);
+      setRestaurants(normalizeRestaurants(json.restaurants || []));
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [router]);
 
   // 1) CHARGEMENT + ✅ SYNC (focus + realtime)
   useEffect(() => {
@@ -53,7 +61,7 @@ export default function SalesDashboard() {
 
         if (!isMounted) return;
         setProfile(json.profile);
-        setRestaurants(json.restaurants || []);
+        setRestaurants(normalizeRestaurants(json.restaurants || []));
       } catch (e) {
         console.error(e);
       } finally {
@@ -84,7 +92,8 @@ export default function SalesDashboard() {
       window.removeEventListener("focus", onFocus);
       supabase.removeChannel(channel);
     };
-  }, [router]); // on garde la même dépendance que toi
+    // ⚠️ On garde ton pattern de dépendances, sans casser
+  }, [router, reloadDashboard, supabase]);
 
   // LOGIQUE EXISTANTE
   const getAtRiskStatus = (resto: any) => {
@@ -100,9 +109,13 @@ export default function SalesDashboard() {
   const toggleStatus = async (id: string, currentBlocked: boolean) => {
     setUpdatingId(id);
 
-    // Optimistic UI: on inverse localement is_blocked
+    // Optimistic UI: on inverse localement is_blocked (+ is_active pour cohérence visuelle)
     setRestaurants(prev =>
-      prev.map(r => (r.id === id ? { ...r, is_blocked: !currentBlocked } : r))
+      prev.map(r =>
+        r.id === id
+          ? { ...r, is_blocked: !currentBlocked, is_active: currentBlocked ? true : false }
+          : r
+      )
     );
 
     try {
@@ -121,15 +134,18 @@ export default function SalesDashboard() {
         throw new Error(json?.error || "Erreur maj statut");
       }
 
-      // ✅ Refresh local sûr (au lieu de dépendre de router.refresh uniquement)
+      // ✅ Sync “propre” via reload (normalisé) — on évite router.refresh qui peut réinjecter une data incomplète
       await reloadDashboard();
-      router.refresh();
     } catch (e: any) {
       alert(e?.message || "Erreur maj statut");
 
       // Rollback si erreur
       setRestaurants(prev =>
-        prev.map(r => (r.id === id ? { ...r, is_blocked: currentBlocked } : r))
+        prev.map(r =>
+          r.id === id
+            ? { ...r, is_blocked: currentBlocked, is_active: currentBlocked ? false : true }
+            : r
+        )
       );
     } finally {
       setUpdatingId(null);
