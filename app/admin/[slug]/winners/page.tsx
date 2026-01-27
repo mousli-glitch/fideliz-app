@@ -16,7 +16,8 @@ function isUUID(str: string) {
 export default async function AdminWinnersPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
 
-  const PAGE_LIMIT = 200
+  // ✅ On charge 50 au premier rendu (sinon tu ne verras jamais "Charger plus")
+  const FETCH_LIMIT = 50
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -56,7 +57,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
       <div className="p-6 max-w-7xl mx-auto space-y-6">
         <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <AdminWinnersTable initialWinners={[]} />
+          <AdminWinnersTable initialWinners={[]} hasMoreInitial={false} />
         </div>
       </div>
     )
@@ -86,7 +87,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .in("game_id", gameIds)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
-    .limit(PAGE_LIMIT)
+    .limit(FETCH_LIMIT)
 
   console.log("=== DIAGNOSTIC WINNERS PAGE ===")
   console.log("RESTAURANT:", restaurant.name)
@@ -105,7 +106,12 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     },
   }))
 
-  const showMoreBanner = typeof totalWinners === "number" && totalWinners > PAGE_LIMIT
+  // ✅ "hasMore" fiable : basé sur count, pas sur la longueur de la liste initiale
+  const hasMoreInitial =
+    typeof totalWinners === "number" ? totalWinners > FETCH_LIMIT : winnersList.length === FETCH_LIMIT
+
+  // Bandeau info (optionnel)
+  const showMoreBanner = typeof totalWinners === "number" && totalWinners > FETCH_LIMIT
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -128,15 +134,12 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
       {showMoreBanner && (
         <div className="p-4 bg-blue-50 text-blue-800 rounded-xl border border-blue-200 text-[11px] font-semibold">
           Il y a <span className="font-black">{totalWinners}</span> gagnants au total.
-          <span className="font-black"> Affichage limité à {PAGE_LIMIT}</span> pour éviter de ralentir le dashboard.
-          <span className="block text-[10px] font-mono opacity-70 mt-1">
-            Pagination “Charger plus” : déjà prête côté front, on branche ensuite sur server action.
-          </span>
+          <span className="font-black"> Affichage initial limité à {FETCH_LIMIT}</span>.
         </div>
       )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <AdminWinnersTable initialWinners={formattedWinners} />
+        <AdminWinnersTable initialWinners={formattedWinners} hasMoreInitial={hasMoreInitial} />
       </div>
     </div>
   )

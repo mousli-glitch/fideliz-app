@@ -12,15 +12,16 @@ import { useParams } from "next/navigation"
 
 interface AdminWinnersTableProps {
   initialWinners: any[]
+  hasMoreInitial?: boolean
 }
 
 type Cursor = { created_at: string; id: string } | null
 
-export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
+export function AdminWinnersTable({ initialWinners, hasMoreInitial = false }: AdminWinnersTableProps) {
   const params = useParams()
   const slug = params?.slug as string
 
-  // ✅ Tu voulais 50
+  // ✅ Pagination : 50 par page
   const PAGE_LIMIT = 50
 
   const [winners, setWinners] = useState(initialWinners)
@@ -30,23 +31,25 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
 
   // ✅ Pagination states
   const [cursor, setCursor] = useState<Cursor>(null)
-  const [hasMore, setHasMore] = useState(false)
+  const [hasMore, setHasMore] = useState<boolean>(Boolean(hasMoreInitial))
   const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   // État sélection groupée
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
-  // ✅ Init cursor/hasMore based on initial list
+  // ✅ Init cursor + hasMore initial (fiable)
   useEffect(() => {
     if (!initialWinners || initialWinners.length === 0) {
       setCursor(null)
-      setHasMore(false)
+      setHasMore(Boolean(hasMoreInitial))
       return
     }
     const last = initialWinners[initialWinners.length - 1]
     if (last?.created_at && last?.id) setCursor({ created_at: last.created_at, id: last.id })
-    setHasMore(initialWinners.length === PAGE_LIMIT) // ✅ 50 => bouton si + de 50
+
+    // ✅ source de vérité = count de la page
+    setHasMore(Boolean(hasMoreInitial))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -80,10 +83,10 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
     if (res.success) {
       const incoming = (res.winners || []).map((winner: any) => ({
         ...winner,
-       prizes: winner.prizes || {
-  label: winner.prize_label_snapshot || "Lot archivé",
-  color: "#64748b",
-},
+        prizes: winner.prizes || {
+          label: winner.prize_label_snapshot || "Lot archivé",
+          color: "#64748b",
+        },
       }))
 
       setWinners((prev) => {
@@ -130,7 +133,9 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
     const result = await validateWinAction(winnerId)
     if (result.success) {
       setWinners((prev) =>
-        prev.map((w) => (w.id === winnerId ? { ...w, status: "redeemed", redeemed_at: new Date().toISOString() } : w))
+        prev.map((w) =>
+          w.id === winnerId ? { ...w, status: "redeemed", redeemed_at: new Date().toISOString() } : w
+        )
       )
     }
     setLoadingId(null)
@@ -190,7 +195,9 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
               return (
                 <tr
                   key={winner.id}
-                  className={`border-b border-slate-50 transition-colors ${isSelected ? "bg-blue-50/40" : "hover:bg-slate-50/50"}`}
+                  className={`border-b border-slate-50 transition-colors ${
+                    isSelected ? "bg-blue-50/40" : "hover:bg-slate-50/50"
+                  }`}
                 >
                   <td className="py-4 text-center">
                     <button onClick={() => toggleSelect(winner.id)} className="text-slate-300 hover:text-blue-600">
@@ -224,7 +231,9 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
 
                   <td className="py-4 text-right pr-2 flex items-center justify-end gap-2">
                     {isRedeemed ? (
-                      <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">Validé</div>
+                      <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">
+                        Validé
+                      </div>
                     ) : (
                       <Button
                         onClick={() => handleQuickValidate(winner.id)}
