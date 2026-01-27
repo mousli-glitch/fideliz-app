@@ -37,7 +37,6 @@ export async function middleware(request: NextRequest) {
 
   // 2. VÉRIFICATION DES RÔLES & BLOCAGE
   if (user) {
-    // 👇 MODIFICATION ICI : On ajoute 'is_active' dans la sélection
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, restaurant_id, is_active')
@@ -46,24 +45,24 @@ export async function middleware(request: NextRequest) {
 
     const role = profile?.role
     const restaurantId = profile?.restaurant_id
-    
-    // 🔥 SÉCURITÉ CRITIQUE : BLOCAGE UTILISATEUR GLOBAL (SALES / ADMIN) 🔥
-    // Si le profil est désactivé manuellement (is_active === false) -> DEHORS
+
+    // 🔥 BLOCAGE UTILISATEUR GLOBAL (SALES / ADMIN) 🔥
     if (profile?.is_active === false) {
       await supabase.auth.signOut()
       return NextResponse.redirect(new URL('/login?reason=blocked', request.url))
     }
 
-    // --- SÉCURITÉ CRITIQUE : BLOCAGE RESTAURANT (Existante) ---
+    // --- ✅ BLOCAGE RESTAURANT : source de vérité = restaurants.is_blocked ---
     if (pathname.startsWith('/admin') && restaurantId) {
       const { data: restaurant } = await supabase
         .from('restaurants')
-        .select('blocked_at, is_active')
+        .select('is_blocked, is_active')
         .eq('id', restaurantId)
         .single()
 
-      if (restaurant?.blocked_at || restaurant?.is_active === false) {
-        await supabase.auth.signOut() 
+      // ✅ MODIF CHIRURGICALE ICI : blocked_at -> is_blocked
+      if (restaurant?.is_blocked === true || restaurant?.is_active === false) {
+        await supabase.auth.signOut()
         return NextResponse.redirect(new URL('/login?reason=blocked', request.url))
       }
     }
@@ -71,7 +70,7 @@ export async function middleware(request: NextRequest) {
 
     // Sécurité ROOT
     if (pathname.startsWith('/super-admin/root') && role !== 'root') {
-      return NextResponse.redirect(new URL('/login', request.url)) 
+      return NextResponse.redirect(new URL('/login', request.url))
     }
 
     // Sécurité SALES
@@ -81,7 +80,7 @@ export async function middleware(request: NextRequest) {
 
     // Sécurité Sales sur Admin
     if (pathname.startsWith('/admin') && role === 'sales') {
-        return NextResponse.redirect(new URL('/super-admin/sales/dashboard', request.url))
+      return NextResponse.redirect(new URL('/super-admin/sales/dashboard', request.url))
     }
   }
 
