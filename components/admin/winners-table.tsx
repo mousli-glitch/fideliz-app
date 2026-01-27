@@ -80,10 +80,10 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
     if (res.success) {
       const incoming = (res.winners || []).map((winner: any) => ({
         ...winner,
-        prizes: winner.prizes || {
-          label: winner.prize_label_snapshot || "Lot archivé",
-          color: winner.prize_color_snapshot || "#64748b",
-        },
+       prizes: winner.prizes || {
+  label: winner.prize_label_snapshot || "Lot archivé",
+  color: "#64748b",
+},
       }))
 
       setWinners((prev) => {
