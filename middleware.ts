@@ -56,12 +56,16 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith('/admin') && restaurantId) {
       const { data: restaurant } = await supabase
         .from('restaurants')
-        .select('is_blocked, is_active')
+        // ✅ on garde blocked_at pour compat + is_blocked comme source de vérité
+        .select('is_blocked, blocked_at, is_active')
         .eq('id', restaurantId)
         .single()
 
-      // ✅ MODIF CHIRURGICALE ICI : blocked_at -> is_blocked
-      if (restaurant?.is_blocked === true || restaurant?.is_active === false) {
+      if (
+        restaurant?.is_blocked === true ||
+        restaurant?.blocked_at || // compat ancienne logique
+        restaurant?.is_active === false
+      ) {
         await supabase.auth.signOut()
         return NextResponse.redirect(new URL('/login?reason=blocked', request.url))
       }
