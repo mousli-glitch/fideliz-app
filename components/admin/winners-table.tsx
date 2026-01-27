@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { validateWinAction } from "@/app/actions/validate-win"
 import { deleteWinnerAction } from "@/app/actions/delete-winner"
-import { getWinnersPageAction } from "@/app/actions/get-winners-page"
+import { getWinnersPage } from "@/app/actions/get-winners-page"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
 import { Loader2, Search, Calendar, Trash2, CheckSquare, Square, ChevronDown } from "lucide-react"
@@ -77,7 +77,7 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
     if (!slug || isLoadingMore || !hasMore) return
     setIsLoadingMore(true)
 
-    const res = await getWinnersPageAction(slug, cursor, PAGE_LIMIT)
+    const res = await getWinnersPage(slug, PAGE_LIMIT, cursor)
 
     if (res.success) {
       const incoming = (res.winners || []).map((winner: any) => ({
