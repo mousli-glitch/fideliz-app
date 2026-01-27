@@ -9,80 +9,13 @@ function isUUID(str: string) {
 }
 
 /**
- * Pagination par GAME (utile si tu affiches des gagnants jeu par jeu)
- */
-export async function getWinnersPage(
-  gameId: string,
-  limit: number = 50,
-  cursor: Cursor = null
-) {
-  try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    let query = supabase
-      .from("winners")
-      .select(`
-        id,
-        created_at,
-        first_name,
-        email,
-        status,
-        redeemed_at,
-        prize_label_snapshot,
-        prize_color_snapshot,
-        prizes(label, color)
-      `)
-      .eq("game_id", gameId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(limit)
-
-    // Pagination curseur (seek method)
-    if (cursor?.created_at && cursor?.id) {
-      query = query.or(
-        `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`
-      )
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      return { success: false as const, message: error.message }
-    }
-
-    const winners = (data || []).map((w: any) => ({
-      ...w,
-      prizes: w.prizes || {
-        label: w.prize_label_snapshot || "Lot archivé",
-        color: w.prize_color_snapshot || "#64748b",
-      },
-    }))
-
-    const last = winners[winners.length - 1]
-    const nextCursor =
-      last?.created_at && last?.id ? { created_at: last.created_at, id: last.id } : null
-
-    return {
-      success: true as const,
-      winners,
-      hasMore: winners.length === limit,
-      nextCursor,
-    }
-  } catch (e: any) {
-    return { success: false as const, message: e?.message || "Erreur serveur" }
-  }
-}
-
-/**
- * Pagination par RESTAURANT (slug ou UUID) -> c'est ça qu'utilise ton winners-table
+ * ✅ Action utilisée par l’UI Admin (slug restaurant)
+ * Signature alignée avec ton front : (slug, cursor, limit)
  */
 export async function getWinnersPageAction(
   restaurantSlugOrId: string,
-  limit: number = 200,
-  cursor: Cursor = null
+  cursor: Cursor = null,
+  limit: number = 50
 ) {
   try {
     const supabase = createClient(
@@ -90,42 +23,29 @@ export async function getWinnersPageAction(
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    // 1) Trouver le restaurant via slug ou UUID
-    let restoQuery = supabase.from("restaurants").select("id, name")
+    // 1) Restaurant
+    let rq = supabase.from("restaurants").select("id, name")
+    rq = isUUID(restaurantSlugOrId) ? rq.eq("id", restaurantSlugOrId) : rq.eq("slug", restaurantSlugOrId)
+    const { data: restaurant, error: rErr } = await rq.single()
 
-    if (isUUID(restaurantSlugOrId)) {
-      restoQuery = restoQuery.eq("id", restaurantSlugOrId)
-    } else {
-      restoQuery = restoQuery.eq("slug", restaurantSlugOrId)
-    }
-
-    const { data: restaurant, error: restoError } = await restoQuery.single()
-    if (restoError || !restaurant?.id) {
+    if (rErr || !restaurant) {
       return { success: false as const, message: "Restaurant introuvable." }
     }
 
-    // 2) Récupérer tous les game_id du restaurant
-    const { data: games, error: gamesError } = await supabase
+    // 2) Tous les games du restaurant
+    const { data: gamesData, error: gErr } = await supabase
       .from("games")
       .select("id")
       .eq("restaurant_id", restaurant.id)
 
-    if (gamesError) {
-      return { success: false as const, message: gamesError.message }
-    }
+    if (gErr) return { success: false as const, message: gErr.message }
 
-    const gameIds = (games || []).map((g: any) => g.id)
+    const gameIds = (gamesData || []).map((g: any) => g.id)
     if (gameIds.length === 0) {
-      return {
-        success: true as const,
-        winners: [],
-        hasMore: false,
-        nextCursor: null,
-        restaurantName: restaurant.name,
-      }
+      return { success: true as const, winners: [], hasMore: false, nextCursor: null }
     }
 
-    // 3) Query winners paginée (keyset)
+    // 3) Winners paginés (keyset)
     let query = supabase
       .from("winners")
       .select(`
@@ -135,7 +55,6 @@ export async function getWinnersPageAction(
         email,
         status,
         redeemed_at,
-        game_id,
         prize_label_snapshot,
         prize_color_snapshot,
         prizes(label, color)
@@ -152,9 +71,7 @@ export async function getWinnersPageAction(
     }
 
     const { data, error } = await query
-    if (error) {
-      return { success: false as const, message: error.message }
-    }
+    if (error) return { success: false as const, message: error.message }
 
     const winners = (data || []).map((w: any) => ({
       ...w,
@@ -165,17 +82,72 @@ export async function getWinnersPageAction(
     }))
 
     const last = winners[winners.length - 1]
-    const nextCursor =
-      last?.created_at && last?.id ? { created_at: last.created_at, id: last.id } : null
+    const nextCursor = last?.created_at && last?.id ? { created_at: last.created_at, id: last.id } : null
 
     return {
       success: true as const,
       winners,
       hasMore: winners.length === limit,
       nextCursor,
-      restaurantName: restaurant.name,
     }
   } catch (e: any) {
     return { success: false as const, message: e?.message || "Erreur serveur" }
+  }
+}
+
+/**
+ * (Optionnel) si tu veux garder une fonction simple par gameId, on la laisse.
+ */
+export async function getWinnersPage(
+  gameId: string,
+  limit: number = 50,
+  cursor: Cursor = null
+) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
+  let query = supabase
+    .from("winners")
+    .select(`
+      id,
+      created_at,
+      first_name,
+      email,
+      status,
+      redeemed_at,
+      prize_label_snapshot,
+      prize_color_snapshot,
+      prizes(label, color)
+    `)
+    .eq("game_id", gameId)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit)
+
+  if (cursor?.created_at && cursor?.id) {
+    query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`)
+  }
+
+  const { data, error } = await query
+  if (error) return { success: false as const, message: error.message }
+
+  const winners = (data || []).map((w: any) => ({
+    ...w,
+    prizes: w.prizes || {
+      label: w.prize_label_snapshot || "Lot archivé",
+      color: w.prize_color_snapshot || "#64748b",
+    },
+  }))
+
+  const last = winners[winners.length - 1]
+  const nextCursor = last?.created_at && last?.id ? { created_at: last.created_at, id: last.id } : null
+
+  return {
+    success: true as const,
+    winners,
+    hasMore: winners.length === limit,
+    nextCursor,
   }
 }

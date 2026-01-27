@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { validateWinAction } from "@/app/actions/validate-win"
 import { deleteWinnerAction } from "@/app/actions/delete-winner"
-import { getWinnersPage } from "@/app/actions/get-winners-page"
+import { getWinnersPageAction } from "@/app/actions/get-winners-page"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
 import { Loader2, Search, Calendar, Trash2, CheckSquare, Square, ChevronDown } from "lucide-react"
@@ -20,7 +20,8 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
   const params = useParams()
   const slug = params?.slug as string
 
-  const PAGE_LIMIT = 200
+  // ✅ Tu voulais 50
+  const PAGE_LIMIT = 50
 
   const [winners, setWinners] = useState(initialWinners)
   const [searchTerm, setSearchTerm] = useState("")
@@ -29,10 +30,10 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
 
   // ✅ Pagination states
   const [cursor, setCursor] = useState<Cursor>(null)
-  const [hasMore, setHasMore] = useState(true)
+  const [hasMore, setHasMore] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
 
-  // État pour la sélection groupée
+  // État sélection groupée
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
@@ -45,7 +46,7 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
     }
     const last = initialWinners[initialWinners.length - 1]
     if (last?.created_at && last?.id) setCursor({ created_at: last.created_at, id: last.id })
-    setHasMore(initialWinners.length === PAGE_LIMIT)
+    setHasMore(initialWinners.length === PAGE_LIMIT) // ✅ 50 => bouton si + de 50
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -59,46 +60,40 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
     })
   }, [winners, searchTerm])
 
-  // Logique sélection
+  // Sélection
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredWinners.length) {
-      setSelectedIds([])
-    } else {
-      setSelectedIds(filteredWinners.map((w) => w.id))
-    }
+    if (selectedIds.length === filteredWinners.length) setSelectedIds([])
+    else setSelectedIds(filteredWinners.map((w) => w.id))
   }
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
   }
 
-  // ✅ Charger plus (pagination keyset)
+  // ✅ Charger plus
   const handleLoadMore = async () => {
     if (!slug || isLoadingMore || !hasMore) return
     setIsLoadingMore(true)
 
-    const res = await getWinnersPage(slug, PAGE_LIMIT, cursor)
+    const res = await getWinnersPageAction(slug, cursor, PAGE_LIMIT)
 
     if (res.success) {
       const incoming = (res.winners || []).map((winner: any) => ({
         ...winner,
         prizes: winner.prizes || {
           label: winner.prize_label_snapshot || "Lot archivé",
-          color: "#64748b",
+          color: winner.prize_color_snapshot || "#64748b",
         },
       }))
 
       setWinners((prev) => {
-        // ✅ anti-doublons (au cas où)
         const existing = new Set(prev.map((x: any) => x.id))
-        const merged = [...prev, ...incoming.filter((x: any) => !existing.has(x.id))]
-        return merged
+        return [...prev, ...incoming.filter((x: any) => !existing.has(x.id))]
       })
 
       setCursor(res.nextCursor || null)
       setHasMore(Boolean(res.hasMore))
     } else {
-      // si erreur, on évite boucle infinie
       setHasMore(false)
       console.error("Load more error:", res.message)
     }
@@ -135,9 +130,7 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
     const result = await validateWinAction(winnerId)
     if (result.success) {
       setWinners((prev) =>
-        prev.map((w) =>
-          w.id === winnerId ? { ...w, status: "redeemed", redeemed_at: new Date().toISOString() } : w
-        )
+        prev.map((w) => (w.id === winnerId ? { ...w, status: "redeemed", redeemed_at: new Date().toISOString() } : w))
       )
     }
     setLoadingId(null)
@@ -197,22 +190,17 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
               return (
                 <tr
                   key={winner.id}
-                  className={`border-b border-slate-50 transition-colors ${
-                    isSelected ? "bg-blue-50/40" : "hover:bg-slate-50/50"
-                  }`}
+                  className={`border-b border-slate-50 transition-colors ${isSelected ? "bg-blue-50/40" : "hover:bg-slate-50/50"}`}
                 >
                   <td className="py-4 text-center">
-                    <button
-                      onClick={() => toggleSelect(winner.id)}
-                      className="text-slate-300 hover:text-blue-600"
-                    >
+                    <button onClick={() => toggleSelect(winner.id)} className="text-slate-300 hover:text-blue-600">
                       {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
                     </button>
                   </td>
 
                   <td className="py-4 pl-2 text-slate-500 text-xs">
                     <div className="flex items-center gap-2">
-                      <Calendar size={14} />{" "}
+                      <Calendar size={14} />
                       {format(new Date(winner.created_at), "dd MMM HH:mm", { locale: fr })}
                     </div>
                   </td>
@@ -236,9 +224,7 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
 
                   <td className="py-4 text-right pr-2 flex items-center justify-end gap-2">
                     {isRedeemed ? (
-                      <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">
-                        Validé
-                      </div>
+                      <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">Validé</div>
                     ) : (
                       <Button
                         onClick={() => handleQuickValidate(winner.id)}
@@ -254,11 +240,7 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
                       disabled={deletingId === winner.id}
                       className="p-2 text-slate-300 hover:text-red-600"
                     >
-                      {deletingId === winner.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Trash2 size={16} />
-                      )}
+                      {deletingId === winner.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={16} />}
                     </button>
                   </td>
                 </tr>
@@ -271,19 +253,12 @@ export function AdminWinnersTable({ initialWinners }: AdminWinnersTableProps) {
       {/* ✅ Load More */}
       <div className="mt-6 flex justify-center">
         {hasMore ? (
-          <Button
-            onClick={handleLoadMore}
-            disabled={isLoadingMore}
-            className="rounded-xl font-bold gap-2"
-            variant="outline"
-          >
+          <Button onClick={handleLoadMore} disabled={isLoadingMore} className="rounded-xl font-bold gap-2" variant="outline">
             {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronDown size={16} />}
             Charger plus
           </Button>
         ) : (
-          <div className="text-xs text-slate-400 font-medium">
-            Fin de la liste.
-          </div>
+          <div className="text-xs text-slate-400 font-medium">Fin de la liste.</div>
         )}
       </div>
     </div>

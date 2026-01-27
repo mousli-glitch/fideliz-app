@@ -81,15 +81,21 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
   // 3.B ✅ RÉCUPÉRATION DES GAGNANTS (LIMIT + tri stable)
   const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
-    .select(
-      `
-      *,
-      games(name, status), 
+    .select(`
+      id,
+      created_at,
+      first_name,
+      email,
+      status,
+      redeemed_at,
+      prize_label_snapshot,
+      prize_color_snapshot,
       prizes(label, color)
-    `
-    )
+    `)
     .in("game_id", gameIds)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(50)
     .order("id", { ascending: false })
     .limit(PAGE_LIMIT)
 
