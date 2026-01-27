@@ -22,12 +22,13 @@ export async function getRootStats() {
     .select('id, name, slug')
     .is('created_by', null)
 
-  // 3. RÉCUPÉRATION DES NOUVEAUX LOGS (Activity Logs)
-  const { data: logs } = await supabase
-    .from('activity_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(15)
+// 3. RÉCUPÉRATION DES LOGS SYSTÈME (system_logs = source de vérité)
+const { data: logs } = await supabase
+  .from('system_logs')
+  .select('*')
+  .order('created_at', { ascending: false })
+  .limit(50)
+
 
   return {
     stats: {
