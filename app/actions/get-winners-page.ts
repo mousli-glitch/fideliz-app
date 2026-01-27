@@ -56,7 +56,6 @@ export async function getWinnersPageAction(
         status,
         redeemed_at,
         prize_label_snapshot,
-        prize_color_snapshot,
         prizes(label, color)
       `)
       .in("game_id", gameIds)
@@ -77,7 +76,7 @@ export async function getWinnersPageAction(
       ...w,
       prizes: w.prizes || {
         label: w.prize_label_snapshot || "Lot archivé",
-        color: w.prize_color_snapshot || "#64748b",
+        color: "#64748b", // ✅ fallback SAFE (car prize_color_snapshot n'existe pas)
       },
     }))
 
@@ -103,51 +102,56 @@ export async function getWinnersPage(
   limit: number = 50,
   cursor: Cursor = null
 ) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
 
-  let query = supabase
-    .from("winners")
-    .select(`
-      id,
-      created_at,
-      first_name,
-      email,
-      status,
-      redeemed_at,
-      prize_label_snapshot,
-      prize_color_snapshot,
-      prizes(label, color)
-    `)
-    .eq("game_id", gameId)
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(limit)
+    let query = supabase
+      .from("winners")
+      .select(`
+        id,
+        created_at,
+        first_name,
+        email,
+        status,
+        redeemed_at,
+        prize_label_snapshot,
+        prizes(label, color)
+      `)
+      .eq("game_id", gameId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit)
 
-  if (cursor?.created_at && cursor?.id) {
-    query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`)
-  }
+    if (cursor?.created_at && cursor?.id) {
+      query = query.or(
+        `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`
+      )
+    }
 
-  const { data, error } = await query
-  if (error) return { success: false as const, message: error.message }
+    const { data, error } = await query
+    if (error) return { success: false as const, message: error.message }
 
-  const winners = (data || []).map((w: any) => ({
-    ...w,
-    prizes: w.prizes || {
-      label: w.prize_label_snapshot || "Lot archivé",
-      color: w.prize_color_snapshot || "#64748b",
-    },
-  }))
+    const winners = (data || []).map((w: any) => ({
+      ...w,
+      prizes: w.prizes || {
+        label: w.prize_label_snapshot || "Lot archivé",
+        color: "#64748b", // ✅ fallback SAFE
+      },
+    }))
 
-  const last = winners[winners.length - 1]
-  const nextCursor = last?.created_at && last?.id ? { created_at: last.created_at, id: last.id } : null
+    const last = winners[winners.length - 1]
+    const nextCursor = last?.created_at && last?.id ? { created_at: last.created_at, id: last.id } : null
 
-  return {
-    success: true as const,
-    winners,
-    hasMore: winners.length === limit,
-    nextCursor,
+    return {
+      success: true as const,
+      winners,
+      hasMore: winners.length === limit,
+      nextCursor,
+    }
+  } catch (e: any) {
+    return { success: false as const, message: e?.message || "Erreur serveur" }
   }
 }
