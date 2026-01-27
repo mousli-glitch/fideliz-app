@@ -1,9 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { getWinnersPageAction } from "@/app/actions/get-winners-page"
-
-type Cursor = { created_at: string; id: string } | null
+import { getWinnersPage, type Cursor } from "@/app/actions/get-winners-page"
 
 export default function WinnersPaginatedList({ gameId }: { gameId: string }) {
   const [rows, setRows] = useState<any[]>([])
@@ -15,21 +13,17 @@ export default function WinnersPaginatedList({ gameId }: { gameId: string }) {
     if (loading || done) return
     setLoading(true)
 
-    // ✅ SIGNATURE RÉELLE : (gameId, cursor, limit?)
-    const res = await getWinnersPageAction(gameId, cursor, 50)
+    const res = await getWinnersPage(gameId, 50, cursor)
 
     if (!res.success) {
-      console.error(res.message || "Erreur chargement gagnants")
       setLoading(false)
       return
     }
 
-    setRows((prev) => [...prev, ...(res.winners || [])])
-    setCursor(res.nextCursor ?? null)
+    setRows((prev) => [...prev, ...res.winners])
+    setCursor(res.nextCursor)
 
-    if (!res.hasMore || !res.nextCursor || (res.winners?.length ?? 0) === 0) {
-      setDone(true)
-    }
+    if (!res.hasMore || res.winners.length === 0) setDone(true)
 
     setLoading(false)
   }
@@ -38,7 +32,6 @@ export default function WinnersPaginatedList({ gameId }: { gameId: string }) {
     setRows([])
     setCursor(null)
     setDone(false)
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     loadMore()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId])
@@ -52,10 +45,7 @@ export default function WinnersPaginatedList({ gameId }: { gameId: string }) {
 
       <div className="space-y-2">
         {rows.map((r) => (
-          <div
-            key={r.id}
-            className="bg-white border border-slate-200 rounded-xl p-3 flex justify-between"
-          >
+          <div key={r.id} className="bg-white border border-slate-200 rounded-xl p-3 flex justify-between">
             <div>
               <div className="font-bold">{r.first_name ?? "Client"}</div>
               <div className="text-xs text-slate-500">
