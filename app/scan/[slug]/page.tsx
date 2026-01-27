@@ -24,7 +24,7 @@ export default async function SmartScanPage({
   if (rErr || !restaurant) {
     return (
       <div className="p-10 text-center text-slate-500">
-        Restaurant introuvable ({slug}).
+        Ce jeu n’est pas disponible.
       </div>
     );
   }
@@ -33,7 +33,7 @@ export default async function SmartScanPage({
   if (restaurant.is_blocked === true) {
     return (
       <div className="p-10 text-center text-red-500 font-bold">
-        Établissement suspendu ({restaurant.name})
+       Service momentanément indisponible. Merci de réessayer plus tard.
       </div>
     );
   }
