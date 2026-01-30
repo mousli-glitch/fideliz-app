@@ -1,3 +1,4 @@
+// app/admin/[slug]/winners/page.tsx
 import { createClient } from "@supabase/supabase-js"
 import { AdminWinnersTable } from "@/components/admin/winners-table"
 import { notFound } from "next/navigation"
@@ -16,8 +17,8 @@ function isUUID(str: string) {
 export default async function AdminWinnersPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
 
-  // ✅ On charge 50 au premier rendu (sinon tu ne verras jamais "Charger plus")
-  const FETCH_LIMIT = 50
+  // ✅ Pages de ~30 gagnants (Option B "pages")
+  const FETCH_LIMIT = 30
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,20 +70,20 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .select("*", { count: "exact", head: true })
     .in("game_id", gameIds)
 
-  // 4) Winners (⚠️ prize_color_snapshot supprimé)
+  // 4) Winners (pas de prize_color_snapshot)
   const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
     .select(
       `
-      id,
-      created_at,
-      first_name,
-      email,
-      status,
-      redeemed_at,
-      prize_label_snapshot,
-      prizes(label, color)
-    `
+        id,
+        created_at,
+        first_name,
+        email,
+        status,
+        redeemed_at,
+        prize_label_snapshot,
+        prizes(label, color)
+      `
     )
     .in("game_id", gameIds)
     .order("created_at", { ascending: false })
@@ -106,7 +107,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     },
   }))
 
-  // ✅ "hasMore" fiable : basé sur count, pas sur la longueur de la liste initiale
+  // ✅ hasMore fiable (count > limit)
   const hasMoreInitial =
     typeof totalWinners === "number" ? totalWinners > FETCH_LIMIT : winnersList.length === FETCH_LIMIT
 
@@ -134,7 +135,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
       {showMoreBanner && (
         <div className="p-4 bg-blue-50 text-blue-800 rounded-xl border border-blue-200 text-[11px] font-semibold">
           Il y a <span className="font-black">{totalWinners}</span> gagnants au total.
-          <span className="font-black"> Affichage initial limité à {FETCH_LIMIT}</span>.
+          <span className="font-black"> Affichage par page : {FETCH_LIMIT}</span>.
         </div>
       )}
 
