@@ -1,4 +1,3 @@
-// components/admin/winners-table.tsx
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
@@ -24,46 +23,45 @@ type Cursor = { created_at: string; id: string } | null
 
 interface AdminWinnersTableProps {
   initialWinners: any[]
-  hasMoreInitial: boolean
+  hasMoreInitial?: boolean
 }
 
-export function AdminWinnersTable({ initialWinners, hasMoreInitial }: AdminWinnersTableProps) {
+export function AdminWinnersTable({ initialWinners, hasMoreInitial = false }: AdminWinnersTableProps) {
   const params = useParams()
   const slug = params?.slug as string
 
   // ✅ Pages de 30
   const PAGE_SIZE = 30
 
-  // ✅ Cache des pages (important pour "Précédent")
-  const [page, setPage] = useState(1)
-  const [pagesCache, setPagesCache] = useState<Record<number, any[]>>({ 1: initialWinners || [] })
-
-  // Cursor de pagination : cursorByPage[N] = curseur à utiliser pour charger la page N
-  // Page 1 => null (déjà chargé)
-  const [cursorByPage, setCursorByPage] = useState<Record<number, Cursor>>({ 1: null })
-  const [hasMoreByPage, setHasMoreByPage] = useState<Record<number, boolean>>({ 1: hasMoreInitial })
-  const [isPaging, setIsPaging] = useState(false)
-
-  // ✅ Liste affichée = page courante
-  const winners = pagesCache[page] || []
-
+  const [winners, setWinners] = useState<any[]>(initialWinners || [])
   const [searchTerm, setSearchTerm] = useState("")
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  // ✅ Pagination “pages” (keyset)
+  const [page, setPage] = useState(1)
+  const [cursorByPage, setCursorByPage] = useState<Record<number, Cursor>>({ 1: null })
+  const [hasMoreByPage, setHasMoreByPage] = useState<Record<number, boolean>>({ 1: hasMoreInitial })
+  const [isPaging, setIsPaging] = useState(false)
 
   // ✅ Sélection groupée
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
-  // Si initialWinners change (rare), on resync page 1
+  // ✅ Au montage : on prépare le cursor de la page 2 à partir de la fin de la page 1
   useEffect(() => {
-    setPagesCache({ 1: initialWinners || [] })
-    setCursorByPage({ 1: null })
+    const list = initialWinners || []
+    const last = list[list.length - 1]
+
+    const page2Cursor: Cursor =
+      last?.created_at && last?.id ? { created_at: last.created_at, id: last.id } : null
+
+    setCursorByPage({ 1: null, 2: page2Cursor })
     setHasMoreByPage({ 1: hasMoreInitial })
     setPage(1)
-    setSelectedIds([])
+    setWinners(list)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug])
+  }, [])
 
   const filteredWinners = useMemo(() => {
     const search = searchTerm.toLowerCase()
@@ -85,18 +83,10 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial }: AdminWinne
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
   }
 
-  // ✅ Charger une page (fetch si pas en cache)
+  // ✅ Charger une page (keyset)
   const loadPage = async (targetPage: number) => {
     if (!slug) return
     if (isPaging) return
-    if (targetPage < 1) return
-
-    // ✅ Si la page existe déjà en cache => pas de fetch
-    if (pagesCache[targetPage]) {
-      setPage(targetPage)
-      setSelectedIds([])
-      return
-    }
 
     setIsPaging(true)
 
@@ -112,18 +102,26 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial }: AdminWinne
         },
       }))
 
-      // ✅ On stocke la page dans le cache
-      setPagesCache((prev) => ({ ...prev, [targetPage]: incoming }))
+      // ✅ Vraie pagination : remplace la liste par la page
+      setWinners(incoming)
 
-      // ✅ curseur pour la page suivante
       const nextCursor = (res.nextCursor || null) as Cursor
-      setCursorByPage((prev) => ({ ...prev, [targetPage + 1]: nextCursor }))
 
-      // ✅ hasMore pour la page courante
+      // ✅ IMPORTANT : clé dynamique correcte
       setHasMoreByPage((prev) => ({ ...prev, [targetPage]: Boolean(res.hasMore) }))
+
+      // ✅ On stocke le cursor pour la page suivante
+      setCursorByPage((prev) => {
+        const next = { ...prev }
+        next[targetPage + 1] = nextCursor
+        return next
+      })
 
       setPage(targetPage)
       setSelectedIds([])
+
+      // ✅ Scroll en haut à chaque changement de page
+      window.scrollTo({ top: 0, behavior: "smooth" })
     } else {
       console.error("Pagination error:", res.message)
       setHasMoreByPage((prev) => ({ ...prev, [targetPage]: false }))
@@ -132,7 +130,7 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial }: AdminWinne
     setIsPaging(false)
   }
 
-  const canPrev = page > 1 && !isPaging
+  const canPrev = page > 1
   const canNext = Boolean(hasMoreByPage[page]) && !isPaging
 
   const handlePrev = async () => {
@@ -150,16 +148,10 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial }: AdminWinne
     if (!confirm(`Supprimer définitivement les ${selectedIds.length} gagnants ?`)) return
     setIsBulkDeleting(true)
     const result = await deleteWinnerAction(selectedIds, slug)
-
     if (result.success) {
-      // retire du cache de la page courante
-      setPagesCache((prev) => ({
-        ...prev,
-        [page]: (prev[page] || []).filter((w: any) => !selectedIds.includes(w.id)),
-      }))
+      setWinners((prev) => prev.filter((w) => !selectedIds.includes(w.id)))
       setSelectedIds([])
     }
-
     setIsBulkDeleting(false)
   }
 
@@ -167,15 +159,10 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial }: AdminWinne
     if (!confirm("Supprimer ce gagnant ?")) return
     setDeletingId(winnerId)
     const result = await deleteWinnerAction([winnerId], slug)
-
     if (result.success) {
-      setPagesCache((prev) => ({
-        ...prev,
-        [page]: (prev[page] || []).filter((w: any) => w.id !== winnerId),
-      }))
+      setWinners((prev) => prev.filter((w) => w.id !== winnerId))
       setSelectedIds((prev) => prev.filter((s) => s !== winnerId))
     }
-
     setDeletingId(null)
   }
 
@@ -183,18 +170,18 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial }: AdminWinne
     if (!confirm("Confirmer la remise du lot ?")) return
     setLoadingId(winnerId)
     const result = await validateWinAction(winnerId)
-
     if (result.success) {
-      setPagesCache((prev) => ({
-        ...prev,
-        [page]: (prev[page] || []).map((w: any) =>
+      setWinners((prev) =>
+        prev.map((w) =>
           w.id === winnerId ? { ...w, status: "redeemed", redeemed_at: new Date().toISOString() } : w
-        ),
-      }))
+        )
+      )
     }
-
     setLoadingId(null)
   }
+
+  // ✅ Petites “annotations” 1/2/3 (on affiche page-1, page, page+1)
+  const pageButtons = Array.from(new Set([Math.max(1, page - 1), page, page + 1]))
 
   return (
     <div className="p-6">
@@ -314,7 +301,7 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial }: AdminWinne
         </table>
       </div>
 
-      {/* ✅ Pagination “Pages” */}
+      {/* ✅ Pagination “Pages” + numéros */}
       <div className="mt-6 flex items-center justify-between">
         <div className="text-xs text-slate-500">
           Page <span className="font-bold">{page}</span> — {winners.length} résultat(s)
@@ -322,9 +309,26 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial }: AdminWinne
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="rounded-xl gap-2" onClick={handlePrev} disabled={!canPrev}>
+          <Button variant="outline" className="rounded-xl gap-2" onClick={handlePrev} disabled={!canPrev || isPaging}>
             <ChevronLeft size={16} /> Précédent
           </Button>
+
+          <div className="flex items-center gap-1">
+            {pageButtons.map((p) => (
+              <button
+                key={p}
+                onClick={() => loadPage(p)}
+                disabled={isPaging || (p > page && !hasMoreByPage[page])}
+                className={`min-w-9 h-9 px-3 rounded-xl text-sm font-black border transition
+                  ${p === page ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"}
+                  ${isPaging ? "opacity-60" : ""}
+                `}
+                title={`Page ${p}`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
 
           <Button variant="outline" className="rounded-xl gap-2" onClick={handleNext} disabled={!canNext}>
             Suivant <ChevronRight size={16} />

@@ -1,4 +1,3 @@
-// app/admin/[slug]/winners/page.tsx
 import { createClient } from "@supabase/supabase-js"
 import { AdminWinnersTable } from "@/components/admin/winners-table"
 import { notFound } from "next/navigation"
@@ -17,7 +16,7 @@ function isUUID(str: string) {
 export default async function AdminWinnersPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
 
-  // ✅ Pages de ~30 gagnants (Option B "pages")
+  // ✅ Page size = 30 (cohérent avec la pagination UI)
   const FETCH_LIMIT = 30
 
   const supabase = createClient(
@@ -65,37 +64,30 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
   }
 
   // 3) Count total
-  const { count: totalWinners, error: countError } = await supabase
+  const { count: totalWinners } = await supabase
     .from("winners")
     .select("*", { count: "exact", head: true })
     .in("game_id", gameIds)
 
-  // 4) Winners (pas de prize_color_snapshot)
+  // 4) Winners (page 1)
   const { data: winnersData, error: fetchError } = await supabase
     .from("winners")
     .select(
       `
-        id,
-        created_at,
-        first_name,
-        email,
-        status,
-        redeemed_at,
-        prize_label_snapshot,
-        prizes(label, color)
-      `
+      id,
+      created_at,
+      first_name,
+      email,
+      status,
+      redeemed_at,
+      prize_label_snapshot,
+      prizes(label, color)
+    `
     )
     .in("game_id", gameIds)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(FETCH_LIMIT)
-
-  console.log("=== DIAGNOSTIC WINNERS PAGE ===")
-  console.log("RESTAURANT:", restaurant.name)
-  console.log("TOTAL GAGNANTS (count):", totalWinners ?? "n/a")
-  console.log("GAGNANTS CHARGÉS:", winnersData?.length || 0)
-  if (fetchError) console.error("ERREUR TECHNIQUE:", fetchError.message)
-  if (countError) console.error("ERREUR COUNT:", countError.message)
 
   const winnersList = (winnersData as any[]) || []
 
@@ -107,12 +99,8 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     },
   }))
 
-  // ✅ hasMore fiable (count > limit)
   const hasMoreInitial =
     typeof totalWinners === "number" ? totalWinners > FETCH_LIMIT : winnersList.length === FETCH_LIMIT
-
-  // Bandeau info (optionnel)
-  const showMoreBanner = typeof totalWinners === "number" && totalWinners > FETCH_LIMIT
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -123,19 +111,6 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
       {fetchError && (
         <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-[10px] font-mono">
           Mode Maintenance : {fetchError.message}
-        </div>
-      )}
-
-      {countError && (
-        <div className="p-4 bg-amber-50 text-amber-900 rounded-xl border border-amber-200 text-[10px] font-mono">
-          Warning count : {countError.message}
-        </div>
-      )}
-
-      {showMoreBanner && (
-        <div className="p-4 bg-blue-50 text-blue-800 rounded-xl border border-blue-200 text-[11px] font-semibold">
-          Il y a <span className="font-black">{totalWinners}</span> gagnants au total.
-          <span className="font-black"> Affichage par page : {FETCH_LIMIT}</span>.
         </div>
       )}
 
