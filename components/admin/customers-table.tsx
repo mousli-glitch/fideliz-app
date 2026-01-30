@@ -58,11 +58,11 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState<number>(() => {
     if (typeof totalCount === "number") return Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
-    // fallback si pas de totalCount : on assume 1 page au début
     return 1
   })
   const [hasMore, setHasMore] = useState<boolean>(hasMoreInitial)
   const [isPaging, setIsPaging] = useState(false)
+  const [pendingPage, setPendingPage] = useState<number | null>(null) // ✅ pour l'overlay
 
   // État sélection multiple
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -99,20 +99,21 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
     if (totalPages && targetPage > totalPages) return
 
     setIsPaging(true)
+    setPendingPage(targetPage)
 
-    // ✅ Page 1 : on remet l’SSR (évite re-fetch, plus stable)
+    // ✅ Page 1 : on remet l’SSR (évite re-fetch)
     if (targetPage === 1) {
       setCustomers(initialCustomers || [])
       setPage(1)
       setSelectedIds([])
       setHasMore(hasMoreInitial)
       scrollTop()
+      setPendingPage(null)
       setIsPaging(false)
       return
     }
 
-    // ✅ IMPORTANT : ici on appelle l’action en mode "page"
-    // -> si ton action attend (slug, page, limit)
+    // ✅ Appel action en mode page (OFFSET)
     const res = (await getCustomersPageAction(slug, targetPage, PAGE_SIZE)) as CustomersPageResult
 
     if (res.success) {
@@ -124,8 +125,10 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
       scrollTop()
     } else {
       console.error("CRM pagination error:", res.message)
+      // On garde l'ancienne page affichée (pas de blanc)
     }
 
+    setPendingPage(null)
     setIsPaging(false)
   }
 
@@ -180,14 +183,15 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition bg-white text-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            disabled={isPaging} // ✅ évite les flashes pendant pagination
           />
         </div>
 
         {selectedIds.length > 0 && (
           <button
             onClick={handleBulkDelete}
-            disabled={isBulkDeleting}
-            className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-red-700 transition-all shadow-sm"
+            disabled={isBulkDeleting || isPaging}
+            className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-red-700 transition-all shadow-sm disabled:opacity-40"
           >
             {isBulkDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
             Supprimer {selectedIds.length} sélection(s)
@@ -195,90 +199,116 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
         )}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
-            <tr>
-              <th className="px-4 py-4 w-10 text-center">
-                <button onClick={toggleSelectAll} className="hover:text-blue-600 transition-colors">
-                  {selectedIds.length === filteredCustomers.length && filteredCustomers.length > 0 ? (
-                    <CheckSquare size={18} className="text-blue-600" />
-                  ) : (
-                    <Square size={18} />
-                  )}
-                </button>
-              </th>
-              <th className="px-4 py-4">Client</th>
-              <th className="px-6 py-4">Contact</th>
-              <th className="px-6 py-4 text-center">Marketing</th>
-              <th className="px-6 py-4 text-right">Actions</th>
-            </tr>
-          </thead>
+      {/* ✅ Wrapper relatif + overlay pour éviter page blanche */}
+      <div className="overflow-x-auto relative">
+        {isPaging && (
+          <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
+            <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Chargement de la page {pendingPage ?? "..."}
+            </div>
+          </div>
+        )}
 
-          <tbody className="divide-y divide-slate-100">
-            {filteredCustomers.length > 0 ? (
-              filteredCustomers.map((client) => {
-                const isSelected = selectedIds.includes(client.id)
-                return (
-                  <tr
-                    key={client.id}
-                    className={`hover:bg-blue-50/50 transition-colors ${isSelected ? "bg-blue-50/40" : ""}`}
-                  >
-                    <td className="px-4 py-4 text-center">
-                      <button onClick={() => toggleSelect(client.id)} className="text-slate-300 hover:text-blue-600">
-                        {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
-                      </button>
-                    </td>
-                    <td className="px-4 py-4 font-bold text-slate-900">{client.first_name || "Anonyme"}</td>
-                    <td className="px-6 py-4 text-slate-600">
-                      <div className="flex flex-col text-xs">
-                        <span className="flex items-center gap-2 text-slate-500">
-                          <Mail size={12} /> {client.email || "-"}
-                        </span>
-                        <span className="flex items-center gap-2 text-slate-500">
-                          <MessageSquare size={12} /> {client.phone || "-"}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {client.marketing_optin ? (
-                        <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                          <UserCheck size={10} /> Opt-in
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                          <UserX size={10} /> Non
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => handleDeleteOne(client.id)}
-                        disabled={deletingId === client.id}
-                        className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        {deletingId === client.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={16} />}
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })
-            ) : (
+        {/* On garde l’ancienne page affichée pendant le fetch */}
+        <div className={isPaging ? "opacity-60 pointer-events-none" : ""}>
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
               <tr>
-                <td colSpan={5} className="py-12 text-center text-slate-400">
-                  Aucun résultat.
-                </td>
+                <th className="px-4 py-4 w-10 text-center">
+                  <button onClick={toggleSelectAll} className="hover:text-blue-600 transition-colors" disabled={isPaging}>
+                    {selectedIds.length === filteredCustomers.length && filteredCustomers.length > 0 ? (
+                      <CheckSquare size={18} className="text-blue-600" />
+                    ) : (
+                      <Square size={18} />
+                    )}
+                  </button>
+                </th>
+                <th className="px-4 py-4">Client</th>
+                <th className="px-6 py-4">Contact</th>
+                <th className="px-6 py-4 text-center">Marketing</th>
+                <th className="px-6 py-4 text-right">Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100">
+              {filteredCustomers.length > 0 ? (
+                filteredCustomers.map((client) => {
+                  const isSelected = selectedIds.includes(client.id)
+                  return (
+                    <tr
+                      key={client.id}
+                      className={`hover:bg-blue-50/50 transition-colors ${isSelected ? "bg-blue-50/40" : ""}`}
+                    >
+                      <td className="px-4 py-4 text-center">
+                        <button
+                          onClick={() => toggleSelect(client.id)}
+                          className="text-slate-300 hover:text-blue-600"
+                          disabled={isPaging}
+                        >
+                          {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
+                        </button>
+                      </td>
+                      <td className="px-4 py-4 font-bold text-slate-900">{client.first_name || "Anonyme"}</td>
+                      <td className="px-6 py-4 text-slate-600">
+                        <div className="flex flex-col text-xs">
+                          <span className="flex items-center gap-2 text-slate-500">
+                            <Mail size={12} /> {client.email || "-"}
+                          </span>
+                          <span className="flex items-center gap-2 text-slate-500">
+                            <MessageSquare size={12} /> {client.phone || "-"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {client.marketing_optin ? (
+                          <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                            <UserCheck size={10} /> Opt-in
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                            <UserX size={10} /> Non
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => handleDeleteOne(client.id)}
+                          disabled={deletingId === client.id || isPaging}
+                          className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                        >
+                          {deletingId === client.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 size={16} />
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })
+              ) : (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                    Aucun résultat.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Pagination */}
       <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
         <div className="text-xs text-slate-500">
           Page <span className="font-bold">{page}</span>
-          {totalPages ? <> / <span className="font-bold">{totalPages}</span></> : null}
+          {totalPages ? (
+            <>
+              {" "}
+              / <span className="font-bold">{totalPages}</span>
+            </>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2">
