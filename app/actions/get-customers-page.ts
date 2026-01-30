@@ -2,19 +2,16 @@
 
 import { createClient } from "@supabase/supabase-js"
 
-export type Cursor = { created_at: string; id: string } | null
-
 function isUUID(str: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
 }
 
 /**
- * Pagination keyset des contacts par restaurant (slug OU id)
- * Signature: (restaurantSlugOrId, cursor, limit)
+ * Pagination OFFSET (range) : page=1 => 0..limit-1, page=2 => limit..2*limit-1
  */
 export async function getCustomersPageAction(
   restaurantSlugOrId: string,
-  cursor: Cursor = null,
+  page: number = 1,
   limit: number = 30
 ) {
   try {
@@ -30,33 +27,31 @@ export async function getCustomersPageAction(
     const { data: restaurant, error: rErr } = await rq.single()
     if (rErr || !restaurant) return { success: false as const, message: "Restaurant introuvable." }
 
-    // 2) Contacts paginés
-    let query = supabase
+    const safePage = Math.max(1, Number(page || 1))
+    const from = (safePage - 1) * limit
+    const to = from + limit - 1
+
+    // 2) Contacts paginés + count total
+    const { data, error, count } = await supabase
       .from("contacts")
-      .select(`id, created_at, first_name, email, phone, marketing_optin`)
+      .select("id, first_name, email, phone, created_at, marketing_optin", { count: "exact" })
       .eq("restaurant_id", restaurant.id)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
-      .limit(limit)
+      .range(from, to)
 
-    if (cursor?.created_at && cursor?.id) {
-      query = query.or(
-        `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`
-      )
-    }
-
-    const { data, error } = await query
     if (error) return { success: false as const, message: error.message }
 
-    const customers = data || []
-    const last = customers[customers.length - 1]
-    const nextCursor = last?.created_at && last?.id ? { created_at: last.created_at, id: last.id } : null
+    const total = count ?? 0
+    const totalPages = Math.max(1, Math.ceil(total / limit))
 
     return {
       success: true as const,
-      customers,
-      hasMore: customers.length === limit,
-      nextCursor,
+      customers: data || [],
+      total,
+      totalPages,
+      page: safePage,
+      hasMore: safePage < totalPages,
     }
   } catch (e: any) {
     return { success: false as const, message: e?.message || "Erreur serveur" }

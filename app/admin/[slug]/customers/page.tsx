@@ -100,7 +100,11 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
         </div>
 
         {/* TABLEAU DES CLIENTS */}
-        <CustomersTable initialCustomers={customers} hasMoreInitial={hasMoreInitial} />
+        <CustomersTable
+  initialCustomers={customers}
+  hasMoreInitial={hasMoreInitial}
+  totalCount={typeof totalCustomers === "number" ? totalCustomers : undefined}
+/>
       </div>
     </div>
   )

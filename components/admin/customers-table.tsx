@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import {
   Search,
   Mail,
@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { useParams } from "next/navigation"
 import { deleteContactAction } from "@/app/actions/delete-contact"
-import { getCustomersPageAction, type Cursor } from "@/app/actions/get-customers-page"
+import { getCustomersPageAction } from "@/app/actions/get-customers-page"
 
 type Customer = {
   id: string
@@ -27,117 +27,57 @@ type Customer = {
   prize: { label: string } | null
 }
 
+type CustomersPageResult =
+  | {
+      success: true
+      customers: Customer[]
+      total: number
+      totalPages: number
+      page: number
+      hasMore: boolean
+    }
+  | { success: false; message: string }
+
 interface CustomersTableProps {
   initialCustomers: Customer[]
   hasMoreInitial: boolean
+  totalCount?: number // ✅ optionnel (recommandé)
 }
 
-export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTableProps) {
+export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }: CustomersTableProps) {
   const params = useParams()
   const slug = params?.slug as string
 
   const PAGE_SIZE = 30
 
+  const [customers, setCustomers] = useState<Customer[]>(initialCustomers || [])
   const [searchTerm, setSearchTerm] = useState("")
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // ✅ Cache des pages : pageNumber -> customers[]
-  const [pageData, setPageData] = useState<Record<number, Customer[]>>({ 1: initialCustomers || [] })
-
-  // ✅ Keyset cursor pour la page (cursorByPage[1] = null, cursorByPage[2] = nextCursor de page 1, etc.)
-  const [cursorByPage, setCursorByPage] = useState<Record<number, Cursor>>({ 1: null })
-  const [hasMoreByPage, setHasMoreByPage] = useState<Record<number, boolean>>({ 1: hasMoreInitial })
-
+  // Pagination pages (offset)
   const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState<number>(() => {
+    if (typeof totalCount === "number") return Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
+    // fallback si pas de totalCount : on assume 1 page au début
+    return 1
+  })
+  const [hasMore, setHasMore] = useState<boolean>(hasMoreInitial)
   const [isPaging, setIsPaging] = useState(false)
 
-  // Sélection multiple (sur la page affichée)
+  // État sélection multiple
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
-  const scrollTop = () => {
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
-  }
-
-  const currentCustomers = pageData[page] || []
-
   const filteredCustomers = useMemo(() => {
     const term = searchTerm.toLowerCase()
-    return currentCustomers.filter((client) => {
+    return customers.filter((client) => {
       return (
         (client.first_name || "").toLowerCase().includes(term) ||
         (client.email || "").toLowerCase().includes(term) ||
         (client.phone || "").includes(term)
       )
     })
-  }, [currentCustomers, searchTerm])
-
-  // ✅ Si tu changes le searchTerm : on revient page 1 (UX classique)
-  useEffect(() => {
-    setPage(1)
-    setSelectedIds([])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm])
-
-  // ✅ Load page (avec cache)
-  const loadPage = async (targetPage: number) => {
-    if (!slug || isPaging) return
-
-    // ✅ Si on a déjà la page en cache, on l’affiche sans refetch
-    if (pageData[targetPage]) {
-      setPage(targetPage)
-      setSelectedIds([])
-      scrollTop()
-      return
-    }
-
-    setIsPaging(true)
-
-    const cursor = cursorByPage[targetPage] ?? null
-    const res = await getCustomersPageAction(slug, cursor, PAGE_SIZE)
-
-    if (res.success) {
-      const incoming = (res.customers || []) as Customer[]
-      const nextCursor = (res.nextCursor || null) as Cursor
-
-      // ✅ stocker la page
-      setPageData((prev) => ({ ...prev, [targetPage]: incoming }))
-
-      // ✅ stocker hasMore pour cette page
-      setHasMoreByPage((prev) => ({ ...prev, [targetPage]: Boolean(res.hasMore) }))
-
-      // ✅ stocker cursor de la page suivante = cursor fin de la page courante
-      setCursorByPage((prev) => ({ ...prev, [targetPage + 1]: nextCursor }))
-
-      setPage(targetPage)
-      setSelectedIds([])
-      scrollTop()
-    } else {
-      console.error("CRM pagination error:", res.message)
-      setHasMoreByPage((prev) => ({ ...prev, [targetPage]: false }))
-    }
-
-    setIsPaging(false)
-  }
-
-  const canPrev = page > 1
-  const canNext = Boolean(hasMoreByPage[page]) && !isPaging
-
-  const handlePrev = async () => {
-    if (!canPrev) return
-    await loadPage(page - 1)
-  }
-
-  const handleNext = async () => {
-    if (!canNext) return
-    await loadPage(page + 1)
-  }
-
-  // ✅ Pagination numérotée (1..N) “optimiste”
-  // On affiche jusqu’à la dernière page connue + 1 si hasMore=true
-  const maxKnownPage = Math.max(...Object.keys(pageData).map((k) => Number(k)))
-  const maxPageToShow = hasMoreByPage[maxKnownPage] ? maxKnownPage + 1 : maxKnownPage
-  const pages = Array.from({ length: Math.max(1, maxPageToShow) }, (_, i) => i + 1)
+  }, [customers, searchTerm])
 
   // Sélection
   const toggleSelectAll = () => {
@@ -149,6 +89,59 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
   }
 
+  const scrollTop = () => {
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  const loadPage = async (targetPage: number) => {
+    if (!slug || isPaging) return
+    if (targetPage < 1) return
+    if (totalPages && targetPage > totalPages) return
+
+    setIsPaging(true)
+
+    // ✅ Page 1 : on remet l’SSR (évite re-fetch, plus stable)
+    if (targetPage === 1) {
+      setCustomers(initialCustomers || [])
+      setPage(1)
+      setSelectedIds([])
+      setHasMore(hasMoreInitial)
+      scrollTop()
+      setIsPaging(false)
+      return
+    }
+
+    // ✅ IMPORTANT : ici on appelle l’action en mode "page"
+    // -> si ton action attend (slug, page, limit)
+    const res = (await getCustomersPageAction(slug, targetPage, PAGE_SIZE)) as CustomersPageResult
+
+    if (res.success) {
+      setCustomers(res.customers || [])
+      setPage(res.page || targetPage)
+      setHasMore(Boolean(res.hasMore))
+      setTotalPages(res.totalPages || totalPages)
+      setSelectedIds([])
+      scrollTop()
+    } else {
+      console.error("CRM pagination error:", res.message)
+    }
+
+    setIsPaging(false)
+  }
+
+  const canPrev = page > 1 && !isPaging
+  const canNext = ((totalPages ? page < totalPages : hasMore) && !isPaging) || false
+
+  const handlePrev = async () => {
+    if (!canPrev) return
+    await loadPage(page - 1)
+  }
+
+  const handleNext = async () => {
+    if (!canNext) return
+    await loadPage(page + 1)
+  }
+
   // Suppression groupée
   const handleBulkDelete = async () => {
     const count = selectedIds.length
@@ -156,34 +149,23 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
 
     setIsBulkDeleting(true)
     const result = await deleteContactAction(selectedIds, slug)
-
     if (result.success) {
-      // remove dans la page courante
-      setPageData((prev) => ({
-        ...prev,
-        [page]: (prev[page] || []).filter((c) => !selectedIds.includes(c.id)),
-      }))
+      setCustomers((prev) => prev.filter((c) => !selectedIds.includes(c.id)))
       setSelectedIds([])
     } else {
       alert("Erreur : " + result.error)
     }
-
     setIsBulkDeleting(false)
   }
 
   const handleDeleteOne = async (id: string) => {
     if (!confirm("Supprimer ce client ?")) return
     setDeletingId(id)
-
     const result = await deleteContactAction([id], slug)
     if (result.success) {
-      setPageData((prev) => ({
-        ...prev,
-        [page]: (prev[page] || []).filter((c) => c.id !== id),
-      }))
+      setCustomers((prev) => prev.filter((c) => c.id !== id))
       setSelectedIds((prev) => prev.filter((selected) => selected !== id))
     }
-
     setDeletingId(null)
   }
 
@@ -247,9 +229,7 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
                         {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
                       </button>
                     </td>
-
                     <td className="px-4 py-4 font-bold text-slate-900">{client.first_name || "Anonyme"}</td>
-
                     <td className="px-6 py-4 text-slate-600">
                       <div className="flex flex-col text-xs">
                         <span className="flex items-center gap-2 text-slate-500">
@@ -260,7 +240,6 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
                         </span>
                       </div>
                     </td>
-
                     <td className="px-6 py-4 text-center">
                       {client.marketing_optin ? (
                         <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
@@ -272,7 +251,6 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
                         </span>
                       )}
                     </td>
-
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => handleDeleteOne(client.id)}
@@ -296,42 +274,21 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
         </table>
       </div>
 
-      {/* ✅ Pagination */}
+      {/* Pagination */}
       <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
-        <div className="text-xs text-slate-500 flex items-center gap-2">
-          <span>
-            Page <span className="font-bold">{page}</span>
-          </span>
-          {isPaging ? <span className="text-slate-400">•</span> : null}
-          {isPaging ? <span className="text-slate-400">chargement</span> : null}
+        <div className="text-xs text-slate-500">
+          Page <span className="font-bold">{page}</span>
+          {totalPages ? <> / <span className="font-bold">{totalPages}</span></> : null}
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handlePrev}
-            disabled={!canPrev || isPaging}
+            disabled={!canPrev}
             className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold disabled:opacity-40"
           >
             Précédent
           </button>
-
-          {/* Pages 1,2,3… */}
-          <div className="hidden sm:flex items-center gap-1">
-            {pages.map((p) => (
-              <button
-                key={p}
-                onClick={() => loadPage(p)}
-                disabled={isPaging}
-                className={`px-3 py-2 rounded-xl border text-sm font-bold ${
-                  p === page
-                    ? "border-blue-600 bg-blue-50 text-blue-700"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                } disabled:opacity-40`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
 
           <button
             onClick={handleNext}
