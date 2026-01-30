@@ -16,7 +16,7 @@ function isUUID(str: string) {
 export default async function AdminWinnersPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
 
-  // ✅ Page size = 30 (cohérent avec la pagination UI)
+  // ✅ On charge une page initiale “safe”
   const FETCH_LIMIT = 30
 
   const supabase = createClient(
@@ -57,14 +57,14 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
       <div className="p-6 max-w-7xl mx-auto space-y-6">
         <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <AdminWinnersTable initialWinners={[]} hasMoreInitial={false} />
+          <AdminWinnersTable initialWinners={[]} totalCount={0} />
         </div>
       </div>
     )
   }
 
   // 3) Count total
-  const { count: totalWinners } = await supabase
+  const { count: totalWinners, error: countError } = await supabase
     .from("winners")
     .select("*", { count: "exact", head: true })
     .in("game_id", gameIds)
@@ -74,20 +74,31 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .from("winners")
     .select(
       `
-      id,
-      created_at,
-      first_name,
-      email,
-      status,
-      redeemed_at,
-      prize_label_snapshot,
-      prizes(label, color)
-    `
+        id,
+        created_at,
+        first_name,
+        email,
+        status,
+        redeemed_at,
+        prize_label_snapshot,
+        prizes(label, color)
+      `
     )
     .in("game_id", gameIds)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(FETCH_LIMIT)
+
+  if (fetchError) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
+        <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
+        <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-[10px] font-mono">
+          Mode Maintenance : {fetchError.message}
+        </div>
+      </div>
+    )
+  }
 
   const winnersList = (winnersData as any[]) || []
 
@@ -99,23 +110,20 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     },
   }))
 
-  const hasMoreInitial =
-    typeof totalWinners === "number" ? totalWinners > FETCH_LIMIT : winnersList.length === FETCH_LIMIT
-
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
       </div>
 
-      {fetchError && (
-        <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-[10px] font-mono">
-          Mode Maintenance : {fetchError.message}
+      {countError && (
+        <div className="p-4 bg-amber-50 text-amber-900 rounded-xl border border-amber-200 text-[10px] font-mono">
+          Warning count : {countError.message}
         </div>
       )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <AdminWinnersTable initialWinners={formattedWinners} hasMoreInitial={hasMoreInitial} />
+        <AdminWinnersTable initialWinners={formattedWinners} totalCount={typeof totalWinners === "number" ? totalWinners : undefined} />
       </div>
     </div>
   )

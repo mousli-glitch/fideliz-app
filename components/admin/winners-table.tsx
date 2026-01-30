@@ -23,10 +23,10 @@ type Cursor = { created_at: string; id: string } | null
 
 interface AdminWinnersTableProps {
   initialWinners: any[]
-  hasMoreInitial?: boolean
+  totalCount?: number
 }
 
-export function AdminWinnersTable({ initialWinners, hasMoreInitial = false }: AdminWinnersTableProps) {
+export function AdminWinnersTable({ initialWinners, totalCount }: AdminWinnersTableProps) {
   const params = useParams()
   const slug = params?.slug as string
 
@@ -41,25 +41,24 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial = false }: Ad
   // ✅ Pagination “pages” (keyset)
   const [page, setPage] = useState(1)
   const [cursorByPage, setCursorByPage] = useState<Record<number, Cursor>>({ 1: null })
-  const [hasMoreByPage, setHasMoreByPage] = useState<Record<number, boolean>>({ 1: hasMoreInitial })
   const [isPaging, setIsPaging] = useState(false)
 
   // ✅ Sélection groupée
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
-  // ✅ Au montage : on prépare le cursor de la page 2 à partir de la fin de la page 1
+  const totalPages = typeof totalCount === "number" ? Math.max(1, Math.ceil(totalCount / PAGE_SIZE)) : null
+
+  // Init: on prépare le curseur de la page 2 à partir de la fin de la page 1
   useEffect(() => {
     const list = initialWinners || []
     const last = list[list.length - 1]
+    const nextCursor = last?.created_at && last?.id ? ({ created_at: last.created_at, id: last.id } as Cursor) : null
 
-    const page2Cursor: Cursor =
-      last?.created_at && last?.id ? { created_at: last.created_at, id: last.id } : null
-
-    setCursorByPage({ 1: null, 2: page2Cursor })
-    setHasMoreByPage({ 1: hasMoreInitial })
-    setPage(1)
-    setWinners(list)
+    setCursorByPage((prev) => ({
+      ...prev,
+      2: nextCursor, // ✅ cursor à utiliser pour aller à la page 2
+    }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -83,14 +82,26 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial = false }: Ad
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
   }
 
-  // ✅ Charger une page (keyset)
+  // ✅ Charge une page N (keyset)
   const loadPage = async (targetPage: number) => {
     if (!slug) return
     if (isPaging) return
+    if (totalPages && (targetPage < 1 || targetPage > totalPages)) return
 
     setIsPaging(true)
 
+    // Page 1 = data initiale, on ne refetch pas (plus rapide)
+    if (targetPage === 1) {
+      setWinners(initialWinners || [])
+      setPage(1)
+      setSelectedIds([])
+      window.scrollTo({ top: 0, behavior: "smooth" })
+      setIsPaging(false)
+      return
+    }
+
     const cursor = cursorByPage[targetPage] ?? null
+
     const res = await getWinnersPageAction(slug, cursor, PAGE_SIZE)
 
     if (res.success) {
@@ -102,36 +113,30 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial = false }: Ad
         },
       }))
 
-      // ✅ Vraie pagination : remplace la liste par la page
       setWinners(incoming)
 
-      const nextCursor = (res.nextCursor || null) as Cursor
+      const last = incoming[incoming.length - 1]
+      const nextCursor =
+        last?.created_at && last?.id ? ({ created_at: last.created_at, id: last.id } as Cursor) : null
 
-      // ✅ IMPORTANT : clé dynamique correcte
-      setHasMoreByPage((prev) => ({ ...prev, [targetPage]: Boolean(res.hasMore) }))
-
-      // ✅ On stocke le cursor pour la page suivante
-      setCursorByPage((prev) => {
-        const next = { ...prev }
-        next[targetPage + 1] = nextCursor
-        return next
-      })
+      // On prépare le curseur de la page suivante (targetPage+1)
+      setCursorByPage((prev) => ({
+        ...prev,
+        [targetPage + 1]: nextCursor,
+      }))
 
       setPage(targetPage)
       setSelectedIds([])
-
-      // ✅ Scroll en haut à chaque changement de page
       window.scrollTo({ top: 0, behavior: "smooth" })
     } else {
       console.error("Pagination error:", res.message)
-      setHasMoreByPage((prev) => ({ ...prev, [targetPage]: false }))
     }
 
     setIsPaging(false)
   }
 
-  const canPrev = page > 1
-  const canNext = Boolean(hasMoreByPage[page]) && !isPaging
+  const canPrev = page > 1 && !isPaging
+  const canNext = (!totalPages || page < totalPages) && !isPaging
 
   const handlePrev = async () => {
     if (!canPrev) return
@@ -179,9 +184,6 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial = false }: Ad
     }
     setLoadingId(null)
   }
-
-  // ✅ Petites “annotations” 1/2/3 (on affiche page-1, page, page+1)
-  const pageButtons = Array.from(new Set([Math.max(1, page - 1), page, page + 1]))
 
   return (
     <div className="p-6">
@@ -301,34 +303,44 @@ export function AdminWinnersTable({ initialWinners, hasMoreInitial = false }: Ad
         </table>
       </div>
 
-      {/* ✅ Pagination “Pages” + numéros */}
+      {/* ✅ Pagination Pro (1..N) */}
       <div className="mt-6 flex items-center justify-between">
         <div className="text-xs text-slate-500">
-          Page <span className="font-bold">{page}</span> — {winners.length} résultat(s)
-          {isPaging ? <span className="ml-2 italic">chargement…</span> : null}
+          Page <span className="font-bold">{page}</span>
+          {typeof totalCount === "number" ? (
+            <> / <span className="font-bold">{totalPages}</span> — <span className="font-bold">{totalCount}</span> gagnant(s)</>
+          ) : (
+            <> — {winners.length} résultat(s)</>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="rounded-xl gap-2" onClick={handlePrev} disabled={!canPrev || isPaging}>
+          <Button variant="outline" className="rounded-xl gap-2" onClick={handlePrev} disabled={!canPrev}>
             <ChevronLeft size={16} /> Précédent
           </Button>
 
-          <div className="flex items-center gap-1">
-            {pageButtons.map((p) => (
-              <button
-                key={p}
-                onClick={() => loadPage(p)}
-                disabled={isPaging || (p > page && !hasMoreByPage[page])}
-                className={`min-w-9 h-9 px-3 rounded-xl text-sm font-black border transition
-                  ${p === page ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"}
-                  ${isPaging ? "opacity-60" : ""}
-                `}
-                title={`Page ${p}`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+          {totalPages ? (
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }).map((_, i) => {
+                const p = i + 1
+                const active = p === page
+                return (
+                  <button
+                    key={p}
+                    onClick={() => loadPage(p)}
+                    disabled={isPaging}
+                    className={`px-3 py-2 rounded-lg text-xs font-bold border transition ${
+                      active
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
 
           <Button variant="outline" className="rounded-xl gap-2" onClick={handleNext} disabled={!canNext}>
             Suivant <ChevronRight size={16} />
