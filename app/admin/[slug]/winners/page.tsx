@@ -2,6 +2,9 @@ import { createClient } from "@supabase/supabase-js"
 import { AdminWinnersTable } from "@/components/admin/winners-table"
 import { notFound } from "next/navigation"
 
+// ✅ NEW: bouton export winners
+import WinnersExportButton from "@/components/admin/winners-export-button"
+
 export const dynamic = "force-dynamic"
 
 interface Restaurant {
@@ -16,7 +19,6 @@ function isUUID(str: string) {
 export default async function AdminWinnersPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
 
-  // ✅ On charge une page initiale “safe”
   const FETCH_LIMIT = 30
 
   const supabase = createClient(
@@ -55,7 +57,24 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
   if (gameIds.length === 0) {
     return (
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
+        {/* ✅ header + boutons export même si 0 gagnant */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
+
+          <div className="flex items-center gap-2">
+            <WinnersExportButton
+              restaurantSlug={slug}
+              mode="all"
+              filename={`gagnants-${restaurant.name}.csv`}
+            />
+            <WinnersExportButton
+              restaurantSlug={slug}
+              mode="campaign"
+              filename={`gagnants-optin-${restaurant.name}.csv`}
+            />
+          </div>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <AdminWinnersTable initialWinners={[]} totalCount={0} />
         </div>
@@ -112,8 +131,24 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* ✅ Header + boutons export */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
+
+        <div className="flex items-center gap-2">
+          {/* ✅ Export complet */}
+          <WinnersExportButton
+            restaurantSlug={slug}
+            mode="all"
+            filename={`gagnants-${restaurant.name}.csv`}
+          />
+          {/* ✅ Export campagne (opt-in only) */}
+          <WinnersExportButton
+            restaurantSlug={slug}
+            mode="campaign"
+            filename={`gagnants-optin-${restaurant.name}.csv`}
+          />
+        </div>
       </div>
 
       {countError && (
@@ -123,7 +158,10 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
       )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <AdminWinnersTable initialWinners={formattedWinners} totalCount={typeof totalWinners === "number" ? totalWinners : undefined} />
+        <AdminWinnersTable
+          initialWinners={formattedWinners}
+          totalCount={typeof totalWinners === "number" ? totalWinners : undefined}
+        />
       </div>
     </div>
   )

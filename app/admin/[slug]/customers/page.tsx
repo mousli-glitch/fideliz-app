@@ -69,7 +69,7 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
           </div>
           <div className="flex gap-3">
             {/* BOUTON EXPORT CSV (⚠️ export la page courante uniquement) */}
-            <CsvExportButton data={customers} filename={`clients-${restaurant.name}.csv`} />
+           <CsvExportButton restaurantSlug={slug} filename={`clients-${restaurant.name}.csv`} />
           </div>
         </div>
 

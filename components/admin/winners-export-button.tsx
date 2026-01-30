@@ -1,14 +1,16 @@
 "use client"
 
 import { useState } from "react"
-import { exportCustomersCsvAction } from "@/app/actions/export-customers-csv"
+import { exportWinnersCsvAction, exportWinnersCampaignCsvAction } from "@/app/actions/export-winners-csv"
 
-export default function CsvExportButton({
+export default function WinnersExportButton({
   restaurantSlug,
   filename,
+  mode,
 }: {
   restaurantSlug: string
   filename?: string
+  mode: "all" | "campaign"
 }) {
   const [loading, setLoading] = useState(false)
 
@@ -28,10 +30,13 @@ export default function CsvExportButton({
     if (loading) return
     setLoading(true)
 
-    const res = await exportCustomersCsvAction(restaurantSlug)
+    const res =
+      mode === "campaign"
+        ? await exportWinnersCampaignCsvAction(restaurantSlug)
+        : await exportWinnersCsvAction(restaurantSlug)
 
     if (!res.success) {
-      alert("Erreur export CSV: " + res.message)
+      alert("Erreur export: " + res.message)
       setLoading(false)
       return
     }
@@ -40,13 +45,15 @@ export default function CsvExportButton({
     setLoading(false)
   }
 
+  const label = mode === "campaign" ? "Exporter gagnants (opt-in)" : "Exporter gagnants (complet)"
+
   return (
     <button
       onClick={onClick}
       disabled={loading}
       className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold disabled:opacity-50"
     >
-      {loading ? "Export..." : "Exporter CSV (complet)"}
+      {loading ? "Export..." : label}
     </button>
   )
 }
