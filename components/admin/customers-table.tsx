@@ -1,9 +1,20 @@
 "use client"
 
-import { useState } from "react"
-import { Search, Mail, MessageSquare, Calendar, UserCheck, Trash2, Loader2, UserX, CheckSquare, Square } from "lucide-react"
+import { useMemo, useState } from "react"
+import {
+  Search,
+  Mail,
+  MessageSquare,
+  UserCheck,
+  Trash2,
+  Loader2,
+  UserX,
+  CheckSquare,
+  Square,
+} from "lucide-react"
 import { useParams } from "next/navigation"
 import { deleteContactAction } from "@/app/actions/delete-contact"
+import { getCustomersPageAction, type Cursor } from "@/app/actions/get-customers-page"
 
 type Customer = {
   id: string
@@ -18,46 +29,95 @@ type Customer = {
 
 interface CustomersTableProps {
   initialCustomers: Customer[]
+  hasMoreInitial: boolean
 }
 
-export function CustomersTable({ initialCustomers }: CustomersTableProps) {
+export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTableProps) {
   const params = useParams()
   const slug = params?.slug as string
 
-  const [customers, setCustomers] = useState(initialCustomers)
+  const PAGE_SIZE = 30
+
+  const [customers, setCustomers] = useState<Customer[]>(initialCustomers || [])
   const [searchTerm, setSearchTerm] = useState("")
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  
-  // État pour la sélection multiple
+
+  // Pagination pages (keyset)
+  const [page, setPage] = useState(1)
+  const [cursorByPage, setCursorByPage] = useState<Record<number, Cursor>>({ 1: null })
+  const [hasMoreByPage, setHasMoreByPage] = useState<Record<number, boolean>>({ 1: hasMoreInitial })
+  const [isPaging, setIsPaging] = useState(false)
+
+  // État sélection multiple
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
-  const filteredCustomers = customers.filter((client) => {
+  const filteredCustomers = useMemo(() => {
     const term = searchTerm.toLowerCase()
-    return (
-      (client.first_name || "").toLowerCase().includes(term) ||
-      (client.email || "").toLowerCase().includes(term) ||
-      (client.phone || "").includes(term) ||
-      (client.prize?.label || "").toLowerCase().includes(term)
-    )
-  })
+    return customers.filter((client) => {
+      return (
+        (client.first_name || "").toLowerCase().includes(term) ||
+        (client.email || "").toLowerCase().includes(term) ||
+        (client.phone || "").includes(term)
+      )
+    })
+  }, [customers, searchTerm])
 
-  // Logique de sélection
+  // Sélection
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredCustomers.length) {
-      setSelectedIds([])
-    } else {
-      setSelectedIds(filteredCustomers.map(c => c.id))
-    }
+    if (selectedIds.length === filteredCustomers.length) setSelectedIds([])
+    else setSelectedIds(filteredCustomers.map((c) => c.id))
   }
 
   const toggleSelect = (id: string) => {
-    setSelectedIds(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    )
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
   }
 
-  // Suppression groupée ou individuelle
+  const scrollTop = () => {
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  const loadPage = async (targetPage: number) => {
+    if (!slug || isPaging) return
+    setIsPaging(true)
+
+    const cursor = cursorByPage[targetPage] ?? null
+    const res = await getCustomersPageAction(slug, cursor, PAGE_SIZE)
+
+    if (res.success) {
+      const incoming = (res.customers || []) as Customer[]
+      setCustomers(incoming)
+
+      const nextCursor = (res.nextCursor || null) as Cursor
+
+      setHasMoreByPage((prev) => ({ ...prev, [targetPage]: Boolean(res.hasMore) }))
+      setCursorByPage((prev) => ({ ...prev, [targetPage + 1]: nextCursor }))
+
+      setPage(targetPage)
+      setSelectedIds([])
+      scrollTop()
+    } else {
+      console.error("CRM pagination error:", res.message)
+      setHasMoreByPage((prev) => ({ ...prev, [targetPage]: false }))
+    }
+
+    setIsPaging(false)
+  }
+
+  const canPrev = page > 1
+  const canNext = Boolean(hasMoreByPage[page]) && !isPaging
+
+  const handlePrev = async () => {
+    if (!canPrev) return
+    await loadPage(page - 1)
+  }
+
+  const handleNext = async () => {
+    if (!canNext) return
+    await loadPage(page + 1)
+  }
+
+  // Suppression groupée
   const handleBulkDelete = async () => {
     const count = selectedIds.length
     if (!confirm(`Supprimer définitivement les ${count} client(s) sélectionné(s) ?`)) return
@@ -65,7 +125,7 @@ export function CustomersTable({ initialCustomers }: CustomersTableProps) {
     setIsBulkDeleting(true)
     const result = await deleteContactAction(selectedIds, slug)
     if (result.success) {
-      setCustomers(prev => prev.filter(c => !selectedIds.includes(c.id)))
+      setCustomers((prev) => prev.filter((c) => !selectedIds.includes(c.id)))
       setSelectedIds([])
     } else {
       alert("Erreur : " + result.error)
@@ -78,8 +138,8 @@ export function CustomersTable({ initialCustomers }: CustomersTableProps) {
     setDeletingId(id)
     const result = await deleteContactAction([id], slug)
     if (result.success) {
-      setCustomers(prev => prev.filter(c => c.id !== id))
-      setSelectedIds(prev => prev.filter(selected => selected !== id))
+      setCustomers((prev) => prev.filter((c) => c.id !== id))
+      setSelectedIds((prev) => prev.filter((selected) => selected !== id))
     }
     setDeletingId(null)
   }
@@ -87,27 +147,27 @@ export function CustomersTable({ initialCustomers }: CustomersTableProps) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-         <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-            <input 
-                type="text" 
-                placeholder="Rechercher un client..." 
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition bg-white text-sm"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-            />
-         </div>
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Rechercher un client..."
+            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition bg-white text-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
 
-         {selectedIds.length > 0 && (
-           <button 
+        {selectedIds.length > 0 && (
+          <button
             onClick={handleBulkDelete}
             disabled={isBulkDeleting}
             className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-red-700 transition-all shadow-sm"
-           >
-             {isBulkDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-             Supprimer {selectedIds.length} sélection(s)
-           </button>
-         )}
+          >
+            {isBulkDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+            Supprimer {selectedIds.length} sélection(s)
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -116,10 +176,11 @@ export function CustomersTable({ initialCustomers }: CustomersTableProps) {
             <tr>
               <th className="px-4 py-4 w-10 text-center">
                 <button onClick={toggleSelectAll} className="hover:text-blue-600 transition-colors">
-                  {selectedIds.length === filteredCustomers.length && filteredCustomers.length > 0 
-                    ? <CheckSquare size={18} className="text-blue-600" /> 
-                    : <Square size={18} />
-                  }
+                  {selectedIds.length === filteredCustomers.length && filteredCustomers.length > 0 ? (
+                    <CheckSquare size={18} className="text-blue-600" />
+                  ) : (
+                    <Square size={18} />
+                  )}
                 </button>
               </th>
               <th className="px-4 py-4">Client</th>
@@ -133,7 +194,10 @@ export function CustomersTable({ initialCustomers }: CustomersTableProps) {
               filteredCustomers.map((client) => {
                 const isSelected = selectedIds.includes(client.id)
                 return (
-                  <tr key={client.id} className={`hover:bg-blue-50/50 transition-colors ${isSelected ? 'bg-blue-50/40' : ''}`}>
+                  <tr
+                    key={client.id}
+                    className={`hover:bg-blue-50/50 transition-colors ${isSelected ? "bg-blue-50/40" : ""}`}
+                  >
                     <td className="px-4 py-4 text-center">
                       <button onClick={() => toggleSelect(client.id)} className="text-slate-300 hover:text-blue-600">
                         {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
@@ -141,19 +205,23 @@ export function CustomersTable({ initialCustomers }: CustomersTableProps) {
                     </td>
                     <td className="px-4 py-4 font-bold text-slate-900">{client.first_name || "Anonyme"}</td>
                     <td className="px-6 py-4 text-slate-600">
-                        <div className="flex flex-col text-xs">
-                            <span className="flex items-center gap-2 text-slate-500"><Mail size={12}/> {client.email || "-"}</span>
-                            <span className="flex items-center gap-2 text-slate-500"><MessageSquare size={12}/> {client.phone || "-"}</span>
-                        </div>
+                      <div className="flex flex-col text-xs">
+                        <span className="flex items-center gap-2 text-slate-500">
+                          <Mail size={12} /> {client.email || "-"}
+                        </span>
+                        <span className="flex items-center gap-2 text-slate-500">
+                          <MessageSquare size={12} /> {client.phone || "-"}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-center">
                       {client.marketing_optin ? (
                         <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                            <UserCheck size={10}/> Opt-in
+                          <UserCheck size={10} /> Opt-in
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                            <UserX size={10}/> Non
+                          <UserX size={10} /> Non
                         </span>
                       )}
                     </td>
@@ -170,10 +238,39 @@ export function CustomersTable({ initialCustomers }: CustomersTableProps) {
                 )
               })
             ) : (
-              <tr><td colSpan={5} className="py-12 text-center text-slate-400">Aucun résultat.</td></tr>
+              <tr>
+                <td colSpan={5} className="py-12 text-center text-slate-400">
+                  Aucun résultat.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination “Pages” */}
+      <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
+        <div className="text-xs text-slate-500">
+          Page <span className="font-bold">{page}</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrev}
+            disabled={!canPrev || isPaging}
+            className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold disabled:opacity-40"
+          >
+            Précédent
+          </button>
+
+          <button
+            onClick={handleNext}
+            disabled={!canNext}
+            className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold disabled:opacity-40"
+          >
+            Suivant
+          </button>
+        </div>
       </div>
     </div>
   )
