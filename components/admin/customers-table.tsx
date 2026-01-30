@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   Search,
   Mail,
@@ -38,47 +38,59 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
 
   const PAGE_SIZE = 30
 
-  const [customers, setCustomers] = useState<Customer[]>(initialCustomers || [])
   const [searchTerm, setSearchTerm] = useState("")
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Pagination pages (keyset)
-  const [page, setPage] = useState(1)
+  // ✅ Cache des pages : pageNumber -> customers[]
+  const [pageData, setPageData] = useState<Record<number, Customer[]>>({ 1: initialCustomers || [] })
+
+  // ✅ Keyset cursor pour la page (cursorByPage[1] = null, cursorByPage[2] = nextCursor de page 1, etc.)
   const [cursorByPage, setCursorByPage] = useState<Record<number, Cursor>>({ 1: null })
   const [hasMoreByPage, setHasMoreByPage] = useState<Record<number, boolean>>({ 1: hasMoreInitial })
+
+  const [page, setPage] = useState(1)
   const [isPaging, setIsPaging] = useState(false)
 
-  // État sélection multiple
+  // Sélection multiple (sur la page affichée)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
+  const scrollTop = () => {
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  const currentCustomers = pageData[page] || []
+
   const filteredCustomers = useMemo(() => {
     const term = searchTerm.toLowerCase()
-    return customers.filter((client) => {
+    return currentCustomers.filter((client) => {
       return (
         (client.first_name || "").toLowerCase().includes(term) ||
         (client.email || "").toLowerCase().includes(term) ||
         (client.phone || "").includes(term)
       )
     })
-  }, [customers, searchTerm])
+  }, [currentCustomers, searchTerm])
 
-  // Sélection
-  const toggleSelectAll = () => {
-    if (selectedIds.length === filteredCustomers.length) setSelectedIds([])
-    else setSelectedIds(filteredCustomers.map((c) => c.id))
-  }
+  // ✅ Si tu changes le searchTerm : on revient page 1 (UX classique)
+  useEffect(() => {
+    setPage(1)
+    setSelectedIds([])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm])
 
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
-  }
-
-  const scrollTop = () => {
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
-  }
-
+  // ✅ Load page (avec cache)
   const loadPage = async (targetPage: number) => {
     if (!slug || isPaging) return
+
+    // ✅ Si on a déjà la page en cache, on l’affiche sans refetch
+    if (pageData[targetPage]) {
+      setPage(targetPage)
+      setSelectedIds([])
+      scrollTop()
+      return
+    }
+
     setIsPaging(true)
 
     const cursor = cursorByPage[targetPage] ?? null
@@ -86,11 +98,15 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
 
     if (res.success) {
       const incoming = (res.customers || []) as Customer[]
-      setCustomers(incoming)
-
       const nextCursor = (res.nextCursor || null) as Cursor
 
+      // ✅ stocker la page
+      setPageData((prev) => ({ ...prev, [targetPage]: incoming }))
+
+      // ✅ stocker hasMore pour cette page
       setHasMoreByPage((prev) => ({ ...prev, [targetPage]: Boolean(res.hasMore) }))
+
+      // ✅ stocker cursor de la page suivante = cursor fin de la page courante
       setCursorByPage((prev) => ({ ...prev, [targetPage + 1]: nextCursor }))
 
       setPage(targetPage)
@@ -117,6 +133,22 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
     await loadPage(page + 1)
   }
 
+  // ✅ Pagination numérotée (1..N) “optimiste”
+  // On affiche jusqu’à la dernière page connue + 1 si hasMore=true
+  const maxKnownPage = Math.max(...Object.keys(pageData).map((k) => Number(k)))
+  const maxPageToShow = hasMoreByPage[maxKnownPage] ? maxKnownPage + 1 : maxKnownPage
+  const pages = Array.from({ length: Math.max(1, maxPageToShow) }, (_, i) => i + 1)
+
+  // Sélection
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredCustomers.length) setSelectedIds([])
+    else setSelectedIds(filteredCustomers.map((c) => c.id))
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
+  }
+
   // Suppression groupée
   const handleBulkDelete = async () => {
     const count = selectedIds.length
@@ -124,23 +156,34 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
 
     setIsBulkDeleting(true)
     const result = await deleteContactAction(selectedIds, slug)
+
     if (result.success) {
-      setCustomers((prev) => prev.filter((c) => !selectedIds.includes(c.id)))
+      // remove dans la page courante
+      setPageData((prev) => ({
+        ...prev,
+        [page]: (prev[page] || []).filter((c) => !selectedIds.includes(c.id)),
+      }))
       setSelectedIds([])
     } else {
       alert("Erreur : " + result.error)
     }
+
     setIsBulkDeleting(false)
   }
 
   const handleDeleteOne = async (id: string) => {
     if (!confirm("Supprimer ce client ?")) return
     setDeletingId(id)
+
     const result = await deleteContactAction([id], slug)
     if (result.success) {
-      setCustomers((prev) => prev.filter((c) => c.id !== id))
+      setPageData((prev) => ({
+        ...prev,
+        [page]: (prev[page] || []).filter((c) => c.id !== id),
+      }))
       setSelectedIds((prev) => prev.filter((selected) => selected !== id))
     }
+
     setDeletingId(null)
   }
 
@@ -189,6 +232,7 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
               <th className="px-6 py-4 text-right">Actions</th>
             </tr>
           </thead>
+
           <tbody className="divide-y divide-slate-100">
             {filteredCustomers.length > 0 ? (
               filteredCustomers.map((client) => {
@@ -203,7 +247,9 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
                         {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
                       </button>
                     </td>
+
                     <td className="px-4 py-4 font-bold text-slate-900">{client.first_name || "Anonyme"}</td>
+
                     <td className="px-6 py-4 text-slate-600">
                       <div className="flex flex-col text-xs">
                         <span className="flex items-center gap-2 text-slate-500">
@@ -214,6 +260,7 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
                         </span>
                       </div>
                     </td>
+
                     <td className="px-6 py-4 text-center">
                       {client.marketing_optin ? (
                         <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
@@ -225,6 +272,7 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
                         </span>
                       )}
                     </td>
+
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => handleDeleteOne(client.id)}
@@ -248,10 +296,14 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
         </table>
       </div>
 
-      {/* Pagination “Pages” */}
+      {/* ✅ Pagination */}
       <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
-        <div className="text-xs text-slate-500">
-          Page <span className="font-bold">{page}</span>
+        <div className="text-xs text-slate-500 flex items-center gap-2">
+          <span>
+            Page <span className="font-bold">{page}</span>
+          </span>
+          {isPaging ? <span className="text-slate-400">•</span> : null}
+          {isPaging ? <span className="text-slate-400">chargement</span> : null}
         </div>
 
         <div className="flex items-center gap-2">
@@ -262,6 +314,24 @@ export function CustomersTable({ initialCustomers, hasMoreInitial }: CustomersTa
           >
             Précédent
           </button>
+
+          {/* Pages 1,2,3… */}
+          <div className="hidden sm:flex items-center gap-1">
+            {pages.map((p) => (
+              <button
+                key={p}
+                onClick={() => loadPage(p)}
+                disabled={isPaging}
+                className={`px-3 py-2 rounded-xl border text-sm font-bold ${
+                  p === page
+                    ? "border-blue-600 bg-blue-50 text-blue-700"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                } disabled:opacity-40`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
 
           <button
             onClick={handleNext}
