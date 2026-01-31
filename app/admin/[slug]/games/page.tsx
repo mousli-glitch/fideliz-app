@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import {
   Gamepad2,
@@ -19,81 +19,111 @@ import {
 import { createClient } from "@/utils/supabase/client"
 import { useParams } from "next/navigation"
 
-// Import des actions serveur
 import { deleteGameAction } from "@/app/actions/deleteGameAction"
 import { activateGameAction } from "@/app/actions/activateGameAction"
 
+type Restaurant = {
+  id: string
+  name: string
+  slug: string
+}
+
+type Prize = {
+  id: string
+  label: string
+  quantity: number | null
+}
+
+type Game = {
+  id: string
+  name: string | null
+  status: string | null
+  restaurant_id: string
+  active_action: string | null
+  action_url: string | null
+  is_stock_limit_active: boolean | null
+  prizes?: Prize[]
+}
+
 export default function GamesListPage() {
-  const [games, setGames] = useState<any[]>([])
-  const [restaurant, setRestaurant] = useState<any>(null)
+  const [games, setGames] = useState<Game[]>([])
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null)
   const [loading, setLoading] = useState(true)
+  const [activatingId, setActivatingId] = useState<string | null>(null)
 
   const params = useParams()
-  const supabase = createClient()
   const slug = params?.slug as string
+  const supabase = createClient()
 
-  // 1. Charger les données (AVEC LES LOTS)
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!slug) return
+  const fetchData = useCallback(async () => {
+    if (!slug) return
+    setLoading(true)
 
-      const { data: rawResto } = await supabase
-        .from("restaurants")
-        .select("id, name, slug")
-        .eq("slug", slug)
-        .single()
+    const { data: restoData, error: restoError } = await supabase
+      .from("restaurants")
+      .select("id, name, slug")
+      .eq("slug", slug)
+      .single<Restaurant>()
 
-      const restoData = rawResto as any
-
-      if (restoData) {
-        setRestaurant(restoData)
-
-        // On récupère les jeux ET les prizes associés
-        const { data: gamesData } = await supabase
-          .from("games")
-          .select("*, prizes(*)")
-          .eq("restaurant_id", restoData.id)
-          .order("created_at", { ascending: false })
-
-        setGames(gamesData || [])
-      }
+    if (restoError || !restoData) {
+      console.error("Erreur chargement restaurant:", restoError)
+      setRestaurant(null)
+      setGames([])
       setLoading(false)
-    }
-    fetchData()
-  }, [slug])
-
-  // Fonction de Suppression
-  const handleDelete = async (gameId: string) => {
-    if (confirm("Êtes-vous sûr de vouloir supprimer ce jeu définitivement ?")) {
-      try {
-        await deleteGameAction(gameId, slug)
-        setGames((currentGames) => currentGames.filter((g) => g.id !== gameId))
-      } catch (error) {
-        alert("Une erreur est survenue lors de la suppression.")
-      }
-    }
-  }
-
-  // ✅ Fonction d'Activation (SAFE)
-  const handleActivate = async (gameId: string) => {
-    if (!restaurant?.id) {
-      alert("Restaurant non chargé, réessaie dans 1 seconde.")
       return
     }
 
-    try {
-      await activateGameAction(gameId, restaurant.id, slug)
+    setRestaurant(restoData)
 
-      // ✅ Après succès seulement : on met à jour l'UI
-      setGames((prev) =>
-        prev.map((g) => ({
-          ...g,
-          status: g.id === gameId ? "active" : "inactive",
-        }))
-      )
+    const { data: gamesData, error: gamesError } = await supabase
+      .from("games")
+      .select("*, prizes(*)")
+      .eq("restaurant_id", restoData.id)
+      .order("created_at", { ascending: false })
+
+    if (gamesError) {
+      console.error("Erreur chargement games:", gamesError)
+      setGames([])
+      setLoading(false)
+      return
+    }
+
+    setGames((gamesData as Game[]) || [])
+    setLoading(false)
+  }, [slug, supabase])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  const handleDelete = async (gameId: string) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce jeu définitivement ?")) return
+
+    try {
+      await deleteGameAction(gameId, slug)
+      setGames((current) => current.filter((g) => g.id !== gameId))
     } catch (error) {
       console.error(error)
-      alert("Erreur lors de l'activation")
+      alert("Une erreur est survenue lors de la suppression.")
+    }
+  }
+
+  const handleActivate = async (gameId: string) => {
+    if (!restaurant?.id) {
+      alert("Restaurant non chargé, réessaie.")
+      return
+    }
+    if (activatingId) return
+
+    setActivatingId(gameId)
+    try {
+      await activateGameAction(gameId, restaurant.id, slug)
+      await fetchData()
+    } catch (error: any) {
+      console.error(error)
+      alert("Erreur lors de l'activation" + (error?.message ? ` : ${error.message}` : ""))
+    } finally {
+      setActivatingId(null)
     }
   }
 
@@ -108,7 +138,6 @@ export default function GamesListPage() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 pb-24">
       <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
-        {/* EN-TÊTE RESPONSIVE */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div>
             <h1 className="text-2xl md:text-3xl font-black text-slate-900 flex items-center gap-3">
@@ -134,11 +163,11 @@ export default function GamesListPage() {
           </Link>
         </div>
 
-        {/* LISTE DES JEUX */}
         <div className="grid grid-cols-1 gap-4">
           {games.length > 0 ? (
             games.map((game) => {
               const isActive = game.status === "active"
+              const isBusy = activatingId === game.id
 
               return (
                 <div
@@ -149,7 +178,6 @@ export default function GamesListPage() {
                       : "border-slate-200 hover:border-blue-200"
                   }`}
                 >
-                  {/* LIGNE DU HAUT : INFO DU JEU + STATUT */}
                   <div className="w-full flex flex-col md:flex-row justify-between gap-4">
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-3">
@@ -173,32 +201,39 @@ export default function GamesListPage() {
                         <span className="bg-slate-100 px-2 py-1 rounded-lg text-slate-600 font-mono text-[9px] md:text-[10px] uppercase border border-slate-200 w-fit">
                           {game.active_action || "JEU"}
                         </span>
-                        <a
-                          href={game.action_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-blue-600 flex items-center gap-1 truncate max-w-full sm:max-w-[200px] hover:underline"
-                        >
-                          {game.action_url}
-                          <ExternalLink size={10} />
-                        </a>
+                        {game.action_url ? (
+                          <a
+                            href={game.action_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-blue-600 flex items-center gap-1 truncate max-w-full sm:max-w-[200px] hover:underline"
+                          >
+                            {game.action_url}
+                            <ExternalLink size={10} />
+                          </a>
+                        ) : null}
                       </div>
                     </div>
 
-                    {/* BOUTONS D'ACTION */}
                     <div className="grid grid-cols-4 sm:flex items-center gap-2 w-full md:w-auto">
                       <button
-                        onClick={() => !isActive && handleActivate(game.id)}
-                        disabled={isActive}
+                        onClick={() => !isActive && !isBusy && handleActivate(game.id)}
+                        disabled={isActive || isBusy}
                         className={`col-span-4 sm:col-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all text-sm border ${
                           isActive
                             ? "bg-green-50 text-green-700 border-green-200 cursor-default"
+                            : isBusy
+                            ? "bg-slate-100 text-slate-400 border-slate-200 cursor-wait"
                             : "bg-white text-slate-600 border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900"
                         }`}
                         title={isActive ? "Ce jeu est actuellement visible" : "Activer ce jeu"}
                       >
-                        <Power size={16} className={isActive ? "fill-green-700" : ""} />
-                        {isActive ? "Activé" : "Activer"}
+                        {isBusy ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Power size={16} className={isActive ? "fill-green-700" : ""} />
+                        )}
+                        {isActive ? "Activé" : isBusy ? "Activation..." : "Activer"}
                       </button>
 
                       <div className="hidden sm:block w-px h-8 bg-slate-200 mx-1"></div>
@@ -239,7 +274,6 @@ export default function GamesListPage() {
                     </div>
                   </div>
 
-                  {/* 🔥 LIGNE DES STOCKS EN TEMPS RÉEL */}
                   {game.is_stock_limit_active ? (
                     <div className="w-full mt-2 pt-3 border-t border-slate-100">
                       <div className="flex items-center gap-2 mb-3">
@@ -251,42 +285,38 @@ export default function GamesListPage() {
 
                       <div className="flex flex-wrap gap-2">
                         {game.prizes && game.prizes.length > 0 ? (
-                          game.prizes.map((prize: any) => {
+                          game.prizes.map((prize: Prize) => {
                             const isOutOfStock = prize.quantity !== null && prize.quantity <= 0
                             const isLowStock =
                               prize.quantity !== null && prize.quantity > 0 && prize.quantity < 5
 
+                            const pillClass = isOutOfStock
+                              ? "bg-red-50 border-red-200 text-red-700"
+                              : isLowStock
+                              ? "bg-orange-50 border-orange-200 text-orange-800"
+                              : "bg-white border-slate-200 text-slate-700"
+
+                            const qtyClass = isOutOfStock
+                              ? "bg-red-200 text-red-900"
+                              : isLowStock
+                              ? "bg-orange-200 text-orange-900"
+                              : "bg-slate-100 text-slate-800"
+
                             return (
                               <div
                                 key={prize.id}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                                  isOutOfStock
-                                    ? "bg-red-50 border-red-200 text-red-700"
-                                    : isLowStock
-                                    ? "bg-orange-50 border-orange-200 text-orange-800"
-                                    : "bg-white border-slate-200 text-slate-700"
-                                }`}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${pillClass}`}
                               >
                                 <span>{prize.label}</span>
-                                <span
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                    isOutOfStock
-                                      ? "bg-red-200 text-red-900"
-                                      : isLowStock
-                                      ? "bg-orange-200 text-orange-900"
-                                      : "bg-slate-100 text-slate-800"
-                                  }`}
-                                >
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${qtyClass}`}>
                                   {prize.quantity !== null ? prize.quantity : "∞"}
                                 </span>
-                                {isOutOfStock && <AlertTriangle size={10} className="text-red-600" />}
+                                {isOutOfStock ? <AlertTriangle size={10} className="text-red-600" /> : null}
                               </div>
                             )
                           })
                         ) : (
-                          <span className="text-xs text-slate-400 italic">
-                            Aucun lot configuré pour ce jeu.
-                          </span>
+                          <span className="text-xs text-slate-400 italic">Aucun lot configuré pour ce jeu.</span>
                         )}
                       </div>
                     </div>
@@ -302,7 +332,6 @@ export default function GamesListPage() {
               )
             })
           ) : (
-            // EMPTY STATE
             <div className="flex flex-col items-center justify-center py-12 md:py-20 bg-white rounded-3xl border border-dashed border-slate-300 text-center px-4">
               <div className="w-16 h-16 md:w-20 md:h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 text-slate-300">
                 <Gamepad2 size={40} />

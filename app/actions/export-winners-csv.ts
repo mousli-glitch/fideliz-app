@@ -9,6 +9,7 @@ function isUUID(str: string) {
 function csvEscape(v: any) {
   if (typeof v === "number" && Number.isNaN(v)) return ""
   const s = (v ?? "").toString()
+  // on échappe ; , " \n
   if (/[",\n;]/.test(s)) return `"${s.replace(/"/g, '""')}"`
   return s
 }
@@ -76,7 +77,7 @@ async function fetchAllWinnersForRestaurant(
           "phone",
           "marketing_optin",
           "status",
-          "source_game_id", // si pas présent chez toi => retire du select
+          "source_game_id",
           "game_id",
           "prize_title",
           "prize_label_snapshot",
@@ -135,6 +136,7 @@ export async function exportWinnersTwilioCsvAction(
 
     const winners = await fetchAllWinnersForRestaurant(supabase, restaurant.id, optInOnly, statusFilter)
 
+    // ✅ Separator: ; (tu es déjà en ; dans tout ton flow)
     const header = [
       "To",
       "Body",
@@ -151,7 +153,7 @@ export async function exportWinnersTwilioCsvAction(
     const lines = winners
       .map((w) => {
         const to = toE164FR(w.phone || "")
-        if (!to) return null // skip si pas de téléphone
+        if (!to) return null
 
         const prize = w.prize_title || w.prize_label_snapshot || "Votre offre"
         const firstName = w.first_name || "Client"
@@ -179,7 +181,9 @@ export async function exportWinnersTwilioCsvAction(
 
     const csv = [header, ...(lines as string[])].join("\n")
 
-    const filename = optInOnly ? `twilio-optin-${restaurant.name}.csv` : `twilio-all-${restaurant.name}.csv`
+    const filename = optInOnly
+      ? `twilio-optin-${restaurant.name}.csv`
+      : `twilio-all-${restaurant.name}.csv`
 
     return { success: true as const, csv, filename, total: lines.length }
   } catch (e: any) {
@@ -188,7 +192,6 @@ export async function exportWinnersTwilioCsvAction(
 }
 
 // ✅ Wrappers utilisés par l'UI (components/admin/winners-export-button.tsx)
-
 export async function exportWinnersCsvAction(restaurantSlugOrId: string) {
   return exportWinnersTwilioCsvAction(restaurantSlugOrId, { optInOnly: false })
 }
