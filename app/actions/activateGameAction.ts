@@ -1,7 +1,7 @@
-'use server'
+"use server"
 
-import { createClient } from '@/utils/supabase/server'
-import { revalidatePath } from 'next/cache'
+import { createClient } from "@/utils/supabase/server"
+import { revalidatePath } from "next/cache"
 
 export async function activateGameAction(gameId: string, restaurantId: string, slug: string) {
   const supabase = await createClient()
@@ -12,29 +12,33 @@ export async function activateGameAction(gameId: string, restaurantId: string, s
   } = await supabase.auth.getUser()
 
   if (userError || !user) throw new Error("Non connecté")
-  if (!gameId || !restaurantId) throw new Error("Paramètres manquants (gameId/restaurantId).")
 
-  // 1) Mettre en PAUSE le jeu actuellement actif (du resto), sauf celui qu'on veut activer
-  const { error: pauseError } = await supabase
-    .from('games')
+  if (!gameId || !restaurantId) {
+    throw new Error("Paramètres manquants (gameId/restaurantId).")
+  }
+
+  // 1) Désactiver le jeu actuellement actif (du resto), sauf celui qu'on veut activer
+  // ✅ 'inactive' est autorisé par games_status_check
+  const { error: disableError } = await supabase
+    .from("games")
     // @ts-ignore
-    .update({ status: 'paused' })
-    .eq('restaurant_id', restaurantId)
-    .eq('status', 'active')
-    .neq('id', gameId)
+    .update({ status: "inactive" })
+    .eq("restaurant_id", restaurantId)
+    .eq("status", "active")
+    .neq("id", gameId)
 
-  if (pauseError) {
-    console.error("Erreur désactivation jeux:", pauseError)
-    throw new Error("Erreur désactivation: " + pauseError.message)
+  if (disableError) {
+    console.error("Erreur désactivation jeux:", disableError)
+    throw new Error("Erreur désactivation: " + disableError.message)
   }
 
   // 2) Activer le jeu demandé (scopé au restaurant)
   const { error: activateError } = await supabase
-    .from('games')
+    .from("games")
     // @ts-ignore
-    .update({ status: 'active' })
-    .eq('id', gameId)
-    .eq('restaurant_id', restaurantId)
+    .update({ status: "active" })
+    .eq("id", gameId)
+    .eq("restaurant_id", restaurantId)
 
   if (activateError) {
     console.error("Erreur activation:", activateError)
