@@ -2,8 +2,9 @@ import { createClient } from "@supabase/supabase-js"
 import { AdminWinnersTable } from "@/components/admin/winners-table"
 import { notFound } from "next/navigation"
 
-// ✅ NEW: bouton export winners
+// ✅ Boutons export
 import WinnersExportButton from "@/components/admin/winners-export-button"
+import WinnersExportTwilioButton from "@/components/admin/winners-export-twilio-button"
 
 export const dynamic = "force-dynamic"
 
@@ -41,10 +42,49 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .select("id")
     .eq("restaurant_id", restaurant.id)
 
+  // ✅ Header commun (réutilisé)
+  const Header = () => (
+    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+      <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {/* ✅ Export complet winners */}
+        <WinnersExportButton
+          restaurantSlug={slug}
+          mode="all"
+          filename={`gagnants-${restaurant.name}.csv`}
+        />
+
+        {/* ✅ Export campagne winners (opt-in only) */}
+        <WinnersExportButton
+          restaurantSlug={slug}
+          mode="campaign"
+          filename={`gagnants-optin-${restaurant.name}.csv`}
+        />
+
+        {/* ✅ Export Twilio-ready (opt-in) */}
+        <WinnersExportTwilioButton
+          restaurantSlug={slug}
+          optInOnly={true}
+          statusFilter={null}
+          filename={`twilio-optin-${restaurant.name}.csv`}
+        />
+
+        {/* ✅ Bonus : export Twilio ciblé "redeemed" */}
+        <WinnersExportTwilioButton
+          restaurantSlug={slug}
+          optInOnly={true}
+          statusFilter="redeemed"
+          filename={`twilio-redeemed-${restaurant.name}.csv`}
+        />
+      </div>
+    </div>
+  )
+
   if (gamesError) {
     return (
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
+        <Header />
         <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-[10px] font-mono">
           Erreur récupération jeux : {gamesError.message}
         </div>
@@ -54,26 +94,11 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   const gameIds = (gamesData as any[])?.map((g) => g.id) || []
 
+  // ✅ Cas 0 jeux (affiche page vide + exports)
   if (gameIds.length === 0) {
     return (
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        {/* ✅ header + boutons export même si 0 gagnant */}
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
-
-          <div className="flex items-center gap-2">
-            <WinnersExportButton
-              restaurantSlug={slug}
-              mode="all"
-              filename={`gagnants-${restaurant.name}.csv`}
-            />
-            <WinnersExportButton
-              restaurantSlug={slug}
-              mode="campaign"
-              filename={`gagnants-optin-${restaurant.name}.csv`}
-            />
-          </div>
-        </div>
+        <Header />
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <AdminWinnersTable initialWinners={[]} totalCount={0} />
@@ -111,7 +136,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
   if (fetchError) {
     return (
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
+        <Header />
         <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 text-[10px] font-mono">
           Mode Maintenance : {fetchError.message}
         </div>
@@ -131,25 +156,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* ✅ Header + boutons export */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
-
-        <div className="flex items-center gap-2">
-          {/* ✅ Export complet */}
-          <WinnersExportButton
-            restaurantSlug={slug}
-            mode="all"
-            filename={`gagnants-${restaurant.name}.csv`}
-          />
-          {/* ✅ Export campagne (opt-in only) */}
-          <WinnersExportButton
-            restaurantSlug={slug}
-            mode="campaign"
-            filename={`gagnants-optin-${restaurant.name}.csv`}
-          />
-        </div>
-      </div>
+      <Header />
 
       {countError && (
         <div className="p-4 bg-amber-50 text-amber-900 rounded-xl border border-amber-200 text-[10px] font-mono">

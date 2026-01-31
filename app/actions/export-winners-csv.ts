@@ -12,25 +12,50 @@ function csvEscape(v: any) {
   return s
 }
 
-function normPhone(p: string | null) {
+// Nettoyage basique (garde + et chiffres)
+function cleanPhone(p: string | null) {
   if (!p) return ""
   return p.trim().replace(/[^\d+]/g, "")
 }
 
-async function exportWinnersBase(restaurantSlugOrId: string, optInOnly: boolean) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+// ✅ Convertit FR "06..." -> "+336..."
+function toE164FR(phoneRaw: string) {
+  const p = cleanPhone(phoneRaw)
 
-  // Restaurant id
+  if (!p) return ""
+  if (p.startsWith("+")) return p
+
+  // 00XX -> +XX
+  if (p.startsWith("00")) return "+" + p.slice(2)
+
+  // FR classique 06/07...
+  if (/^0[67]\d{8}$/.test(p)) return "+33" + p.slice(1)
+
+  // Si c'est déjà "33..." sans +
+  if (/^33\d{9}$/.test(p)) return "+" + p
+
+  // Sinon on renvoie tel quel (à toi de corriger)
+  return p
+}
+
+function buildBody(template: string, vars: Record<string, string>) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? "")
+}
+
+async function getRestaurantIdAndName(supabase: any, restaurantSlugOrId: string) {
   let rq = supabase.from("restaurants").select("id, name").limit(1)
   rq = isUUID(restaurantSlugOrId) ? rq.eq("id", restaurantSlugOrId) : rq.eq("slug", restaurantSlugOrId)
+  const { data: restaurant, error } = await rq.single()
+  if (error || !restaurant) return null
+  return restaurant
+}
 
-  const { data: restaurant, error: rErr } = await rq.single()
-  if (rErr || !restaurant) return { success: false as const, message: "Restaurant introuvable." }
-
-  // Fetch ALL winners paginés
+async function fetchAllWinnersForRestaurant(
+  supabase: any,
+  restaurantId: string,
+  optInOnly: boolean,
+  statusFilter: string | null
+) {
   const pageSize = 1000
   let offset = 0
   let all: any[] = []
@@ -41,31 +66,28 @@ async function exportWinnersBase(restaurantSlugOrId: string, optInOnly: boolean)
       .select(
         [
           "id",
-          "restaurant_id",
-          "game_id",
-          "prize_id",
-          "prize_title",
-          "prize_label_snapshot",
+          "created_at",
           "first_name",
           "email",
           "phone",
           "marketing_optin",
-          "created_at",
           "status",
-          "redeemed_at",
-          "consumed_at",
-          "expires_at",
+          "source_game_id", // si pas présent chez toi => retire du select
+          "game_id",
+          "prize_title",
+          "prize_label_snapshot",
         ].join(",")
       )
-      .eq("restaurant_id", restaurant.id)
+      .eq("restaurant_id", restaurantId)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .range(offset, offset + pageSize - 1)
 
     if (optInOnly) q = q.eq("marketing_optin", true)
+    if (statusFilter) q = q.eq("status", statusFilter)
 
     const { data, error } = await q
-    if (error) return { success: false as const, message: error.message }
+    if (error) throw new Error(error.message)
 
     const rows = data || []
     all = all.concat(rows)
@@ -74,57 +96,91 @@ async function exportWinnersBase(restaurantSlugOrId: string, optInOnly: boolean)
     offset += pageSize
   }
 
-  const header = [
-    "restaurant_name",
-    "winner_id",
-    "created_at",
-    "first_name",
-    "email",
-    "phone",
-    "marketing_optin",
-    "game_id",
-    "prize_id",
-    "prize_title",
-    "status",
-    "redeemed_at",
-    "consumed_at",
-    "expires_at",
-  ].join(";")
+  return all
+}
 
-  const lines = all.map((w) => {
-    const prizeTitle = w.prize_title || w.prize_label_snapshot || ""
-    return [
-      csvEscape(restaurant.name),
-      csvEscape(w.id),
-      csvEscape(w.created_at),
-      csvEscape(w.first_name),
-      csvEscape(w.email),
-      csvEscape(normPhone(w.phone)),
-      csvEscape(w.marketing_optin ? "true" : "false"),
-      csvEscape(w.game_id),
-      csvEscape(w.prize_id),
-      csvEscape(prizeTitle),
-      csvEscape(w.status),
-      csvEscape(w.redeemed_at),
-      csvEscape(w.consumed_at),
-      csvEscape(w.expires_at),
-    ].join(";")
-  })
-
-  const csv = [header, ...lines].join("\n")
-
-  return {
-    success: true as const,
-    filename: optInOnly ? `gagnants-optin-${restaurant.name}.csv` : `gagnants-${restaurant.name}.csv`,
-    csv,
-    total: all.length,
+/**
+ * ✅ Export Twilio-ready
+ * - optInOnly : true => uniquement marketing_optin = true
+ * - statusFilter : ex "redeemed" | "available" | null (pas de filtre)
+ * - template : message avec variables {{firstName}} {{restaurant}} {{prize}}
+ */
+export async function exportWinnersTwilioCsvAction(
+  restaurantSlugOrId: string,
+  options?: {
+    optInOnly?: boolean
+    statusFilter?: string | null
+    template?: string
   }
-}
+) {
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
 
-export async function exportWinnersCsvAction(restaurantSlugOrId: string) {
-  return exportWinnersBase(restaurantSlugOrId, false)
-}
+    const restaurant = await getRestaurantIdAndName(supabase, restaurantSlugOrId)
+    if (!restaurant) return { success: false as const, message: "Restaurant introuvable." }
 
-export async function exportWinnersCampaignCsvAction(restaurantSlugOrId: string) {
-  return exportWinnersBase(restaurantSlugOrId, true)
+    const optInOnly = Boolean(options?.optInOnly)
+    const statusFilter = options?.statusFilter ?? null
+
+    const template =
+      options?.template ??
+      "Bonjour {{firstName}}, merci pour votre visite chez {{restaurant}}. 🎁 Offre: {{prize}}. Répondez STOP pour vous désinscrire."
+
+    const winners = await fetchAllWinnersForRestaurant(supabase, restaurant.id, optInOnly, statusFilter)
+
+    const header = [
+      "To",
+      "Body",
+      "FirstName",
+      "Email",
+      "Restaurant",
+      "SourceGameId",
+      "CreatedAt",
+      "WinnerId",
+      "OptIn",
+      "Status",
+    ].join(";")
+
+    const lines = winners
+      .map((w) => {
+        const to = toE164FR(w.phone || "")
+        if (!to) return null // skip si pas de téléphone
+
+        const prize = w.prize_title || w.prize_label_snapshot || "Votre offre"
+        const firstName = w.first_name || "Client"
+
+        const body = buildBody(template, {
+          firstName,
+          restaurant: restaurant.name,
+          prize,
+        })
+
+        return [
+          csvEscape(to),
+          csvEscape(body),
+          csvEscape(firstName),
+          csvEscape(w.email || ""),
+          csvEscape(restaurant.name),
+          csvEscape(w.source_game_id || w.game_id || ""),
+          csvEscape(w.created_at || ""),
+          csvEscape(w.id || ""),
+          csvEscape(w.marketing_optin ? "true" : "false"),
+          csvEscape(w.status || ""),
+        ].join(";")
+      })
+      .filter(Boolean)
+
+    const csv = [header, ...(lines as string[])].join("\n")
+
+    const filename = optInOnly
+      ? `twilio-optin-${restaurant.name}.csv`
+      : `twilio-all-${restaurant.name}.csv`
+
+    return { success: true as const, csv, filename, total: lines.length }
+  } catch (e: any) {
+    return { success: false as const, message: e?.message || "Erreur serveur" }
+  }
 }

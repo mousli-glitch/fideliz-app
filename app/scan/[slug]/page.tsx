@@ -1,25 +1,45 @@
-import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { Gamepad2 } from "lucide-react";
+import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 
 export default async function SmartScanPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const supabase = await createClient();
-
   const { slug } = await params;
 
-  // ✅ On récupère aussi is_blocked (et éventuellement blocked_at si tu l’as)
-  const { data: restaurant } = await supabase
+  const scanSlug = slug?.toString().trim().toLowerCase();
+
+  const SUPABASE_URL =
+    process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    // En prod, on évite de leak des infos → message neutre
+    return (
+      <div className="p-10 text-center text-slate-500">
+        Service indisponible.
+      </div>
+    );
+  }
+
+  // ✅ Client Admin (bypass RLS) — safe car Server Component
+  const supabaseAdmin = createSupabaseAdmin(
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY
+  );
+
+  // ✅ On récupère aussi is_blocked
+  const { data: restaurant, error: restaurantError } = await supabaseAdmin
     .from("restaurants")
     .select("id, name, is_blocked")
-    .eq("slug", slug)
-    .single();
+    .eq("slug", scanSlug)
+    .maybeSingle();
 
-  // ✅ Ne pas exposer le slug au client
-  if (!restaurant) {
+  // ✅ Ne pas exposer le slug au client (ni l'erreur technique)
+  if (restaurantError || !restaurant) {
     return (
       <div className="p-10 text-center text-slate-500">
         Restaurant introuvable.
@@ -49,16 +69,17 @@ export default async function SmartScanPage({
   const restoId = (restaurant as any).id;
   const restoName = (restaurant as any).name;
 
-  const { data: activeGame } = await supabase
+  const { data: activeGame, error: gameError } = await supabaseAdmin
     .from("games")
     .select("id")
     .eq("restaurant_id", restoId)
     .eq("status", "active")
-    .single();
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  if (activeGame) {
-    const gameId = (activeGame as any).id;
-    redirect(`/play/${gameId}`);
+  if (!gameError && activeGame?.id) {
+    redirect(`/play/${activeGame.id}`);
   }
 
   return (
@@ -66,9 +87,12 @@ export default async function SmartScanPage({
       <div className="w-20 h-20 bg-white rounded-full shadow-sm flex items-center justify-center mb-6">
         <Gamepad2 size={40} className="text-slate-300" />
       </div>
-      <h1 className="text-2xl font-bold text-slate-900 mb-2">Pas de jeu en cours</h1>
+      <h1 className="text-2xl font-bold text-slate-900 mb-2">
+        Pas de jeu en cours
+      </h1>
       <p className="text-slate-500 max-w-md">
-        Le restaurant <strong>{restoName}</strong> n&apos;a pas de campagne active pour le moment.
+        Le restaurant <strong>{restoName}</strong> n&apos;a pas de campagne active
+        pour le moment.
         <br />
         Revenez plus tard !
       </p>
