@@ -7,6 +7,7 @@ function isUUID(str: string) {
 }
 
 function csvEscape(v: any) {
+  if (typeof v === "number" && Number.isNaN(v)) return ""
   const s = (v ?? "").toString()
   if (/[",\n;]/.test(s)) return `"${s.replace(/"/g, '""')}"`
   return s
@@ -18,7 +19,7 @@ function cleanPhone(p: string | null) {
   return p.trim().replace(/[^\d+]/g, "")
 }
 
-// ✅ Convertit FR "06..." -> "+336..."
+// ✅ Convertit FR vers E164 (robuste)
 function toE164FR(phoneRaw: string) {
   const p = cleanPhone(phoneRaw)
 
@@ -28,13 +29,16 @@ function toE164FR(phoneRaw: string) {
   // 00XX -> +XX
   if (p.startsWith("00")) return "+" + p.slice(2)
 
-  // FR classique 06/07...
+  // FR classique 06/07XXXXXXXX
   if (/^0[67]\d{8}$/.test(p)) return "+33" + p.slice(1)
 
-  // Si c'est déjà "33..." sans +
+  // ✅ Cas fréquent : saisi sans le 0 => 6XXXXXXXX ou 7XXXXXXXX
+  if (/^[67]\d{8}$/.test(p)) return "+33" + p
+
+  // Déjà 33XXXXXXXXX sans +
   if (/^33\d{9}$/.test(p)) return "+" + p
 
-  // Sinon on renvoie tel quel (à toi de corriger)
+  // Sinon (étranger / format inattendu)
   return p
 }
 
@@ -175,26 +179,20 @@ export async function exportWinnersTwilioCsvAction(
 
     const csv = [header, ...(lines as string[])].join("\n")
 
-    const filename = optInOnly
-      ? `twilio-optin-${restaurant.name}.csv`
-      : `twilio-all-${restaurant.name}.csv`
+    const filename = optInOnly ? `twilio-optin-${restaurant.name}.csv` : `twilio-all-${restaurant.name}.csv`
 
     return { success: true as const, csv, filename, total: lines.length }
   } catch (e: any) {
     return { success: false as const, message: e?.message || "Erreur serveur" }
   }
 }
+
 // ✅ Wrappers utilisés par l'UI (components/admin/winners-export-button.tsx)
-// Ils permettent de garder des noms "simples" tout en réutilisant l'export Twilio-ready.
 
 export async function exportWinnersCsvAction(restaurantSlugOrId: string) {
-  return exportWinnersTwilioCsvAction(restaurantSlugOrId, {
-    optInOnly: false,
-  })
+  return exportWinnersTwilioCsvAction(restaurantSlugOrId, { optInOnly: false })
 }
 
 export async function exportWinnersCampaignCsvAction(restaurantSlugOrId: string) {
-  return exportWinnersTwilioCsvAction(restaurantSlugOrId, {
-    optInOnly: true,
-  })
+  return exportWinnersTwilioCsvAction(restaurantSlugOrId, { optInOnly: true })
 }
