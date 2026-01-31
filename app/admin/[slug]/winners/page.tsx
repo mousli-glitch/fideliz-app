@@ -2,10 +2,6 @@ import { createClient } from "@supabase/supabase-js"
 import { AdminWinnersTable } from "@/components/admin/winners-table"
 import { notFound } from "next/navigation"
 
-// ✅ Boutons export
-import WinnersExportButton from "@/components/admin/winners-export-button"
-import WinnersExportTwilioButton from "@/components/admin/winners-export-twilio-button"
-
 export const dynamic = "force-dynamic"
 
 interface Restaurant {
@@ -42,42 +38,10 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .select("id")
     .eq("restaurant_id", restaurant.id)
 
-  // ✅ Header commun (réutilisé)
+  // ✅ Header commun (sans exports)
   const Header = () => (
     <div className="flex flex-col md:flex-row justify-between items-center gap-4">
       <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {/* ✅ Export complet winners */}
-        <WinnersExportButton
-          restaurantSlug={slug}
-          mode="all"
-          filename={`gagnants-${restaurant.name}.csv`}
-        />
-
-        {/* ✅ Export campagne winners (opt-in only) */}
-        <WinnersExportButton
-          restaurantSlug={slug}
-          mode="campaign"
-          filename={`gagnants-optin-${restaurant.name}.csv`}
-        />
-
-        {/* ✅ Export Twilio-ready (opt-in) */}
-        <WinnersExportTwilioButton
-          restaurantSlug={slug}
-          optInOnly={true}
-          statusFilter={null}
-          filename={`twilio-optin-${restaurant.name}.csv`}
-        />
-
-        {/* ✅ Bonus : export Twilio ciblé "redeemed" */}
-        <WinnersExportTwilioButton
-          restaurantSlug={slug}
-          optInOnly={true}
-          statusFilter="redeemed"
-          filename={`twilio-redeemed-${restaurant.name}.csv`}
-        />
-      </div>
     </div>
   )
 
@@ -94,7 +58,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
 
   const gameIds = (gamesData as any[])?.map((g) => g.id) || []
 
-  // ✅ Cas 0 jeux (affiche page vide + exports)
+  // ✅ Cas 0 jeux
   if (gameIds.length === 0) {
     return (
       <div className="p-6 max-w-7xl mx-auto space-y-6">

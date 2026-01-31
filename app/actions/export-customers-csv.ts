@@ -13,27 +13,37 @@ function csvEscape(v: any) {
   return s
 }
 
-// --- Phone utils (E.164 FR) ---
-
+// Nettoyage basique (garde + et chiffres)
 function cleanPhone(p: string | null) {
   if (!p) return ""
-  return p.trim().replace(/[^\d+]/g, "") // garde chiffres + "+"
+  return p.trim().replace(/[^\d+]/g, "")
 }
 
-// ✅ Convertit FR vers E164 (robuste)
+// ✅ Convertit FR vers E164 (robuste) + corrige le bug +330
 function toE164FR(phoneRaw: string | null) {
-  const p = cleanPhone(phoneRaw)
-
-  if (!p) return ""
-  if (p.startsWith("+")) return p
+  const p0 = cleanPhone(phoneRaw)
+  if (!p0) return ""
 
   // 00XX -> +XX
-  if (p.startsWith("00")) return "+" + p.slice(2)
+  let p = p0.startsWith("00") ? "+" + p0.slice(2) : p0
+
+  // Si déjà +33 mais avec 0 derrière (ex: +3306...) => on enlève ce 0
+  if (p.startsWith("+330")) {
+    p = "+33" + p.slice(4)
+  }
+
+  // Si déjà 33 mais avec 0 derrière (ex: 3306...) => +33 + enlever 0
+  if (/^330/.test(p)) {
+    p = "+33" + p.slice(3)
+  }
+
+  // Si déjà +XX, ok
+  if (p.startsWith("+")) return p
 
   // FR classique 06/07XXXXXXXX
   if (/^0[67]\d{8}$/.test(p)) return "+33" + p.slice(1)
 
-  // ✅ Cas fréquent : saisi sans le 0 => 6XXXXXXXX ou 7XXXXXXXX
+  // Cas fréquent : saisi sans le 0 => 6XXXXXXXX ou 7XXXXXXXX
   if (/^[67]\d{8}$/.test(p)) return "+33" + p
 
   // Déjà 33XXXXXXXXX sans +
@@ -84,7 +94,7 @@ export async function exportCustomersCsvAction(restaurantSlugOrId: string) {
     "restaurant_name",
     "first_name",
     "email",
-    "phone",              // ✅ E.164 FR (Twilio ready)
+    "phone",              // ✅ E164 (+33...)
     "marketing_optin",
     "marketing_optin_at",
     "source_game_id",
@@ -96,7 +106,7 @@ export async function exportCustomersCsvAction(restaurantSlugOrId: string) {
       csvEscape(restaurant.name),
       csvEscape(c.first_name),
       csvEscape(c.email),
-      csvEscape(toE164FR(c.phone)), // ✅ +33/+336/+337
+      csvEscape(toE164FR(c.phone)),
       csvEscape(c.marketing_optin ? "true" : "false"),
       csvEscape(c.marketing_optin_at),
       csvEscape(c.source_game_id),

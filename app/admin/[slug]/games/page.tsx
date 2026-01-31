@@ -127,6 +127,48 @@ export default function GamesListPage() {
     }
   }
 
+  const getStatusMeta = (statusRaw: string | null) => {
+    const status = (statusRaw || "").toLowerCase()
+
+    if (status === "active") {
+      return {
+        label: "Actif",
+        badgeClass:
+          "bg-green-100 text-green-700 border border-green-200 px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0",
+        dotClass: "w-1.5 h-1.5 bg-green-600 rounded-full animate-pulse",
+        cardClass: "border-green-500 ring-1 ring-green-500 shadow-green-50",
+      }
+    }
+
+    if (status === "paused") {
+      return {
+        label: "En pause",
+        badgeClass:
+          "bg-amber-100 text-amber-800 border border-amber-200 px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0",
+        dotClass: "w-1.5 h-1.5 bg-amber-600 rounded-full",
+        cardClass: "border-amber-300 hover:border-amber-300",
+      }
+    }
+
+    if (status === "archived") {
+      return {
+        label: "Archivé",
+        badgeClass:
+          "bg-slate-200 text-slate-700 border border-slate-300 px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider shrink-0",
+        dotClass: "",
+        cardClass: "border-slate-200 hover:border-slate-300",
+      }
+    }
+
+    return {
+      label: "Inactif",
+      badgeClass:
+        "bg-slate-100 text-slate-500 border border-slate-200 px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wider shrink-0",
+      dotClass: "",
+      cardClass: "border-slate-200 hover:border-blue-200",
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -166,17 +208,14 @@ export default function GamesListPage() {
         <div className="grid grid-cols-1 gap-4">
           {games.length > 0 ? (
             games.map((game) => {
-              const isActive = game.status === "active"
+              const meta = getStatusMeta(game.status)
+              const isActive = (game.status || "").toLowerCase() === "active"
               const isBusy = activatingId === game.id
 
               return (
                 <div
                   key={game.id}
-                  className={`group bg-white rounded-2xl p-4 md:p-6 shadow-sm border flex flex-col items-start justify-between gap-4 transition-all ${
-                    isActive
-                      ? "border-green-500 ring-1 ring-green-500 shadow-green-50"
-                      : "border-slate-200 hover:border-blue-200"
-                  }`}
+                  className={`group bg-white rounded-2xl p-4 md:p-6 shadow-sm border flex flex-col items-start justify-between gap-4 transition-all ${meta.cardClass}`}
                 >
                   <div className="w-full flex flex-col md:flex-row justify-between gap-4">
                     <div className="flex-1 space-y-2">
@@ -185,16 +224,10 @@ export default function GamesListPage() {
                           {game.name || "Jeu sans nom"}
                         </h2>
 
-                        {isActive ? (
-                          <span className="bg-green-100 text-green-700 px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border border-green-200 shrink-0">
-                            <span className="w-1.5 h-1.5 bg-green-600 rounded-full animate-pulse"></span>
-                            Actif
-                          </span>
-                        ) : (
-                          <span className="bg-slate-100 text-slate-500 px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-wider border border-slate-200 shrink-0">
-                            Inactif
-                          </span>
-                        )}
+                        <span className={meta.badgeClass}>
+                          {meta.dotClass ? <span className={meta.dotClass}></span> : null}
+                          {meta.label}
+                        </span>
                       </div>
 
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-xs md:text-sm text-slate-500 font-medium">
@@ -311,7 +344,9 @@ export default function GamesListPage() {
                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${qtyClass}`}>
                                   {prize.quantity !== null ? prize.quantity : "∞"}
                                 </span>
-                                {isOutOfStock ? <AlertTriangle size={10} className="text-red-600" /> : null}
+                                {isOutOfStock ? (
+                                  <AlertTriangle size={10} className="text-red-600" />
+                                ) : null}
                               </div>
                             )
                           })
