@@ -13,6 +13,23 @@ export async function activateGameAction(gameId: string, restaurantId: string, s
     throw new Error("Paramètres manquants (gameId/restaurantId).")
   }
 
+  // ✅ 0) Si le jeu est déjà actif, on ne fait rien (évite un update inutile + course condition)
+  const { data: current, error: currentErr } = await supabase
+    .from('games')
+    .select('id, status')
+    .eq('id', gameId)
+    .eq('restaurant_id', restaurantId)
+    .single()
+
+  if (currentErr || !current) {
+    throw new Error("Jeu introuvable pour ce restaurant.")
+  }
+
+  if (current.status === 'active') {
+    revalidatePath(`/admin/${slug}/games`)
+    return { success: true as const }
+  }
+
   // 1) Désactiver (inactive) le jeu actuellement actif du resto (sauf celui qu'on active)
   const { error: pauseError } = await supabase
     .from('games')
