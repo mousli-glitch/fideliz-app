@@ -184,3 +184,17 @@ export async function exportWinnersTwilioCsvAction(
     return { success: false as const, message: e?.message || "Erreur serveur" }
   }
 }
+// ✅ Wrappers utilisés par l'UI (components/admin/winners-export-button.tsx)
+// Ils permettent de garder des noms "simples" tout en réutilisant l'export Twilio-ready.
+
+export async function exportWinnersCsvAction(restaurantSlugOrId: string) {
+  return exportWinnersTwilioCsvAction(restaurantSlugOrId, {
+    optInOnly: false,
+  })
+}
+
+export async function exportWinnersCampaignCsvAction(restaurantSlugOrId: string) {
+  return exportWinnersTwilioCsvAction(restaurantSlugOrId, {
+    optInOnly: true,
+  })
+}

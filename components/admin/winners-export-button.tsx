@@ -1,7 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { exportWinnersCsvAction, exportWinnersCampaignCsvAction } from "@/app/actions/export-winners-csv"
+import {
+  exportWinnersCsvAction,
+  exportWinnersCampaignCsvAction,
+} from "@/app/actions/export-winners-csv"
 
 export default function WinnersExportButton({
   restaurantSlug,
@@ -30,22 +33,27 @@ export default function WinnersExportButton({
     if (loading) return
     setLoading(true)
 
-    const res =
-      mode === "campaign"
-        ? await exportWinnersCampaignCsvAction(restaurantSlug)
-        : await exportWinnersCsvAction(restaurantSlug)
+    try {
+      const res =
+        mode === "campaign"
+          ? await exportWinnersCampaignCsvAction(restaurantSlug)
+          : await exportWinnersCsvAction(restaurantSlug)
 
-    if (!res.success) {
-      alert("Erreur export: " + res.message)
+      if (!res.success) {
+        alert("Erreur export: " + (res.message || "Inconnue"))
+        return
+      }
+
+      download(res.csv, filename || (res as any).filename || "export.csv")
+    } finally {
       setLoading(false)
-      return
     }
-
-    download(res.csv, filename || res.filename || "export.csv")
-    setLoading(false)
   }
 
-  const label = mode === "campaign" ? "Exporter gagnants (opt-in)" : "Exporter gagnants (complet)"
+  const label =
+    mode === "campaign"
+      ? "Exporter gagnants (opt-in)"
+      : "Exporter gagnants (complet)"
 
   return (
     <button
