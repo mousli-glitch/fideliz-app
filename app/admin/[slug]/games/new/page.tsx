@@ -387,11 +387,33 @@ export default function NewGamePage() {
                             {/* COLONNE GAUCHE : IDENTITÉ */}
                             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                                 <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 mb-4"><Palette size={20} className="text-blue-600"/> Identité Visuelle</h3>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Logo du commerce</label>
-                                    <div className="bg-white p-2 rounded-xl border border-slate-200"><LogoUploader currentUrl={designData.logo_url} onUrlChange={(url) => setDesignData({...designData, logo_url: url})} /></div>
-                                    <p className="text-xs text-slate-400 mt-2 ml-1">Conseil : Utilisez un format PNG transparent.</p>
-                                </div>
+                               <div>
+  <div className="flex items-center justify-between gap-3 mb-2">
+    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+      Logo du restaurant (commun à tous les jeux)
+    </label>
+
+    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full bg-slate-200 text-slate-700">
+      Global
+    </span>
+  </div>
+
+  <div className="bg-white p-2 rounded-xl border border-slate-200">
+    <LogoUploader
+      currentUrl={designData.logo_url}
+      onUrlChange={(url) => setDesignData({ ...designData, logo_url: url })}
+    />
+  </div>
+
+  <div className="mt-3 p-3 rounded-xl border border-amber-200 bg-amber-50">
+    <p className="text-[11px] font-bold text-amber-900">
+      ⚠️ Ce logo est celui du restaurant. Il sera utilisé pour tous les jeux.
+    </p>
+    <p className="text-[11px] text-amber-800 mt-1">
+      Conseil : utilisez un PNG transparent pour un rendu propre.
+    </p>
+  </div>
+</div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Couleur du Bouton (Actions)</label>
                                     <div className="flex items-center gap-4 p-3 bg-white rounded-xl border border-slate-200">
