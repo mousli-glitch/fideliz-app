@@ -48,20 +48,20 @@ export function CustomersTable({
 
   const slug = params?.slug as string
 
-  // SSR state mirror (table always shows SSR data)
+  // SSR mirror
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers || [])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
-  // Search box is local UI state; actual search is done via URL (?q=)
+  // Search input (UI). Real search is SSR via URL (?q=)
   const [searchInput, setSearchInput] = useState(initialQuery || "")
 
-  // Navigation/loading states
+  // Navigation/loading
   const [pendingLabel, setPendingLabel] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  // Keep table synced with SSR props after navigation
+  // Sync when SSR props change (after navigation)
   useEffect(() => {
     setCustomers(initialCustomers || [])
     setSelectedIds([])
@@ -71,16 +71,21 @@ export function CustomersTable({
     setSearchInput(initialQuery || "")
   }, [initialQuery])
 
+  // Clear label when transition ends
+  useEffect(() => {
+    if (!isPending) setPendingLabel(null)
+  }, [isPending])
+
   const page = ssrPage
   const totalPages = ssrTotalPages
 
-  // Helpers
   const scrollTop = () => {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   const buildUrl = (nextPage: number, q: string) => {
     const qp = new URLSearchParams(searchParams?.toString() || "")
+
     if (nextPage <= 1) qp.delete("page")
     else qp.set("page", String(nextPage))
 
@@ -126,10 +131,9 @@ export function CustomersTable({
     navigate(page + 1, initialQuery, `Page ${page + 1}`)
   }
 
-  // Search (global via SSR)
+  // Global search (SSR)
   const applySearch = () => {
     const q = (searchInput || "").trim()
-    // Always go back to page 1 when searching
     navigate(1, q, q ? `Recherche: "${q}"` : "Liste complète")
   }
 
@@ -148,7 +152,6 @@ export function CustomersTable({
     const result = await deleteContactAction(selectedIds, slug)
 
     if (result.success) {
-      // remove locally then refresh page (re-sync total/count)
       setCustomers((prev) => prev.filter((c) => !selectedIds.includes(c.id)))
       setSelectedIds([])
       startTransition(() => {
@@ -177,7 +180,6 @@ export function CustomersTable({
     setDeletingId(null)
   }
 
-  // UI helpers
   const headerRight = useMemo(() => {
     if (typeof totalCount === "number") {
       return (
@@ -191,7 +193,7 @@ export function CustomersTable({
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      {/* Top bar: global search */}
+      {/* Global search */}
       <div className="p-4 border-b border-slate-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-slate-50/50">
         <div className="relative flex-1 max-w-xl">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -251,7 +253,7 @@ export function CustomersTable({
         </div>
       </div>
 
-      {/* Table wrapper + overlay */}
+      {/* Table + overlay */}
       <div className="overflow-x-auto relative">
         {(isPending || pendingLabel) && (
           <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
@@ -344,7 +346,11 @@ export function CustomersTable({
                           className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
                           title="Supprimer"
                         >
-                          {deletingId === client.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={16} />}
+                          {deletingId === client.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 size={16} />
+                          )}
                         </button>
                       </td>
                     </tr>
@@ -362,7 +368,7 @@ export function CustomersTable({
         </div>
       </div>
 
-      {/* Pagination controls (SSR) */}
+      {/* Pagination (SSR) */}
       <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
         <div className="text-xs text-slate-500">
           Page <span className="font-black">{page}</span> / <span className="font-black">{totalPages}</span>
