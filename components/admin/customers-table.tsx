@@ -11,8 +11,9 @@ import {
   UserX,
   CheckSquare,
   Square,
+  X,
 } from "lucide-react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { deleteContactAction } from "@/app/actions/delete-contact"
 
 type Customer = {
@@ -22,6 +23,8 @@ type Customer = {
   phone: string
   marketing_optin: boolean
   created_at: string
+  game?: { active_action: string } | null
+  prize?: { label: string } | null
 }
 
 interface CustomersTableProps {
@@ -35,51 +38,71 @@ interface CustomersTableProps {
 export function CustomersTable({
   initialCustomers,
   totalCount,
-  page,
-  totalPages,
+  page: ssrPage,
+  totalPages: ssrTotalPages,
   initialQuery,
 }: CustomersTableProps) {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
+
   const slug = params?.slug as string
 
+  // SSR state mirror (table always shows SSR data)
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers || [])
-  const [searchTerm, setSearchTerm] = useState(initialQuery || "")
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-
-  // multi select
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
-  // nav loading (évite l'effet “page blanche”)
+  // Search box is local UI state; actual search is done via URL (?q=)
+  const [searchInput, setSearchInput] = useState(initialQuery || "")
+
+  // Navigation/loading states
+  const [pendingLabel, setPendingLabel] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  // keep in sync when SSR changes page/q
+  // Keep table synced with SSR props after navigation
   useEffect(() => {
     setCustomers(initialCustomers || [])
     setSelectedIds([])
   }, [initialCustomers])
 
   useEffect(() => {
-    setSearchTerm(initialQuery || "")
+    setSearchInput(initialQuery || "")
   }, [initialQuery])
 
-  // ✅ Search globale = pousse l'URL (SSR) avec debounce
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if (!slug) return
-      const q = searchTerm.trim()
-      const qp = q ? `&q=${encodeURIComponent(q)}` : ""
-      // on revient page 1 à chaque recherche
-      startTransition(() => {
-        router.push(`/admin/${slug}/customers?page=1${qp}`)
-      })
-    }, 450)
+  const page = ssrPage
+  const totalPages = ssrTotalPages
 
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, slug])
+  // Helpers
+  const scrollTop = () => {
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
+  }
 
+  const buildUrl = (nextPage: number, q: string) => {
+    const qp = new URLSearchParams(searchParams?.toString() || "")
+    if (nextPage <= 1) qp.delete("page")
+    else qp.set("page", String(nextPage))
+
+    const cleanQ = (q || "").trim()
+    if (!cleanQ) qp.delete("q")
+    else qp.set("q", cleanQ)
+
+    const queryString = qp.toString()
+    return `/admin/${slug}/customers${queryString ? `?${queryString}` : ""}`
+  }
+
+  const navigate = (nextPage: number, q: string, label: string) => {
+    if (!slug) return
+    setPendingLabel(label)
+    startTransition(() => {
+      router.push(buildUrl(nextPage, q))
+      router.refresh()
+    })
+    scrollTop()
+  }
+
+  // Selection
   const toggleSelectAll = () => {
     if (selectedIds.length === customers.length) setSelectedIds([])
     else setSelectedIds(customers.map((c) => c.id))
@@ -89,93 +112,157 @@ export function CustomersTable({
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
   }
 
-  const goToPage = (targetPage: number) => {
-    if (!slug) return
-    if (targetPage < 1 || targetPage > totalPages) return
-    const q = (initialQuery || "").trim()
-    const qp = q ? `&q=${encodeURIComponent(q)}` : ""
-    startTransition(() => {
-      router.push(`/admin/${slug}/customers?page=${targetPage}${qp}`)
-    })
-  }
-
+  // Pagination
   const canPrev = page > 1 && !isPending
   const canNext = page < totalPages && !isPending
 
+  const handlePrev = () => {
+    if (!canPrev) return
+    navigate(page - 1, initialQuery, `Page ${page - 1}`)
+  }
+
+  const handleNext = () => {
+    if (!canNext) return
+    navigate(page + 1, initialQuery, `Page ${page + 1}`)
+  }
+
+  // Search (global via SSR)
+  const applySearch = () => {
+    const q = (searchInput || "").trim()
+    // Always go back to page 1 when searching
+    navigate(1, q, q ? `Recherche: "${q}"` : "Liste complète")
+  }
+
+  const clearSearch = () => {
+    setSearchInput("")
+    navigate(1, "", "Liste complète")
+  }
+
+  // Bulk delete
   const handleBulkDelete = async () => {
     const count = selectedIds.length
-    if (!count) return
+    if (count === 0) return
     if (!confirm(`Supprimer définitivement les ${count} client(s) sélectionné(s) ?`)) return
 
     setIsBulkDeleting(true)
     const result = await deleteContactAction(selectedIds, slug)
 
     if (result.success) {
-      // update local (instant)
+      // remove locally then refresh page (re-sync total/count)
       setCustomers((prev) => prev.filter((c) => !selectedIds.includes(c.id)))
       setSelectedIds([])
-      // refresh SSR (recompte total)
-      router.refresh()
+      startTransition(() => {
+        router.refresh()
+      })
     } else {
       alert("Erreur : " + result.error)
     }
-
     setIsBulkDeleting(false)
   }
 
   const handleDeleteOne = async (id: string) => {
     if (!confirm("Supprimer ce client ?")) return
     setDeletingId(id)
+
     const result = await deleteContactAction([id], slug)
     if (result.success) {
       setCustomers((prev) => prev.filter((c) => c.id !== id))
       setSelectedIds((prev) => prev.filter((x) => x !== id))
-      router.refresh()
+      startTransition(() => {
+        router.refresh()
+      })
     } else {
       alert("Erreur : " + result.error)
     }
     setDeletingId(null)
   }
 
+  // UI helpers
+  const headerRight = useMemo(() => {
+    if (typeof totalCount === "number") {
+      return (
+        <div className="text-xs text-slate-500 font-medium">
+          Total CRM : <span className="font-black text-slate-700">{totalCount}</span>
+        </div>
+      )
+    }
+    return null
+  }, [totalCount])
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 gap-3">
-        <div className="relative flex-1 max-w-md">
+      {/* Top bar: global search */}
+      <div className="p-4 border-b border-slate-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-slate-50/50">
+        <div className="relative flex-1 max-w-xl">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
-            placeholder="Rechercher sur tout le CRM (nom, email, téléphone)..."
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition bg-white text-sm"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Rechercher dans tout le CRM (nom, email, téléphone)…"
+            className="w-full pl-10 pr-28 py-2.5 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition bg-white text-sm"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") applySearch()
+            }}
             disabled={isPending}
           />
+
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            {initialQuery ? (
+              <button
+                onClick={clearSearch}
+                disabled={isPending}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+                title="Réinitialiser"
+              >
+                <X size={16} />
+              </button>
+            ) : null}
+
+            <button
+              onClick={applySearch}
+              disabled={isPending}
+              className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-black hover:bg-slate-800 disabled:opacity-40"
+            >
+              Rechercher
+            </button>
+          </div>
+
+          {initialQuery ? (
+            <div className="mt-2 text-[11px] text-slate-500">
+              Filtre actif : <span className="font-black text-slate-700">{initialQuery}</span>
+            </div>
+          ) : null}
         </div>
 
-        {selectedIds.length > 0 && (
-          <button
-            onClick={handleBulkDelete}
-            disabled={isBulkDeleting || isPending}
-            className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-red-700 transition-all shadow-sm disabled:opacity-40"
-          >
-            {isBulkDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-            Supprimer {selectedIds.length}
-          </button>
-        )}
+        <div className="flex items-center justify-between md:justify-end gap-3">
+          {headerRight}
+
+          {selectedIds.length > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting || isPending}
+              className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-red-700 transition-all shadow-sm disabled:opacity-40"
+            >
+              {isBulkDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+              Supprimer {selectedIds.length}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* overlay nav */}
+      {/* Table wrapper + overlay */}
       <div className="overflow-x-auto relative">
-        {isPending && (
+        {(isPending || pendingLabel) && (
           <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
             <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
               <Loader2 className="w-5 h-5 animate-spin" />
-              Chargement...
+              Chargement… {pendingLabel ?? ""}
             </div>
           </div>
         )}
 
-        <div className={isPending ? "opacity-60 pointer-events-none" : ""}>
+        <div className={(isPending || pendingLabel) ? "opacity-60 pointer-events-none" : ""}>
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
               <tr>
@@ -184,6 +271,7 @@ export function CustomersTable({
                     onClick={toggleSelectAll}
                     className="hover:text-blue-600 transition-colors"
                     disabled={isPending}
+                    title="Tout sélectionner"
                   >
                     {selectedIds.length === customers.length && customers.length > 0 ? (
                       <CheckSquare size={18} className="text-blue-600" />
@@ -213,15 +301,21 @@ export function CustomersTable({
                           onClick={() => toggleSelect(client.id)}
                           className="text-slate-300 hover:text-blue-600"
                           disabled={isPending}
+                          title="Sélectionner"
                         >
                           {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
                         </button>
                       </td>
 
-                      <td className="px-4 py-4 font-bold text-slate-900">{client.first_name || "Anonyme"}</td>
+                      <td className="px-4 py-4">
+                        <div className="font-black text-slate-900">{client.first_name || "Anonyme"}</div>
+                        <div className="text-[11px] text-slate-400">
+                          {client.created_at ? new Date(client.created_at).toLocaleString() : ""}
+                        </div>
+                      </td>
 
                       <td className="px-6 py-4 text-slate-600">
-                        <div className="flex flex-col text-xs">
+                        <div className="flex flex-col text-xs gap-1">
                           <span className="flex items-center gap-2 text-slate-500">
                             <Mail size={12} /> {client.email || "-"}
                           </span>
@@ -248,12 +342,9 @@ export function CustomersTable({
                           onClick={() => handleDeleteOne(client.id)}
                           disabled={deletingId === client.id || isPending}
                           className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                          title="Supprimer"
                         >
-                          {deletingId === client.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 size={16} />
-                          )}
+                          {deletingId === client.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={16} />}
                         </button>
                       </td>
                     </tr>
@@ -271,18 +362,15 @@ export function CustomersTable({
         </div>
       </div>
 
-      {/* Pagination SSR */}
+      {/* Pagination controls (SSR) */}
       <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
         <div className="text-xs text-slate-500">
-          Page <span className="font-bold">{page}</span> / <span className="font-bold">{totalPages}</span>
-          {typeof totalCount === "number" ? (
-            <span className="ml-2 text-slate-400">({totalCount} total)</span>
-          ) : null}
+          Page <span className="font-black">{page}</span> / <span className="font-black">{totalPages}</span>
         </div>
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => goToPage(page - 1)}
+            onClick={handlePrev}
             disabled={!canPrev}
             className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold disabled:opacity-40"
           >
@@ -290,7 +378,7 @@ export function CustomersTable({
           </button>
 
           <button
-            onClick={() => goToPage(page + 1)}
+            onClick={handleNext}
             disabled={!canNext}
             className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold disabled:opacity-40"
           >

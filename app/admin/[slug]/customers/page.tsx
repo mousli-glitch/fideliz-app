@@ -1,9 +1,8 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { notFound, redirect } from "next/navigation"
 import CsvExportButton from "@/components/admin/csv-export-button"
 import { CustomersTable } from "@/components/admin/customers-table"
 
-// --- TYPES LOCAUX ---
 interface Restaurant {
   id: string
   name: string
@@ -24,22 +23,33 @@ export default async function CustomersPage({
 }) {
   const { slug } = params
 
-  // ✅ Service role (comme Winners) : évite les 0 rows liés à RLS en prod
-  const supabase = createClient(
+  // ✅ Client ADMIN (bypass RLS) — comme winners
+  const supabase = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
   )
 
-  // 1) DÉTECTION DU RESTAURANT
+  // 1) Restaurant (id ou slug)
   let query = supabase.from("restaurants").select("id, name")
   query = isUUID(slug) ? query.eq("id", slug) : query.eq("slug", slug)
 
-  const { data: rawRestaurant, error: restoError } = await query.single()
+  const { data: rawRestaurant, error: restoError } = await query.maybeSingle()
+
+  // ✅ DEBUG TEMPORAIRE (si tu veux voir exactement)
+  // if (!rawRestaurant) {
+  //   return (
+  //     <pre className="p-6 text-xs bg-red-50 border border-red-200 rounded-xl overflow-auto">
+  //       {JSON.stringify({ slug, restoError, rawRestaurant }, null, 2)}
+  //     </pre>
+  //   )
+  // }
+
   if (restoError || !rawRestaurant) return notFound()
 
-  const restaurant = rawRestaurant as unknown as Restaurant
+  const restaurant = rawRestaurant as Restaurant
 
-  // 2) PAGINATION + RECHERCHE SSR (via URL)
+  // 2) Pagination + recherche SSR via URL
   const PAGE_SIZE = 30
   const page = Math.max(1, Number.parseInt(searchParams?.page ?? "1", 10) || 1)
   const q = (searchParams?.q ?? "").trim()
@@ -47,15 +57,13 @@ export default async function CustomersPage({
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
 
-  // Base query (avec count exact)
   let contactsQuery = supabase
     .from("contacts")
-    .select(`id, first_name, email, phone, created_at, marketing_optin`, { count: "exact" })
+    .select("id, first_name, email, phone, created_at, marketing_optin", { count: "exact" })
     .eq("restaurant_id", restaurant.id)
 
-  // ✅ Recherche globale sur tout le CRM (pas juste la page courante)
+  // ✅ Recherche globale sur tout le CRM
   if (q) {
-    // protection basique % _
     const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
     const qLike = `%${safe}%`
     contactsQuery = contactsQuery.or(
@@ -71,17 +79,15 @@ export default async function CustomersPage({
   if (customersError) return notFound()
 
   const customers = (rawCustomers || []) as any[]
-
   const total = typeof totalCustomers === "number" ? totalCustomers : 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  // ✅ Si page trop haute -> redirect dernière page (en conservant q)
+  // ✅ Page trop haute → redirect vers dernière page (en gardant q)
   if (page > totalPages) {
     const qp = q ? `&q=${encodeURIComponent(q)}` : ""
     redirect(`/admin/${slug}/customers?page=${totalPages}${qp}`)
   }
 
-  // Opt-in affiché (page courante)
   const optInCount = customers.filter((c) => c.marketing_optin).length
 
   return (
@@ -91,11 +97,11 @@ export default async function CustomersPage({
           <div>
             <h1 className="text-3xl font-black text-slate-900">Portefeuille Clients 👥</h1>
             <p className="text-slate-500 mt-1 font-medium">
-              Clients opt-in (page courante) :{" "}
+              Clients ayant accepté de recevoir des offres :{" "}
               <span className="text-blue-600 font-bold">{optInCount}</span> / {customers.length}
               {q ? (
                 <span className="ml-2 text-slate-400">
-                  (recherche : <span className="font-bold">{q}</span>)
+                  (filtré par : <span className="font-bold">{q}</span>)
                 </span>
               ) : null}
             </p>
