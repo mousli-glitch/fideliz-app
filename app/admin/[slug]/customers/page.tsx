@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation"
 import CsvExportButton from "@/components/admin/csv-export-button"
 import { CustomersTable } from "@/components/admin/customers-table"
 
+export const dynamic = "force-dynamic"
+
 // --- TYPES LOCAUX ---
 interface Restaurant {
   id: string
@@ -19,7 +21,7 @@ export default async function CustomersPage({
   searchParams,
 }: {
   params: { slug: string }
-  searchParams?: { page?: string }
+  searchParams?: { page?: string; q?: string }
 }) {
   const { slug } = params
   const supabase = await createClient()
@@ -33,35 +35,35 @@ export default async function CustomersPage({
 
   const restaurant = rawRestaurant as unknown as Restaurant
 
-  // 2) PAGINATION SSR (page via URL ?page=2)
+  // 2) PAGINATION + RECHERCHE SSR (via URL)
   const PAGE_SIZE = 30
   const page = Math.max(1, Number.parseInt(searchParams?.page ?? "1", 10) || 1)
 
-  const { count: totalCustomers, error: countError } = await supabase
-    .from("contacts")
-    .select("*", { count: "exact", head: true })
-    .eq("restaurant_id", restaurant.id)
-
-  if (countError) {
-    // si tu veux afficher une UI erreur plutôt que notFound, dis-moi
-    return notFound()
-  }
-
-  const total = typeof totalCustomers === "number" ? totalCustomers : 0
-  const maxPage = Math.max(1, Math.ceil(total / PAGE_SIZE))
-
-  // ✅ si quelqu’un arrive sur page trop haute, on le ramène au max
-  if (page > maxPage) {
-    redirect(`/admin/admin/${slug}/customers?page=${maxPage}`)
-  }
+  // ✅ recherche globale: q sur tout le CRM
+  const qRaw = (searchParams?.q ?? "").trim()
+  const q = qRaw.length > 80 ? qRaw.slice(0, 80) : qRaw // petite sécurité
 
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
 
-  const { data: rawCustomers, error: customersError } = await supabase
+  // Base query (avec count exact)
+  let contactsQuery = supabase
     .from("contacts")
-    .select(`id, first_name, email, phone, created_at, marketing_optin`)
+    .select(`id, first_name, email, phone, created_at, marketing_optin`, { count: "exact" })
     .eq("restaurant_id", restaurant.id)
+
+  if (q) {
+    // échappe % et _ pour LIKE
+    const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
+    const qLike = `%${safe}%`
+
+    // ⚠️ PostgREST .or() sur plusieurs colonnes
+    contactsQuery = contactsQuery.or(
+      `first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`
+    )
+  }
+
+  const { data: rawCustomers, count: totalCustomers, error: customersError } = await contactsQuery
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .range(from, to)
@@ -70,11 +72,17 @@ export default async function CustomersPage({
 
   const customers = (rawCustomers || []) as any[]
 
+  const total = typeof totalCustomers === "number" ? totalCustomers : 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  // ✅ Si page trop haute -> redirect vers dernière (en conservant q)
+  if (page > totalPages) {
+    const qp = q ? `&q=${encodeURIComponent(q)}` : ""
+    redirect(`/admin/admin/${slug}/customers?page=${totalPages}${qp}`)
+  }
+
   // Opt-in affiché (sur la page courante)
   const optInCount = customers.filter((c) => c.marketing_optin).length
-
-  // hasMore initial fiable (basé sur page vs maxPage)
-  const hasMoreInitial = page < maxPage
 
   return (
     <div className="min-h-screen bg-slate-50 p-8">
@@ -86,6 +94,11 @@ export default async function CustomersPage({
             <p className="text-slate-500 mt-1 font-medium">
               Clients ayant accepté de recevoir des offres :{" "}
               <span className="text-blue-600 font-bold">{optInCount}</span> / {customers.length}
+              {q ? (
+                <span className="ml-2 text-slate-400">
+                  (filtré par : <span className="font-bold">{q}</span>)
+                </span>
+              ) : null}
             </p>
           </div>
 
@@ -97,8 +110,10 @@ export default async function CustomersPage({
         {/* TABLEAU DES CLIENTS */}
         <CustomersTable
           initialCustomers={customers}
-          hasMoreInitial={hasMoreInitial}
           totalCount={typeof totalCustomers === "number" ? totalCustomers : undefined}
+          page={page}
+          totalPages={totalPages}
+          initialQuery={q}
         />
       </div>
     </div>
