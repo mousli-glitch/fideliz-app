@@ -45,7 +45,33 @@ export default async function CustomersPage({
   //   )
   // }
 
-  if (restoError || !rawRestaurant) return notFound()
+  if (restoError || !rawRestaurant) {
+  const { data: sample, error: sampleErr } = await supabase
+    .from("restaurants")
+    .select("id, slug, name")
+    .order("created_at", { ascending: false })
+    .limit(10)
+
+  return (
+    <pre className="p-6 text-xs bg-red-50 border border-red-200 rounded-xl overflow-auto">
+      {JSON.stringify(
+        {
+          debug: "CRM restaurant not found",
+          receivedSlug: slug,
+          isUUID: isUUID(slug),
+          restoError,
+          rawRestaurant,
+          envUrlPrefix: (process.env.NEXT_PUBLIC_SUPABASE_URL || "").slice(0, 40),
+          hasServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+          sampleErr,
+          sampleRestaurants: sample,
+        },
+        null,
+        2
+      )}
+    </pre>
+  )
+}
 
   const restaurant = rawRestaurant as Restaurant
 
