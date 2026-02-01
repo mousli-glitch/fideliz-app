@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import {
   Search,
   Mail,
@@ -12,9 +12,8 @@ import {
   CheckSquare,
   Square,
 } from "lucide-react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { deleteContactAction } from "@/app/actions/delete-contact"
-import { getCustomersPageAction } from "@/app/actions/get-customers-page"
 
 type Customer = {
   id: string
@@ -27,62 +26,55 @@ type Customer = {
   prize: { label: string } | null
 }
 
-type CustomersPageResult =
-  | {
-      success: true
-      customers: Customer[]
-      total: number
-      totalPages: number
-      page: number
-      hasMore: boolean
-    }
-  | { success: false; message: string }
-
 interface CustomersTableProps {
   initialCustomers: Customer[]
-  hasMoreInitial: boolean
-  totalCount?: number // ✅ optionnel (recommandé)
+  totalCount?: number
+  page: number
+  totalPages: number
+  initialQuery: string
 }
 
-export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }: CustomersTableProps) {
+export function CustomersTable({
+  initialCustomers,
+  totalCount,
+  page,
+  totalPages,
+  initialQuery,
+}: CustomersTableProps) {
   const params = useParams()
   const slug = params?.slug as string
+
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
   const PAGE_SIZE = 30
 
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers || [])
-  const [searchTerm, setSearchTerm] = useState("")
+  const [searchTerm, setSearchTerm] = useState(initialQuery || "")
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Pagination pages (offset)
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState<number>(() => {
-    if (typeof totalCount === "number") return Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
-    return 1
-  })
-  const [hasMore, setHasMore] = useState<boolean>(hasMoreInitial)
-  const [isPaging, setIsPaging] = useState(false)
-  const [pendingPage, setPendingPage] = useState<number | null>(null) // ✅ pour l'overlay
-
-  // État sélection multiple
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
-  const filteredCustomers = useMemo(() => {
-    const term = searchTerm.toLowerCase()
-    return customers.filter((client) => {
-      return (
-        (client.first_name || "").toLowerCase().includes(term) ||
-        (client.email || "").toLowerCase().includes(term) ||
-        (client.phone || "").includes(term)
-      )
-    })
-  }, [customers, searchTerm])
+  const [isPending, startTransition] = useTransition()
+  const [pendingLabel, setPendingLabel] = useState<string | null>(null)
+
+  // ✅ Sync quand SSR change (navigation URL)
+  useEffect(() => {
+    setCustomers(initialCustomers || [])
+    setSelectedIds([])
+  }, [initialCustomers])
+
+  useEffect(() => {
+    setSearchTerm(initialQuery || "")
+  }, [initialQuery])
+
+  const shownCustomers = useMemo(() => customers, [customers])
 
   // Sélection
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredCustomers.length) setSelectedIds([])
-    else setSelectedIds(filteredCustomers.map((c) => c.id))
+    if (selectedIds.length === shownCustomers.length) setSelectedIds([])
+    else setSelectedIds(shownCustomers.map((c) => c.id))
   }
 
   const toggleSelect = (id: string) => {
@@ -93,56 +85,47 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  const loadPage = async (targetPage: number) => {
-    if (!slug || isPaging) return
-    if (targetPage < 1) return
-    if (totalPages && targetPage > totalPages) return
+  const pushUrl = (nextPage: number, nextQuery: string) => {
+    const sp = new URLSearchParams(searchParams.toString())
 
-    setIsPaging(true)
-    setPendingPage(targetPage)
+    const q = nextQuery.trim()
+    if (q) sp.set("q", q)
+    else sp.delete("q")
 
-    // ✅ Page 1 : on remet l’SSR (évite re-fetch)
-    if (targetPage === 1) {
-      setCustomers(initialCustomers || [])
-      setPage(1)
-      setSelectedIds([])
-      setHasMore(hasMoreInitial)
-      scrollTop()
-      setPendingPage(null)
-      setIsPaging(false)
-      return
-    }
+    sp.set("page", String(nextPage))
 
-    // ✅ Appel action en mode page (OFFSET)
-    const res = (await getCustomersPageAction(slug, targetPage, PAGE_SIZE)) as CustomersPageResult
-
-    if (res.success) {
-      setCustomers(res.customers || [])
-      setPage(res.page || targetPage)
-      setHasMore(Boolean(res.hasMore))
-      setTotalPages(res.totalPages || totalPages)
-      setSelectedIds([])
-      scrollTop()
-    } else {
-      console.error("CRM pagination error:", res.message)
-      // On garde l'ancienne page affichée (pas de blanc)
-    }
-
-    setPendingPage(null)
-    setIsPaging(false)
+    startTransition(() => {
+      router.push(`?${sp.toString()}`)
+    })
   }
 
-  const canPrev = page > 1 && !isPaging
-  const canNext = ((totalPages ? page < totalPages : hasMore) && !isPaging) || false
+  // ✅ Recherche globale (SSR) avec debounce
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPendingLabel(searchTerm.trim() ? `Recherche: "${searchTerm.trim()}"` : "Chargement...")
+      pushUrl(1, searchTerm)
+      scrollTop()
+    }, 350)
 
-  const handlePrev = async () => {
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm])
+
+  const canPrev = page > 1 && !isPending
+  const canNext = page < totalPages && !isPending
+
+  const handlePrev = () => {
     if (!canPrev) return
-    await loadPage(page - 1)
+    setPendingLabel(`Page ${page - 1}`)
+    pushUrl(page - 1, searchTerm)
+    scrollTop()
   }
 
-  const handleNext = async () => {
+  const handleNext = () => {
     if (!canNext) return
-    await loadPage(page + 1)
+    setPendingLabel(`Page ${page + 1}`)
+    pushUrl(page + 1, searchTerm)
+    scrollTop()
   }
 
   // Suppression groupée
@@ -164,33 +147,37 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
   const handleDeleteOne = async (id: string) => {
     if (!confirm("Supprimer ce client ?")) return
     setDeletingId(id)
+
     const result = await deleteContactAction([id], slug)
     if (result.success) {
       setCustomers((prev) => prev.filter((c) => c.id !== id))
       setSelectedIds((prev) => prev.filter((selected) => selected !== id))
+    } else {
+      alert("Erreur : " + result.error)
     }
+
     setDeletingId(null)
   }
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+      <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 gap-3">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
-            placeholder="Rechercher un client..."
+            placeholder="Rechercher dans tout le CRM (nom, email, tel)..."
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition bg-white text-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            disabled={isPaging} // ✅ évite les flashes pendant pagination
+            disabled={isPending}
           />
         </div>
 
         {selectedIds.length > 0 && (
           <button
             onClick={handleBulkDelete}
-            disabled={isBulkDeleting || isPaging}
+            disabled={isBulkDeleting || isPending}
             className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-red-700 transition-all shadow-sm disabled:opacity-40"
           >
             {isBulkDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
@@ -199,25 +186,28 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
         )}
       </div>
 
-      {/* ✅ Wrapper relatif + overlay pour éviter page blanche */}
+      {/* ✅ Wrapper relatif + overlay pendant navigation SSR */}
       <div className="overflow-x-auto relative">
-        {isPaging && (
+        {isPending && (
           <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
             <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
               <Loader2 className="w-5 h-5 animate-spin" />
-              Chargement de la page {pendingPage ?? "..."}
+              {pendingLabel || "Chargement..."}
             </div>
           </div>
         )}
 
-        {/* On garde l’ancienne page affichée pendant le fetch */}
-        <div className={isPaging ? "opacity-60 pointer-events-none" : ""}>
+        <div className={isPending ? "opacity-60 pointer-events-none" : ""}>
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
               <tr>
                 <th className="px-4 py-4 w-10 text-center">
-                  <button onClick={toggleSelectAll} className="hover:text-blue-600 transition-colors" disabled={isPaging}>
-                    {selectedIds.length === filteredCustomers.length && filteredCustomers.length > 0 ? (
+                  <button
+                    onClick={toggleSelectAll}
+                    className="hover:text-blue-600 transition-colors"
+                    disabled={isPending}
+                  >
+                    {selectedIds.length === shownCustomers.length && shownCustomers.length > 0 ? (
                       <CheckSquare size={18} className="text-blue-600" />
                     ) : (
                       <Square size={18} />
@@ -232,8 +222,8 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {filteredCustomers.length > 0 ? (
-                filteredCustomers.map((client) => {
+              {shownCustomers.length > 0 ? (
+                shownCustomers.map((client) => {
                   const isSelected = selectedIds.includes(client.id)
                   return (
                     <tr
@@ -244,12 +234,14 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
                         <button
                           onClick={() => toggleSelect(client.id)}
                           className="text-slate-300 hover:text-blue-600"
-                          disabled={isPaging}
+                          disabled={isPending}
                         >
                           {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
                         </button>
                       </td>
+
                       <td className="px-4 py-4 font-bold text-slate-900">{client.first_name || "Anonyme"}</td>
+
                       <td className="px-6 py-4 text-slate-600">
                         <div className="flex flex-col text-xs">
                           <span className="flex items-center gap-2 text-slate-500">
@@ -260,6 +252,7 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
                           </span>
                         </div>
                       </td>
+
                       <td className="px-6 py-4 text-center">
                         {client.marketing_optin ? (
                           <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
@@ -271,10 +264,11 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
                           </span>
                         )}
                       </td>
+
                       <td className="px-6 py-4 text-right">
                         <button
                           onClick={() => handleDeleteOne(client.id)}
-                          disabled={deletingId === client.id || isPaging}
+                          disabled={deletingId === client.id || isPending}
                           className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
                         >
                           {deletingId === client.id ? (
@@ -299,15 +293,12 @@ export function CustomersTable({ initialCustomers, hasMoreInitial, totalCount }:
         </div>
       </div>
 
-      {/* Pagination */}
+      {/* Pagination SSR */}
       <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
         <div className="text-xs text-slate-500">
-          Page <span className="font-bold">{page}</span>
-          {totalPages ? (
-            <>
-              {" "}
-              / <span className="font-bold">{totalPages}</span>
-            </>
+          Page <span className="font-bold">{page}</span> / <span className="font-bold">{totalPages}</span>
+          {typeof totalCount === "number" ? (
+            <span className="ml-2 text-slate-400">({totalCount} clients)</span>
           ) : null}
         </div>
 
