@@ -76,10 +76,10 @@ export default async function CustomersPage({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   // ✅ Si page trop haute -> redirect vers dernière (en conservant q)
-  if (page > totalPages) {
-    const qp = q ? `&q=${encodeURIComponent(q)}` : ""
-    redirect(`/admin/admin/${slug}/customers?page=${totalPages}${qp}`)
-  }
+ if (page > totalPages) {
+  const qp = q ? `&q=${encodeURIComponent(q)}` : ""
+  redirect(`/admin/${slug}/customers?page=${totalPages}${qp}`)
+}
 
   // Opt-in affiché (sur la page courante)
   const optInCount = customers.filter((c) => c.marketing_optin).length
