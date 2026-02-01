@@ -45,23 +45,26 @@ export function CustomersTable({
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
-
   const slug = params?.slug as string
 
-  // SSR mirror
+  // Table data (mirrors SSR)
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers || [])
+
+  // Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+
+  // Delete states
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
-  // Search input (UI). Real search is SSR via URL (?q=)
+  // Search input (UI) — actual search is SSR via ?q=
   const [searchInput, setSearchInput] = useState(initialQuery || "")
 
   // Navigation/loading
   const [pendingLabel, setPendingLabel] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  // Sync when SSR props change (after navigation)
+  // Sync when SSR changes after navigation
   useEffect(() => {
     setCustomers(initialCustomers || [])
     setSelectedIds([])
@@ -70,11 +73,6 @@ export function CustomersTable({
   useEffect(() => {
     setSearchInput(initialQuery || "")
   }, [initialQuery])
-
-  // Clear label when transition ends
-  useEffect(() => {
-    if (!isPending) setPendingLabel(null)
-  }, [isPending])
 
   const page = ssrPage
   const totalPages = ssrTotalPages
@@ -86,9 +84,11 @@ export function CustomersTable({
   const buildUrl = (nextPage: number, q: string) => {
     const qp = new URLSearchParams(searchParams?.toString() || "")
 
+    // page
     if (nextPage <= 1) qp.delete("page")
     else qp.set("page", String(nextPage))
 
+    // q
     const cleanQ = (q || "").trim()
     if (!cleanQ) qp.delete("q")
     else qp.set("q", cleanQ)
@@ -100,15 +100,18 @@ export function CustomersTable({
   const navigate = (nextPage: number, q: string, label: string) => {
     if (!slug) return
     setPendingLabel(label)
+
     startTransition(() => {
       router.push(buildUrl(nextPage, q))
       router.refresh()
     })
+
     scrollTop()
   }
 
   // Selection
   const toggleSelectAll = () => {
+    if (customers.length === 0) return
     if (selectedIds.length === customers.length) setSelectedIds([])
     else setSelectedIds(customers.map((c) => c.id))
   }
@@ -131,9 +134,10 @@ export function CustomersTable({
     navigate(page + 1, initialQuery, `Page ${page + 1}`)
   }
 
-  // Global search (SSR)
+  // Search (global SSR)
   const applySearch = () => {
     const q = (searchInput || "").trim()
+    // Revenir à la page 1 lors d'une recherche
     navigate(1, q, q ? `Recherche: "${q}"` : "Liste complète")
   }
 
@@ -142,7 +146,7 @@ export function CustomersTable({
     navigate(1, "", "Liste complète")
   }
 
-  // Bulk delete
+  // Delete (bulk)
   const handleBulkDelete = async () => {
     const count = selectedIds.length
     if (count === 0) return
@@ -152,6 +156,7 @@ export function CustomersTable({
     const result = await deleteContactAction(selectedIds, slug)
 
     if (result.success) {
+      // Optimiste: on enlève localement puis refresh SSR (pour recalc total/pages)
       setCustomers((prev) => prev.filter((c) => !selectedIds.includes(c.id)))
       setSelectedIds([])
       startTransition(() => {
@@ -160,9 +165,11 @@ export function CustomersTable({
     } else {
       alert("Erreur : " + result.error)
     }
+
     setIsBulkDeleting(false)
   }
 
+  // Delete (one)
   const handleDeleteOne = async (id: string) => {
     if (!confirm("Supprimer ce client ?")) return
     setDeletingId(id)
@@ -177,6 +184,7 @@ export function CustomersTable({
     } else {
       alert("Erreur : " + result.error)
     }
+
     setDeletingId(null)
   }
 
@@ -191,9 +199,11 @@ export function CustomersTable({
     return null
   }, [totalCount])
 
+  const isOverlay = Boolean(isPending || pendingLabel)
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      {/* Global search */}
+      {/* Top bar: global search */}
       <div className="p-4 border-b border-slate-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-slate-50/50">
         <div className="relative flex-1 max-w-xl">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -253,9 +263,9 @@ export function CustomersTable({
         </div>
       </div>
 
-      {/* Table + overlay */}
+      {/* Table wrapper + overlay */}
       <div className="overflow-x-auto relative">
-        {(isPending || pendingLabel) && (
+        {isOverlay && (
           <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
             <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -264,7 +274,7 @@ export function CustomersTable({
           </div>
         )}
 
-        <div className={(isPending || pendingLabel) ? "opacity-60 pointer-events-none" : ""}>
+        <div className={isOverlay ? "opacity-60 pointer-events-none" : ""}>
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
               <tr>
@@ -368,7 +378,7 @@ export function CustomersTable({
         </div>
       </div>
 
-      {/* Pagination (SSR) */}
+      {/* Pagination controls (SSR) */}
       <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
         <div className="text-xs text-slate-500">
           Page <span className="font-black">{page}</span> / <span className="font-black">{totalPages}</span>
