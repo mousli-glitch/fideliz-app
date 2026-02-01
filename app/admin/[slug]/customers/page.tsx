@@ -31,7 +31,16 @@ export default async function CustomersPage({
   query = isUUID(slug) ? query.eq("id", slug) : query.eq("slug", slug)
 
   const { data: rawRestaurant, error: restoError } = await query.single()
-  if (restoError || !rawRestaurant) return notFound()
+  if (restoError || !rawRestaurant) {
+  return (
+    <div className="p-10">
+      <h1 className="text-2xl font-black">DEBUG CRM 404</h1>
+      <pre className="mt-4 text-xs bg-slate-100 p-4 rounded">
+        {JSON.stringify({ slug, restoError, rawRestaurant }, null, 2)}
+      </pre>
+    </div>
+  )
+}
 
   const restaurant = rawRestaurant as unknown as Restaurant
 
