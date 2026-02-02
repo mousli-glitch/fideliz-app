@@ -45,7 +45,11 @@ export function CustomersTable({
   const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const slug = params?.slug as string
+
+  // slug peut être string | string[] selon le router
+  const slugParam = params?.slug as unknown
+  const slug =
+    typeof slugParam === "string" ? slugParam : Array.isArray(slugParam) ? slugParam[0] : ""
 
   // SSR mirror: the table always displays SSR data
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers || [])
@@ -59,6 +63,7 @@ export function CustomersTable({
   // Navigation/loading
   const [pendingLabel, setPendingLabel] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const isNavigating = isPending || Boolean(pendingLabel)
 
   useEffect(() => {
     setCustomers(initialCustomers || [])
@@ -68,6 +73,11 @@ export function CustomersTable({
   useEffect(() => {
     setSearchInput(initialQuery || "")
   }, [initialQuery])
+
+  // ✅ IMPORTANT : coupe l’overlay dès qu’une nouvelle page SSR est reçue
+  useEffect(() => {
+    setPendingLabel(null)
+  }, [ssrPage, ssrTotalPages, initialQuery, initialCustomers])
 
   const page = ssrPage
   const totalPages = ssrTotalPages
@@ -95,10 +105,12 @@ export function CustomersTable({
   const navigate = (nextPage: number, q: string, label: string) => {
     if (!slug) return
     setPendingLabel(label)
+
     startTransition(() => {
+      // ✅ pas besoin de refresh : navigation SSR via URL suffit
       router.push(buildUrl(nextPage, q))
-      router.refresh()
     })
+
     scrollTop()
   }
 
@@ -113,8 +125,8 @@ export function CustomersTable({
   }
 
   // Pagination (SSR)
-  const canPrev = page > 1 && !isPending
-  const canNext = page < totalPages && !isPending
+  const canPrev = page > 1 && !isNavigating
+  const canNext = page < totalPages && !isNavigating
 
   const handlePrev = () => {
     if (!canPrev) return
@@ -199,14 +211,14 @@ export function CustomersTable({
             onKeyDown={(e) => {
               if (e.key === "Enter") applySearch()
             }}
-            disabled={isPending}
+            disabled={isNavigating}
           />
 
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
             {initialQuery ? (
               <button
                 onClick={clearSearch}
-                disabled={isPending}
+                disabled={isNavigating}
                 className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40"
                 title="Réinitialiser"
               >
@@ -216,7 +228,7 @@ export function CustomersTable({
 
             <button
               onClick={applySearch}
-              disabled={isPending}
+              disabled={isNavigating}
               className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-black hover:bg-slate-800 disabled:opacity-40"
             >
               Rechercher
@@ -236,7 +248,7 @@ export function CustomersTable({
           {selectedIds.length > 0 && (
             <button
               onClick={handleBulkDelete}
-              disabled={isBulkDeleting || isPending}
+              disabled={isBulkDeleting || isNavigating}
               className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-red-700 transition-all shadow-sm disabled:opacity-40"
             >
               {isBulkDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
@@ -248,7 +260,7 @@ export function CustomersTable({
 
       {/* Table + overlay */}
       <div className="overflow-x-auto relative">
-        {(isPending || pendingLabel) && (
+        {isNavigating && (
           <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
             <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -257,7 +269,7 @@ export function CustomersTable({
           </div>
         )}
 
-        <div className={(isPending || pendingLabel) ? "opacity-60 pointer-events-none" : ""}>
+        <div className={isNavigating ? "opacity-60 pointer-events-none" : ""}>
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
               <tr>
@@ -265,7 +277,7 @@ export function CustomersTable({
                   <button
                     onClick={toggleSelectAll}
                     className="hover:text-blue-600 transition-colors"
-                    disabled={isPending}
+                    disabled={isNavigating}
                     title="Tout sélectionner"
                   >
                     {selectedIds.length === customers.length && customers.length > 0 ? (
@@ -295,7 +307,7 @@ export function CustomersTable({
                         <button
                           onClick={() => toggleSelect(client.id)}
                           className="text-slate-300 hover:text-blue-600"
-                          disabled={isPending}
+                          disabled={isNavigating}
                           title="Sélectionner"
                         >
                           {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
@@ -335,7 +347,7 @@ export function CustomersTable({
                       <td className="px-6 py-4 text-right">
                         <button
                           onClick={() => handleDeleteOne(client.id)}
-                          disabled={deletingId === client.id || isPending}
+                          disabled={deletingId === client.id || isNavigating}
                           className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
                           title="Supprimer"
                         >
