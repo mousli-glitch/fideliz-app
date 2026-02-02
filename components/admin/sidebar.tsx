@@ -2,15 +2,33 @@
 
 import { LayoutDashboard, Gamepad2, Trophy, Settings, Users, LogOut, X, Star } from "lucide-react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 
-export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: () => void }) {
+export function Sidebar({ restaurant, onClose }: { restaurant: any; onClose?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
+  const params = useParams()
   const supabase = createClient()
-  
+
+  // ✅ slug ultra fiable (évite /admin//customers)
+  const slugFromParams = (params?.slug as string) || ""
+  const slugFromProps = (restaurant?.slug as string) || ""
+  const slug = (slugFromParams || slugFromProps || "").trim()
+
+  const isReady = Boolean(slug)
+
   const isActive = (path: string) => pathname?.includes(path)
+
+  const safeHref = (path: string) => (isReady ? `/admin/${slug}${path}` : "#")
+
+  const guardClick = (e: React.MouseEvent) => {
+    if (!isReady) {
+      e.preventDefault()
+      return
+    }
+    onClose?.()
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -18,41 +36,50 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: ()
     router.refresh()
   }
 
+  const disabledClass = !isReady ? "opacity-40 pointer-events-none" : ""
+
   return (
-    <aside className={`
-      bg-slate-900 text-white flex flex-col p-4 sticky top-0 z-50
-      /* Utilisation de dvh pour une hauteur parfaite sur mobile */
-      ${onClose 
-        ? 'w-[280px] fixed left-0 h-[100dvh]' 
-        : 'w-64 hidden md:flex h-screen'
-      }
-    `}>
+    <aside
+      className={`
+        bg-slate-900 text-white flex flex-col p-4 sticky top-0 z-50
+        ${onClose ? "w-[280px] fixed left-0 h-[100dvh]" : "w-64 hidden md:flex h-screen"}
+      `}
+    >
       <div className="px-4 py-4 mb-6 flex justify-between items-center">
         <div className="group cursor-default">
-            <h2 className="font-black text-2xl tracking-tight text-blue-500 group-hover:text-blue-400 transition-colors">Fideliz Admin</h2>
-            <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">{restaurant.name}</p>
+          <h2 className="font-black text-2xl tracking-tight text-blue-500 group-hover:text-blue-400 transition-colors">
+            Fideliz Admin
+          </h2>
+          <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">{restaurant.name}</p>
+          {!isReady && (
+            <p className="text-[10px] text-slate-500 mt-1 font-bold">Chargement du restaurant…</p>
+          )}
         </div>
+
         {onClose && (
-            <button onClick={onClose} className="md:hidden p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-all">
-                <X size={24} />
-            </button>
+          <button
+            onClick={onClose}
+            className="md:hidden p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-all"
+          >
+            <X size={24} />
+          </button>
         )}
       </div>
-      
-      <nav className="flex-1 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
-        <Link 
-          href={`/admin/${restaurant.slug}`}
-          onClick={onClose}
+
+      <nav className={`flex-1 flex flex-col gap-2 overflow-y-auto scrollbar-hide ${disabledClass}`}>
+        <Link
+          href={safeHref("")}
+          onClick={guardClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-            pathname === `/admin/${restaurant.slug}` ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
+            pathname === `/admin/${slug}` ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
         >
           <LayoutDashboard size={20} className="group-hover:scale-110 transition-transform" /> Dashboard
         </Link>
 
-        <Link 
-          href={`/admin/${restaurant.slug}/games`}
-          onClick={onClose}
+        <Link
+          href={safeHref("/games")}
+          onClick={guardClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
             isActive("/games") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
@@ -60,9 +87,9 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: ()
           <Gamepad2 size={20} className="group-hover:scale-110 transition-transform" /> Mes Jeux
         </Link>
 
-        <Link 
-          href={`/admin/${restaurant.slug}/customers`}
-          onClick={onClose}
+        <Link
+          href={safeHref("/customers")}
+          onClick={guardClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
             isActive("/customers") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
@@ -70,9 +97,9 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: ()
           <Users size={20} className="group-hover:scale-110 transition-transform" /> Clients CRM
         </Link>
 
-        <Link 
-          href={`/admin/${restaurant.slug}/winners`}
-          onClick={onClose}
+        <Link
+          href={safeHref("/winners")}
+          onClick={guardClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
             isActive("/winners") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
@@ -80,20 +107,23 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: ()
           <Trophy size={20} className="group-hover:scale-110 transition-transform" /> Gagnants
         </Link>
 
-        {/* --- NOUVEL ONGLET : AVIS GOOGLE --- */}
-        <Link 
-          href={`/admin/${restaurant.slug}/reviews`}
-          onClick={onClose}
+        <Link
+          href={safeHref("/reviews")}
+          onClick={guardClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
             isActive("/reviews") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
         >
-          <Star size={20} className={`group-hover:scale-110 transition-transform ${isActive("/reviews") ? "text-white" : "text-yellow-500"}`} /> Avis Google
+          <Star
+            size={20}
+            className={`group-hover:scale-110 transition-transform ${isActive("/reviews") ? "text-white" : "text-yellow-500"}`}
+          />{" "}
+          Avis Google
         </Link>
 
-        <Link 
-          href={`/admin/${restaurant.slug}/settings`}
-          onClick={onClose}
+        <Link
+          href={safeHref("/settings")}
+          onClick={guardClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
             isActive("/settings") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
           }`}
@@ -103,15 +133,15 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any, onClose?: ()
       </nav>
 
       <div className="mt-auto pt-4 border-t border-slate-800">
-          <button 
-            onClick={handleLogout}
-            className="w-full bg-slate-800 hover:bg-red-900/30 hover:text-red-400 transition-all p-3 rounded-xl flex items-center gap-3 text-sm font-bold text-slate-300 group"
-          >
-            <div className="bg-black group-hover:bg-red-900/50 w-8 h-8 rounded-full flex items-center justify-center text-white transition-colors">
-                <LogOut size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-            </div>
-            Déconnexion
-          </button>
+        <button
+          onClick={handleLogout}
+          className="w-full bg-slate-800 hover:bg-red-900/30 hover:text-red-400 transition-all p-3 rounded-xl flex items-center gap-3 text-sm font-bold text-slate-300 group"
+        >
+          <div className="bg-black group-hover:bg-red-900/50 w-8 h-8 rounded-full flex items-center justify-center text-white transition-colors">
+            <LogOut size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+          </div>
+          Déconnexion
+        </button>
       </div>
     </aside>
   )

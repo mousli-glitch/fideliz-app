@@ -1,5 +1,6 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { notFound, redirect } from "next/navigation"
+import { headers } from "next/headers"
 import CsvExportButton from "@/components/admin/csv-export-button"
 import { CustomersTable } from "@/components/admin/customers-table"
 
@@ -12,7 +13,6 @@ function isUUID(str: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
 }
 
-// ✅ Safe decode (évite crash "URIError: URI malformed")
 function safeDecodeURIComponent(value: string) {
   try {
     return decodeURIComponent(value)
@@ -36,53 +36,73 @@ export default async function CustomersPage({
   params: { slug: string }
   searchParams?: { page?: string; q?: string }
 }) {
-  const { slug } = params
+  const slugRaw = String(params?.slug ?? "")
+  const cleanSlug = safeDecodeURIComponent(slugRaw).trim()
 
-  // ✅ slug propre (IMPORTANT)
-  const cleanSlug = safeDecodeURIComponent(String(slug ?? "")).trim()
+  // ✅ si slug vide : ce n’est PAS un problème Supabase, c’est un lien / routing
+  if (!cleanSlug) {
+    // ✅ Next.js 15: headers() est async
+    const h = await headers()
+    const allHeaders = Object.fromEntries(h.entries())
 
-  const debugSlug = {
-    slug_raw: String(slug ?? ""),
-    slug_clean: cleanSlug,
-    slug_raw_len: String(slug ?? "").length,
-    slug_clean_len: cleanSlug.length,
-    slug_raw_hex: toHex(String(slug ?? "")),
-    slug_clean_hex: toHex(cleanSlug),
+    return (
+      <pre className="p-6 text-xs bg-amber-50 border border-amber-200 rounded-xl overflow-auto">
+        {JSON.stringify(
+          {
+            debug: "CRM called without slug (routing/link issue)",
+            paramsSlugRaw: slugRaw,
+            paramsSlugClean: cleanSlug,
+            slugRawHex: toHex(slugRaw),
+            slugCleanHex: toHex(cleanSlug),
+            hint: "Your CRM link is probably /admin/customers or /admin//customers instead of /admin/<slug>/customers",
+            headers: {
+              host: allHeaders["host"],
+              referer: allHeaders["referer"],
+              "x-forwarded-host": allHeaders["x-forwarded-host"],
+              "x-forwarded-proto": allHeaders["x-forwarded-proto"],
+              "x-vercel-id": allHeaders["x-vercel-id"],
+              // allHeaders,
+            },
+          },
+          null,
+          2
+        )}
+      </pre>
+    )
   }
 
-  // ✅ Client ADMIN (bypass RLS) — comme winners
+  // ✅ Client ADMIN (bypass RLS)
   const supabase = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   )
 
-  // 1) Restaurant (id ou slug) — ✅ UTILISE cleanSlug
+  // 1) Restaurant (id ou slug)
   let query = supabase.from("restaurants").select("id, name")
   query = isUUID(cleanSlug) ? query.eq("id", cleanSlug) : query.eq("slug", cleanSlug)
 
   const { data: rawRestaurant, error: restoError } = await query.maybeSingle()
 
-  // ✅ Debug lisible si introuvable
   if (restoError || !rawRestaurant) {
-    const { data: sample, error: sampleErr } = await supabase
-      .from("restaurants")
-      .select("id, slug, name")
-      // plus safe que created_at si la colonne n'existe pas
-      .order("name", { ascending: true })
-      .limit(10)
-
+    const { data: sample } = await supabase.from("restaurants").select("id, slug, name").limit(10)
     return (
       <pre className="p-6 text-xs bg-red-50 border border-red-200 rounded-xl overflow-auto">
         {JSON.stringify(
           {
             debug: "CRM restaurant not found",
-            debugSlug,
+            debugSlug: {
+              slug_raw: slugRaw,
+              slug_clean: cleanSlug,
+              slug_raw_len: slugRaw.length,
+              slug_clean_len: cleanSlug.length,
+              slug_raw_hex: toHex(slugRaw),
+              slug_clean_hex: toHex(cleanSlug),
+            },
             restoError,
             rawRestaurant,
             envUrlPrefix: (process.env.NEXT_PUBLIC_SUPABASE_URL || "").slice(0, 40),
             hasServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-            sampleErr,
             sampleRestaurants: sample,
           },
           null,
@@ -107,11 +127,12 @@ export default async function CustomersPage({
     .select("id, first_name, email, phone, created_at, marketing_optin", { count: "exact" })
     .eq("restaurant_id", restaurant.id)
 
-  // ✅ Recherche globale sur tout le CRM
   if (q) {
     const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
     const qLike = `%${safe}%`
-    contactsQuery = contactsQuery.or(`first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`)
+    contactsQuery = contactsQuery.or(
+      `first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`
+    )
   }
 
   const { data: rawCustomers, count: totalCustomers, error: customersError } = await contactsQuery
@@ -125,7 +146,6 @@ export default async function CustomersPage({
   const total = typeof totalCustomers === "number" ? totalCustomers : 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  // ✅ Page trop haute → redirect vers dernière page (en gardant q)
   if (page > totalPages) {
     const qp = q ? `&q=${encodeURIComponent(q)}` : ""
     redirect(`/admin/${cleanSlug}/customers?page=${totalPages}${qp}`)
