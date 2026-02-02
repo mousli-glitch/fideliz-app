@@ -45,32 +45,20 @@ export default async function CustomersPage({
   //   )
   // }
 
-  if (restoError || !rawRestaurant) {
-  const { data: sample, error: sampleErr } = await supabase
-    .from("restaurants")
-    .select("id, slug, name")
-    .order("created_at", { ascending: false })
-    .limit(10)
+const cleanSlug = decodeURIComponent(String(slug ?? "")).trim()
 
-  return (
-    <pre className="p-6 text-xs bg-red-50 border border-red-200 rounded-xl overflow-auto">
-      {JSON.stringify(
-        {
-          debug: "CRM restaurant not found",
-          receivedSlug: slug,
-          isUUID: isUUID(slug),
-          restoError,
-          rawRestaurant,
-          envUrlPrefix: (process.env.NEXT_PUBLIC_SUPABASE_URL || "").slice(0, 40),
-          hasServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-          sampleErr,
-          sampleRestaurants: sample,
-        },
-        null,
-        2
-      )}
-    </pre>
-  )
+const toHex = (s: string) =>
+  Array.from(s)
+    .map((ch) => ch.charCodeAt(0).toString(16).padStart(2, "0"))
+    .join(" ")
+
+const debugSlug = {
+  slug_raw: slug,
+  slug_clean: cleanSlug,
+  slug_raw_len: String(slug ?? "").length,
+  slug_clean_len: cleanSlug.length,
+  slug_raw_hex: toHex(String(slug ?? "")),
+  slug_clean_hex: toHex(cleanSlug),
 }
 
   const restaurant = rawRestaurant as Restaurant
