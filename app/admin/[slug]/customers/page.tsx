@@ -33,18 +33,20 @@ export default async function CustomersPage({
   params,
   searchParams,
 }: {
-  params: { slug: string }
-  searchParams?: { page?: string; q?: string }
+  params: Promise<{ slug: string }>
+  searchParams?: Promise<{ page?: string; q?: string }>
 }) {
-  const slugRaw = String(params?.slug ?? "")
+  // ✅ Next (async params)
+  const { slug } = await params
+  const sp = (await searchParams) ?? {}
+
+  const slugRaw = String(slug ?? "")
   const cleanSlug = safeDecodeURIComponent(slugRaw).trim()
 
-  // ✅ si slug vide : ce n’est PAS un problème Supabase, c’est un lien / routing
+  // ✅ Si slug vide : problème de routing/link (ou params non await dans une autre page)
   if (!cleanSlug) {
-    // ✅ Next.js 15: headers() est async
     const h = await headers()
     const allHeaders = Object.fromEntries(h.entries())
-
     return (
       <pre className="p-6 text-xs bg-amber-50 border border-amber-200 rounded-xl overflow-auto">
         {JSON.stringify(
@@ -54,14 +56,13 @@ export default async function CustomersPage({
             paramsSlugClean: cleanSlug,
             slugRawHex: toHex(slugRaw),
             slugCleanHex: toHex(cleanSlug),
-            hint: "Your CRM link is probably /admin/customers or /admin//customers instead of /admin/<slug>/customers",
+            hint: "You reached this page without a slug param. This happens when params/searchParams are not awaited (Next async params), or a bad link to /admin/customers.",
             headers: {
               host: allHeaders["host"],
               referer: allHeaders["referer"],
               "x-forwarded-host": allHeaders["x-forwarded-host"],
               "x-forwarded-proto": allHeaders["x-forwarded-proto"],
               "x-vercel-id": allHeaders["x-vercel-id"],
-              // allHeaders,
             },
           },
           null,
@@ -85,7 +86,11 @@ export default async function CustomersPage({
   const { data: rawRestaurant, error: restoError } = await query.maybeSingle()
 
   if (restoError || !rawRestaurant) {
-    const { data: sample } = await supabase.from("restaurants").select("id, slug, name").limit(10)
+    const { data: sample, error: sampleErr } = await supabase
+      .from("restaurants")
+      .select("id, slug, name")
+      .limit(10)
+
     return (
       <pre className="p-6 text-xs bg-red-50 border border-red-200 rounded-xl overflow-auto">
         {JSON.stringify(
@@ -103,6 +108,7 @@ export default async function CustomersPage({
             rawRestaurant,
             envUrlPrefix: (process.env.NEXT_PUBLIC_SUPABASE_URL || "").slice(0, 40),
             hasServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+            sampleErr,
             sampleRestaurants: sample,
           },
           null,
@@ -116,8 +122,8 @@ export default async function CustomersPage({
 
   // 2) Pagination + recherche SSR via URL
   const PAGE_SIZE = 30
-  const page = Math.max(1, Number.parseInt(searchParams?.page ?? "1", 10) || 1)
-  const q = (searchParams?.q ?? "").trim()
+  const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1)
+  const q = (sp.q ?? "").trim()
 
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
@@ -127,12 +133,11 @@ export default async function CustomersPage({
     .select("id, first_name, email, phone, created_at, marketing_optin", { count: "exact" })
     .eq("restaurant_id", restaurant.id)
 
+  // ✅ Recherche globale sur tout le CRM
   if (q) {
     const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
     const qLike = `%${safe}%`
-    contactsQuery = contactsQuery.or(
-      `first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`
-    )
+    contactsQuery = contactsQuery.or(`first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`)
   }
 
   const { data: rawCustomers, count: totalCustomers, error: customersError } = await contactsQuery
@@ -146,6 +151,7 @@ export default async function CustomersPage({
   const total = typeof totalCustomers === "number" ? totalCustomers : 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
+  // ✅ Page trop haute → redirect vers dernière page (en gardant q)
   if (page > totalPages) {
     const qp = q ? `&q=${encodeURIComponent(q)}` : ""
     redirect(`/admin/${cleanSlug}/customers?page=${totalPages}${qp}`)
