@@ -125,7 +125,7 @@ export default async function CustomersPage({
 
   let contactsQuery = supabase
     .from("contacts")
-    .select("id, first_name, email, phone, created_at, marketing_optin", { count: "exact" })
+   .select("id, first_name, email, phone, created_at, marketing_optin", { count: "planned" })
     .eq("restaurant_id", restaurant.id)
 
   // ✅ Recherche globale sur tout le CRM
