@@ -33,20 +33,19 @@ export default async function CustomersPage({
   params,
   searchParams,
 }: {
+  // ✅ Next 16 : params peut être une Promise (comme dans ton app/[slug]/page.tsx)
   params: Promise<{ slug: string }>
-  searchParams?: Promise<{ page?: string; q?: string }>
+  searchParams?: { page?: string; q?: string }
 }) {
-  // ✅ Next (async params)
-  const { slug } = await params
-  const sp = (await searchParams) ?? {}
-
+  const { slug } = await params // ✅ IMPORTANT
   const slugRaw = String(slug ?? "")
   const cleanSlug = safeDecodeURIComponent(slugRaw).trim()
 
-  // ✅ Si slug vide : problème de routing/link (ou params non await dans une autre page)
+  // ✅ si slug vide : c’est un problème de routing / appel, pas Supabase
   if (!cleanSlug) {
-    const h = await headers()
+    const h = await headers() // ✅ IMPORTANT (Next 16)
     const allHeaders = Object.fromEntries(h.entries())
+
     return (
       <pre className="p-6 text-xs bg-amber-50 border border-amber-200 rounded-xl overflow-auto">
         {JSON.stringify(
@@ -56,7 +55,7 @@ export default async function CustomersPage({
             paramsSlugClean: cleanSlug,
             slugRawHex: toHex(slugRaw),
             slugCleanHex: toHex(cleanSlug),
-            hint: "You reached this page without a slug param. This happens when params/searchParams are not awaited (Next async params), or a bad link to /admin/customers.",
+            hint: "The page is being rendered without receiving the dynamic param. This usually happens when params is a Promise but not awaited.",
             headers: {
               host: allHeaders["host"],
               referer: allHeaders["referer"],
@@ -86,10 +85,7 @@ export default async function CustomersPage({
   const { data: rawRestaurant, error: restoError } = await query.maybeSingle()
 
   if (restoError || !rawRestaurant) {
-    const { data: sample, error: sampleErr } = await supabase
-      .from("restaurants")
-      .select("id, slug, name")
-      .limit(10)
+    const { data: sample } = await supabase.from("restaurants").select("id, slug, name").limit(10)
 
     return (
       <pre className="p-6 text-xs bg-red-50 border border-red-200 rounded-xl overflow-auto">
@@ -108,7 +104,6 @@ export default async function CustomersPage({
             rawRestaurant,
             envUrlPrefix: (process.env.NEXT_PUBLIC_SUPABASE_URL || "").slice(0, 40),
             hasServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-            sampleErr,
             sampleRestaurants: sample,
           },
           null,
@@ -122,8 +117,8 @@ export default async function CustomersPage({
 
   // 2) Pagination + recherche SSR via URL
   const PAGE_SIZE = 30
-  const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1)
-  const q = (sp.q ?? "").trim()
+  const page = Math.max(1, Number.parseInt(searchParams?.page ?? "1", 10) || 1)
+  const q = (searchParams?.q ?? "").trim()
 
   const from = (page - 1) * PAGE_SIZE
   const to = from + PAGE_SIZE - 1
@@ -137,7 +132,9 @@ export default async function CustomersPage({
   if (q) {
     const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
     const qLike = `%${safe}%`
-    contactsQuery = contactsQuery.or(`first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`)
+    contactsQuery = contactsQuery.or(
+      `first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`
+    )
   }
 
   const { data: rawCustomers, count: totalCustomers, error: customersError } = await contactsQuery
@@ -151,7 +148,6 @@ export default async function CustomersPage({
   const total = typeof totalCustomers === "number" ? totalCustomers : 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  // ✅ Page trop haute → redirect vers dernière page (en gardant q)
   if (page > totalPages) {
     const qp = q ? `&q=${encodeURIComponent(q)}` : ""
     redirect(`/admin/${cleanSlug}/customers?page=${totalPages}${qp}`)
