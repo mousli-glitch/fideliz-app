@@ -12,6 +12,21 @@ function isUUID(str: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
 }
 
+// ✅ Safe decode (évite crash "URIError: URI malformed")
+function safeDecodeURIComponent(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+// Helpers debug (caractères invisibles)
+const toHex = (s: string) =>
+  Array.from(s)
+    .map((ch) => ch.charCodeAt(0).toString(16).padStart(2, "0"))
+    .join(" ")
+
 export const dynamic = "force-dynamic"
 
 export default async function CustomersPage({
@@ -23,6 +38,18 @@ export default async function CustomersPage({
 }) {
   const { slug } = params
 
+  // ✅ slug propre (IMPORTANT)
+  const cleanSlug = safeDecodeURIComponent(String(slug ?? "")).trim()
+
+  const debugSlug = {
+    slug_raw: String(slug ?? ""),
+    slug_clean: cleanSlug,
+    slug_raw_len: String(slug ?? "").length,
+    slug_clean_len: cleanSlug.length,
+    slug_raw_hex: toHex(String(slug ?? "")),
+    slug_clean_hex: toHex(cleanSlug),
+  }
+
   // ✅ Client ADMIN (bypass RLS) — comme winners
   const supabase = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,36 +57,40 @@ export default async function CustomersPage({
     { auth: { persistSession: false } }
   )
 
-  // 1) Restaurant (id ou slug)
+  // 1) Restaurant (id ou slug) — ✅ UTILISE cleanSlug
   let query = supabase.from("restaurants").select("id, name")
-  query = isUUID(slug) ? query.eq("id", slug) : query.eq("slug", slug)
+  query = isUUID(cleanSlug) ? query.eq("id", cleanSlug) : query.eq("slug", cleanSlug)
 
   const { data: rawRestaurant, error: restoError } = await query.maybeSingle()
 
-  // ✅ DEBUG TEMPORAIRE (si tu veux voir exactement)
-  // if (!rawRestaurant) {
-  //   return (
-  //     <pre className="p-6 text-xs bg-red-50 border border-red-200 rounded-xl overflow-auto">
-  //       {JSON.stringify({ slug, restoError, rawRestaurant }, null, 2)}
-  //     </pre>
-  //   )
-  // }
+  // ✅ Debug lisible si introuvable
+  if (restoError || !rawRestaurant) {
+    const { data: sample, error: sampleErr } = await supabase
+      .from("restaurants")
+      .select("id, slug, name")
+      // plus safe que created_at si la colonne n'existe pas
+      .order("name", { ascending: true })
+      .limit(10)
 
-const cleanSlug = decodeURIComponent(String(slug ?? "")).trim()
-
-const toHex = (s: string) =>
-  Array.from(s)
-    .map((ch) => ch.charCodeAt(0).toString(16).padStart(2, "0"))
-    .join(" ")
-
-const debugSlug = {
-  slug_raw: slug,
-  slug_clean: cleanSlug,
-  slug_raw_len: String(slug ?? "").length,
-  slug_clean_len: cleanSlug.length,
-  slug_raw_hex: toHex(String(slug ?? "")),
-  slug_clean_hex: toHex(cleanSlug),
-}
+    return (
+      <pre className="p-6 text-xs bg-red-50 border border-red-200 rounded-xl overflow-auto">
+        {JSON.stringify(
+          {
+            debug: "CRM restaurant not found",
+            debugSlug,
+            restoError,
+            rawRestaurant,
+            envUrlPrefix: (process.env.NEXT_PUBLIC_SUPABASE_URL || "").slice(0, 40),
+            hasServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+            sampleErr,
+            sampleRestaurants: sample,
+          },
+          null,
+          2
+        )}
+      </pre>
+    )
+  }
 
   const restaurant = rawRestaurant as Restaurant
 
@@ -80,9 +111,7 @@ const debugSlug = {
   if (q) {
     const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
     const qLike = `%${safe}%`
-    contactsQuery = contactsQuery.or(
-      `first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`
-    )
+    contactsQuery = contactsQuery.or(`first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`)
   }
 
   const { data: rawCustomers, count: totalCustomers, error: customersError } = await contactsQuery
@@ -99,7 +128,7 @@ const debugSlug = {
   // ✅ Page trop haute → redirect vers dernière page (en gardant q)
   if (page > totalPages) {
     const qp = q ? `&q=${encodeURIComponent(q)}` : ""
-    redirect(`/admin/${slug}/customers?page=${totalPages}${qp}`)
+    redirect(`/admin/${cleanSlug}/customers?page=${totalPages}${qp}`)
   }
 
   const optInCount = customers.filter((c) => c.marketing_optin).length
@@ -122,7 +151,7 @@ const debugSlug = {
           </div>
 
           <div className="flex gap-3">
-            <CsvExportButton restaurantSlug={slug} filename={`clients-${restaurant.name}.csv`} />
+            <CsvExportButton restaurantSlug={cleanSlug} filename={`clients-${restaurant.name}.csv`} />
           </div>
         </div>
 
