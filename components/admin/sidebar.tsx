@@ -13,17 +13,19 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any; onClose?: ()
 
   // ✅ slug ultra fiable (évite /admin//customers)
   const slugFromParams = (params?.slug as string) || ""
-  const slugFromProps = (restaurant?.slug as string) || ""
-  const slug = (slugFromParams || slugFromProps || "").trim()
-
-  const isReady = Boolean(slug)
+  const safeSlug = (slugFromParams || restaurant?.slug || "").toString().trim()
 
   const isActive = (path: string) => pathname?.includes(path)
 
-  const safeHref = (path: string) => (isReady ? `/admin/${slug}${path}` : "#")
+  const safeHref = (suffix: string) => {
+    if (!safeSlug) return "#" // bloque tant que slug pas prêt
+    const encoded = encodeURIComponent(safeSlug)
+    return `/admin/${encoded}${suffix}`
+  }
 
-  const guardClick = (e: React.MouseEvent) => {
-    if (!isReady) {
+  const handleLinkClick = (e: React.MouseEvent) => {
+    // bloque si slug non prêt (évite navigation vers /admin//customers)
+    if (!safeSlug) {
       e.preventDefault()
       return
     }
@@ -35,8 +37,6 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any; onClose?: ()
     router.push("/login")
     router.refresh()
   }
-
-  const disabledClass = !isReady ? "opacity-40 pointer-events-none" : ""
 
   return (
     <aside
@@ -51,11 +51,7 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any; onClose?: ()
             Fideliz Admin
           </h2>
           <p className="text-xs text-slate-500 mt-1 uppercase font-bold tracking-widest">{restaurant.name}</p>
-          {!isReady && (
-            <p className="text-[10px] text-slate-500 mt-1 font-bold">Chargement du restaurant…</p>
-          )}
         </div>
-
         {onClose && (
           <button
             onClick={onClose}
@@ -66,67 +62,81 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any; onClose?: ()
         )}
       </div>
 
-      <nav className={`flex-1 flex flex-col gap-2 overflow-y-auto scrollbar-hide ${disabledClass}`}>
+      <nav className="flex-1 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
         <Link
           href={safeHref("")}
-          onClick={guardClick}
+          onClick={handleLinkClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-            pathname === `/admin/${slug}` ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
-          }`}
+            pathname === `/admin/${safeSlug}`
+              ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50"
+              : "hover:bg-slate-800 text-slate-400"
+          } ${!safeSlug ? "opacity-50 pointer-events-none" : ""}`}
         >
           <LayoutDashboard size={20} className="group-hover:scale-110 transition-transform" /> Dashboard
         </Link>
 
         <Link
           href={safeHref("/games")}
-          onClick={guardClick}
+          onClick={handleLinkClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-            isActive("/games") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
-          }`}
+            isActive("/games")
+              ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50"
+              : "hover:bg-slate-800 text-slate-400"
+          } ${!safeSlug ? "opacity-50 pointer-events-none" : ""}`}
         >
           <Gamepad2 size={20} className="group-hover:scale-110 transition-transform" /> Mes Jeux
         </Link>
 
         <Link
           href={safeHref("/customers")}
-          onClick={guardClick}
+          onClick={handleLinkClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-            isActive("/customers") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
-          }`}
+            isActive("/customers")
+              ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50"
+              : "hover:bg-slate-800 text-slate-400"
+          } ${!safeSlug ? "opacity-50 pointer-events-none" : ""}`}
         >
           <Users size={20} className="group-hover:scale-110 transition-transform" /> Clients CRM
         </Link>
 
         <Link
           href={safeHref("/winners")}
-          onClick={guardClick}
+          onClick={handleLinkClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-            isActive("/winners") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
-          }`}
+            isActive("/winners")
+              ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50"
+              : "hover:bg-slate-800 text-slate-400"
+          } ${!safeSlug ? "opacity-50 pointer-events-none" : ""}`}
         >
           <Trophy size={20} className="group-hover:scale-110 transition-transform" /> Gagnants
         </Link>
 
         <Link
           href={safeHref("/reviews")}
-          onClick={guardClick}
+          onClick={handleLinkClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-            isActive("/reviews") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
-          }`}
+            isActive("/reviews")
+              ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50"
+              : "hover:bg-slate-800 text-slate-400"
+          } ${!safeSlug ? "opacity-50 pointer-events-none" : ""}`}
         >
           <Star
             size={20}
-            className={`group-hover:scale-110 transition-transform ${isActive("/reviews") ? "text-white" : "text-yellow-500"}`}
+            className={`group-hover:scale-110 transition-transform ${
+              isActive("/reviews") ? "text-white" : "text-yellow-500"
+            }`}
           />{" "}
           Avis Google
         </Link>
 
         <Link
           href={safeHref("/settings")}
-          onClick={guardClick}
+          onClick={handleLinkClick}
           className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-            isActive("/settings") ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50" : "hover:bg-slate-800 text-slate-400"
-          }`}
+            isActive("/settings")
+              ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50"
+              : "hover:bg-slate-800 text-slate-400"
+          } ${!safeSlug ? "opacity-50 pointer-events-none" : ""}`}
         >
           <Settings size={20} className="group-hover:scale-110 transition-transform" /> Paramètres
         </Link>
