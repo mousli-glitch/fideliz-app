@@ -33,7 +33,7 @@ export default async function CustomersPage({
   params,
   searchParams,
 }: {
-  // ✅ Next 16 : params peut être une Promise (comme dans ton app/[slug]/page.tsx)
+  // ✅ Next 16: params est async
   params: Promise<{ slug: string }>
   searchParams?: { page?: string; q?: string }
 }) {
@@ -41,9 +41,9 @@ export default async function CustomersPage({
   const slugRaw = String(slug ?? "")
   const cleanSlug = safeDecodeURIComponent(slugRaw).trim()
 
-  // ✅ si slug vide : c’est un problème de routing / appel, pas Supabase
+  // ✅ si slug vide : routing / appel incorrect
   if (!cleanSlug) {
-    const h = await headers() // ✅ IMPORTANT (Next 16)
+    const h = await headers() // ✅ Next 16: headers() est async
     const allHeaders = Object.fromEntries(h.entries())
 
     return (
@@ -55,7 +55,7 @@ export default async function CustomersPage({
             paramsSlugClean: cleanSlug,
             slugRawHex: toHex(slugRaw),
             slugCleanHex: toHex(cleanSlug),
-            hint: "The page is being rendered without receiving the dynamic param. This usually happens when params is a Promise but not awaited.",
+            hint: "Request reached this page but params.slug is empty. With Next 16 this usually means params wasn't awaited somewhere. This file now awaits params.",
             headers: {
               host: allHeaders["host"],
               referer: allHeaders["referer"],
@@ -71,7 +71,7 @@ export default async function CustomersPage({
     )
   }
 
-  // ✅ Client ADMIN (bypass RLS)
+  // ✅ Client ADMIN (bypass RLS) — comme winners
   const supabase = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -132,9 +132,7 @@ export default async function CustomersPage({
   if (q) {
     const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
     const qLike = `%${safe}%`
-    contactsQuery = contactsQuery.or(
-      `first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`
-    )
+    contactsQuery = contactsQuery.or(`first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`)
   }
 
   const { data: rawCustomers, count: totalCustomers, error: customersError } = await contactsQuery
@@ -148,6 +146,7 @@ export default async function CustomersPage({
   const total = typeof totalCustomers === "number" ? totalCustomers : 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
+  // ✅ Page trop haute → redirect vers dernière page (en gardant q)
   if (page > totalPages) {
     const qp = q ? `&q=${encodeURIComponent(q)}` : ""
     redirect(`/admin/${cleanSlug}/customers?page=${totalPages}${qp}`)
