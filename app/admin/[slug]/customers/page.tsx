@@ -115,42 +115,61 @@ export default async function CustomersPage({
 
   const restaurant = rawRestaurant as Restaurant
 
-  // 2) Pagination + recherche SSR via URL
-  const PAGE_SIZE = 30
-  const page = Math.max(1, Number.parseInt(searchParams?.page ?? "1", 10) || 1)
-  const q = (searchParams?.q ?? "").trim()
+// 2) Pagination + recherche SSR via URL
+const PAGE_SIZE = 30
+const page = Math.max(1, Number.parseInt(searchParams?.page ?? "1", 10) || 1)
+const q = (searchParams?.q ?? "").trim()
 
-  const from = (page - 1) * PAGE_SIZE
-  const to = from + PAGE_SIZE - 1
+const from = (page - 1) * PAGE_SIZE
+const to = from + PAGE_SIZE - 1
 
-  let contactsQuery = supabase
-    .from("contacts")
-   .select("id, first_name, email, phone, created_at, marketing_optin", { count: "planned" })
-    .eq("restaurant_id", restaurant.id)
+// --- 1) Query DATA (range)
+let dataQuery = supabase
+  .from("contacts")
+  .select("id, first_name, email, phone, created_at, marketing_optin")
+  .eq("restaurant_id", restaurant.id)
 
-  // ✅ Recherche globale sur tout le CRM
-  if (q) {
-    const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
-    const qLike = `%${safe}%`
-    contactsQuery = contactsQuery.or(`first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`)
-  }
+// --- 2) Query COUNT (head true)
+let countQuery = supabase
+  .from("contacts")
+  .select("id", { count: "exact", head: true })
+  .eq("restaurant_id", restaurant.id)
 
-  const { data: rawCustomers, count: totalCustomers, error: customersError } = await contactsQuery
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .range(from, to)
+// ✅ Recherche globale sur tout le CRM
+if (q) {
+  const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
+  const qLike = `%${safe}%`
 
-  if (customersError) return notFound()
+  const orClause = `first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`
 
-  const customers = (rawCustomers || []) as any[]
-  const total = typeof totalCustomers === "number" ? totalCustomers : 0
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  dataQuery = dataQuery.or(orClause)
+  countQuery = countQuery.or(orClause)
+}
 
-  // ✅ Page trop haute → redirect vers dernière page (en gardant q)
-  if (page > totalPages) {
-    const qp = q ? `&q=${encodeURIComponent(q)}` : ""
-    redirect(`/admin/${cleanSlug}/customers?page=${totalPages}${qp}`)
-  }
+const [{ data: rawCustomers, error: customersError }, { count: totalCustomers, error: countError }] =
+  await Promise.all([
+    dataQuery
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to),
+
+    countQuery,
+  ])
+
+if (customersError || countError) {
+  console.error("CRM error:", { customersError, countError })
+  return notFound()
+}
+
+const customers = (rawCustomers || []) as any[]
+const total = typeof totalCustomers === "number" ? totalCustomers : 0
+const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+// ✅ Page trop haute → redirect vers dernière page (en gardant q)
+if (page > totalPages) {
+  const qp = q ? `&q=${encodeURIComponent(q)}` : ""
+  redirect(`/admin/${cleanSlug}/customers?page=${totalPages}${qp}`)
+}
 
   const optInCount = customers.filter((c) => c.marketing_optin).length
 
