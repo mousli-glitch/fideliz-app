@@ -35,9 +35,12 @@ export default async function CustomersPage({
 }: {
   // ✅ Next 16: params est async
   params: Promise<{ slug: string }>
-  searchParams?: { page?: string; q?: string }
+  // ✅ Next 16: searchParams peut aussi être async
+  searchParams?: Promise<{ page?: string; q?: string }>
 }) {
   const { slug } = await params // ✅ IMPORTANT
+  const sp = await searchParams // ✅ IMPORTANT (sinon page/q restent à 1 et vide)
+
   const slugRaw = String(slug ?? "")
   const cleanSlug = safeDecodeURIComponent(slugRaw).trim()
 
@@ -71,7 +74,7 @@ export default async function CustomersPage({
     )
   }
 
-  // ✅ Client ADMIN (bypass RLS) — comme winners
+  // ✅ Client ADMIN (bypass RLS)
   const supabase = createServiceClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -115,61 +118,59 @@ export default async function CustomersPage({
 
   const restaurant = rawRestaurant as Restaurant
 
-// 2) Pagination + recherche SSR via URL
-const PAGE_SIZE = 30
-const page = Math.max(1, Number.parseInt(searchParams?.page ?? "1", 10) || 1)
-const q = (searchParams?.q ?? "").trim()
+  // 2) Pagination + recherche SSR via URL
+  const PAGE_SIZE = 30
+  const page = Math.max(1, Number.parseInt(sp?.page ?? "1", 10) || 1)
+  const q = (sp?.q ?? "").trim()
 
-const from = (page - 1) * PAGE_SIZE
-const to = from + PAGE_SIZE - 1
+  const from = (page - 1) * PAGE_SIZE
+  const to = from + PAGE_SIZE - 1
 
-// --- 1) Query DATA (range)
-let dataQuery = supabase
-  .from("contacts")
-  .select("id, first_name, email, phone, created_at, marketing_optin")
-  .eq("restaurant_id", restaurant.id)
+  // --- 1) Query DATA (range)
+  let dataQuery = supabase
+    .from("contacts")
+    .select("id, first_name, email, phone, created_at, marketing_optin")
+    .eq("restaurant_id", restaurant.id)
 
-// --- 2) Query COUNT (head true)
-let countQuery = supabase
-  .from("contacts")
-  .select("id", { count: "exact", head: true })
-  .eq("restaurant_id", restaurant.id)
+  // --- 2) Query COUNT (head true)
+  let countQuery = supabase
+    .from("contacts")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurant.id)
 
-// ✅ Recherche globale sur tout le CRM
-if (q) {
-  const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
-  const qLike = `%${safe}%`
+  // ✅ Recherche globale sur tout le CRM
+  if (q) {
+    const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_")
+    const qLike = `%${safe}%`
+    const orClause = `first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`
 
-  const orClause = `first_name.ilike.${qLike},email.ilike.${qLike},phone.ilike.${qLike}`
+    dataQuery = dataQuery.or(orClause)
+    countQuery = countQuery.or(orClause)
+  }
 
-  dataQuery = dataQuery.or(orClause)
-  countQuery = countQuery.or(orClause)
-}
+  const [{ data: rawCustomers, error: customersError }, { count: totalCustomers, error: countError }] =
+    await Promise.all([
+      dataQuery
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+      countQuery,
+    ])
 
-const [{ data: rawCustomers, error: customersError }, { count: totalCustomers, error: countError }] =
-  await Promise.all([
-    dataQuery
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(from, to),
+  if (customersError || countError) {
+    console.error("CRM error:", { customersError, countError })
+    return notFound()
+  }
 
-    countQuery,
-  ])
+  const customers = (rawCustomers || []) as any[]
+  const total = typeof totalCustomers === "number" ? totalCustomers : 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-if (customersError || countError) {
-  console.error("CRM error:", { customersError, countError })
-  return notFound()
-}
-
-const customers = (rawCustomers || []) as any[]
-const total = typeof totalCustomers === "number" ? totalCustomers : 0
-const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-
-// ✅ Page trop haute → redirect vers dernière page (en gardant q)
-if (page > totalPages) {
-  const qp = q ? `&q=${encodeURIComponent(q)}` : ""
-  redirect(`/admin/${cleanSlug}/customers?page=${totalPages}${qp}`)
-}
+  // ✅ Page trop haute → redirect vers dernière page (en gardant q)
+  if (page > totalPages) {
+    const qp = q ? `&q=${encodeURIComponent(q)}` : ""
+    redirect(`/admin/${cleanSlug}/customers?page=${totalPages}${qp}`)
+  }
 
   const optInCount = customers.filter((c) => c.marketing_optin).length
 
