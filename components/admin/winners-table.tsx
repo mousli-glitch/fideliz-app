@@ -47,13 +47,15 @@ export function AdminWinnersTable({ initialWinners, totalCount }: AdminWinnersTa
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
 
-  const totalPages = typeof totalCount === "number" ? Math.max(1, Math.ceil(totalCount / PAGE_SIZE)) : null
+  const totalPages =
+    typeof totalCount === "number" ? Math.max(1, Math.ceil(totalCount / PAGE_SIZE)) : null
 
   // Init: on prépare le curseur de la page 2 à partir de la fin de la page 1
   useEffect(() => {
     const list = initialWinners || []
     const last = list[list.length - 1]
-    const nextCursor = last?.created_at && last?.id ? ({ created_at: last.created_at, id: last.id } as Cursor) : null
+    const nextCursor =
+      last?.created_at && last?.id ? ({ created_at: last.created_at, id: last.id } as Cursor) : null
 
     setCursorByPage((prev) => ({
       ...prev,
@@ -171,6 +173,7 @@ export function AdminWinnersTable({ initialWinners, totalCount }: AdminWinnersTa
     setDeletingId(null)
   }
 
+  // ✅ Ne touche pas au bouton : on garde validateWinAction + set status
   const handleQuickValidate = async (winnerId: string) => {
     if (!confirm("Confirmer la remise du lot ?")) return
     setLoadingId(winnerId)
@@ -183,6 +186,17 @@ export function AdminWinnersTable({ initialWinners, totalCount }: AdminWinnersTa
       )
     }
     setLoadingId(null)
+  }
+
+  // ✅ Helper format date remise (redeemed_at / consumed_at fallback)
+  const formatRedeemDate = (winner: any) => {
+    const dt = winner?.redeemed_at || winner?.consumed_at
+    if (!dt) return null
+    try {
+      return format(new Date(dt), "dd MMM HH:mm", { locale: fr })
+    } catch {
+      return null
+    }
   }
 
   return (
@@ -236,6 +250,8 @@ export function AdminWinnersTable({ initialWinners, totalCount }: AdminWinnersTa
             {filteredWinners.map((winner) => {
               const isSelected = selectedIds.includes(winner.id)
               const isRedeemed = winner.status === "redeemed" || winner.status === "consumed"
+              const redeemedLabel = formatRedeemDate(winner)
+
               return (
                 <tr
                   key={winner.id}
@@ -244,7 +260,10 @@ export function AdminWinnersTable({ initialWinners, totalCount }: AdminWinnersTa
                   }`}
                 >
                   <td className="py-4 text-center">
-                    <button onClick={() => toggleSelect(winner.id)} className="text-slate-300 hover:text-blue-600">
+                    <button
+                      onClick={() => toggleSelect(winner.id)}
+                      className="text-slate-300 hover:text-blue-600"
+                    >
                       {isSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
                     </button>
                   </td>
@@ -275,8 +294,14 @@ export function AdminWinnersTable({ initialWinners, totalCount }: AdminWinnersTa
 
                   <td className="py-4 text-right pr-2 flex items-center justify-end gap-2">
                     {isRedeemed ? (
-                      <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">
-                        Validé
+                      <div className="flex flex-col items-end gap-1">
+                        {/* ✅ CHANGEMENT : "Validé" -> "Remis" + date/heure */}
+                        <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">
+                          Remis
+                        </div>
+                        {redeemedLabel ? (
+                          <div className="text-[10px] text-slate-400">{redeemedLabel}</div>
+                        ) : null}
                       </div>
                     ) : (
                       <Button
@@ -308,7 +333,11 @@ export function AdminWinnersTable({ initialWinners, totalCount }: AdminWinnersTa
         <div className="text-xs text-slate-500">
           Page <span className="font-bold">{page}</span>
           {typeof totalCount === "number" ? (
-            <> / <span className="font-bold">{totalPages}</span> — <span className="font-bold">{totalCount}</span> gagnant(s)</>
+            <>
+              {" "}
+              / <span className="font-bold">{totalPages}</span> —{" "}
+              <span className="font-bold">{totalCount}</span> gagnant(s)
+            </>
           ) : (
             <> — {winners.length} résultat(s)</>
           )}
