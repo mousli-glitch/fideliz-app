@@ -107,6 +107,25 @@ export function AdminWinnersTable({
     return `/admin/${encodeURIComponent(slug)}/winners${queryString ? `?${queryString}` : ""}`
   }
 
+  // ✅ PREFETCH auto : page suivante + précédente (pour rendre le clic quasi instant)
+  useEffect(() => {
+    if (!slug) return
+    if (isPending) return
+
+    const pageAttachable = (p: number) => p >= 1 && p <= totalPages
+
+    // Prefetch page suivante
+    if (pageAttachable(page + 1)) {
+      router.prefetch(buildUrl(page + 1, initialQuery))
+    }
+
+    // Prefetch page précédente
+    if (pageAttachable(page - 1)) {
+      router.prefetch(buildUrl(page - 1, initialQuery))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, page, totalPages, initialQuery, isPending])
+
   const navigate = (nextPage: number, q: string, label: string) => {
     if (!slug) return
     setPendingLabel(label)
@@ -325,7 +344,7 @@ export function AdminWinnersTable({
       {/* Table + overlay */}
       <div className="overflow-x-auto relative">
         {(isPending || pendingLabel) && (
-          <div className="absolute inset-0 z-10 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
+          <div className="absolute inset-0 z-10 bg-white/80 flex items-center justify-center">
             <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
               <Loader2 className="w-5 h-5 animate-spin" />
               Chargement… {pendingLabel ?? ""}
@@ -333,7 +352,7 @@ export function AdminWinnersTable({
           </div>
         )}
 
-        <div className={isPending || pendingLabel ? "opacity-60 pointer-events-none" : ""}>
+        <div className={isPending || pendingLabel ? "pointer-events-none" : ""}>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-100">
@@ -407,7 +426,9 @@ export function AdminWinnersTable({
                               <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">
                                 Remis
                               </div>
-                              {redeemedLabel ? <div className="text-[10px] text-slate-400">{redeemedLabel}</div> : null}
+                              {redeemedLabel ? (
+                                <div className="text-[10px] text-slate-400">{redeemedLabel}</div>
+                              ) : null}
                             </div>
                           ) : (
                             <Button
@@ -425,7 +446,11 @@ export function AdminWinnersTable({
                             className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
                             title="Supprimer"
                           >
-                            {deletingId === winner.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 size={16} />}
+                            {deletingId === winner.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 size={16} />
+                            )}
                           </button>
                         </div>
                       </td>
