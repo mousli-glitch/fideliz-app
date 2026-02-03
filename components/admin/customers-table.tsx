@@ -251,15 +251,15 @@ export function CustomersTable({
       {/* Global search bar */}
       <div className="p-4 border-b border-slate-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-slate-50/50">
         <div className="relative flex-1 max-w-xl">
-          {/* ✅ Align vertical propre */}
-          <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+          {/* ✅ Icone gauche parfaitement centrée */}
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
             <Search className="text-slate-400" size={18} />
           </div>
 
           <input
             type="text"
             placeholder="Rechercher dans tout le CRM (nom, email, téléphone)…"
-            className="w-full h-10 pl-10 pr-36 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition bg-white text-sm"
+            className="w-full h-10 pl-10 pr-40 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition bg-white text-sm"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => {
@@ -268,13 +268,13 @@ export function CustomersTable({
             disabled={isPending}
           />
 
-          {/* ✅ Align vertical propre */}
-          <div className="absolute inset-y-0 right-2 flex items-center gap-2">
+          {/* ✅ Actions droites parfaitement centrées (croix + bouton) */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2 h-10">
             {initialQuery ? (
               <button
                 onClick={clearSearch}
                 disabled={isPending}
-                className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+                className="h-9 w-9 inline-flex items-center justify-center leading-none rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40"
                 title="Réinitialiser"
               >
                 <X size={16} />
@@ -284,7 +284,7 @@ export function CustomersTable({
             <button
               onClick={applySearch}
               disabled={isPending}
-              className="h-8 px-3 inline-flex items-center rounded-lg bg-slate-900 text-white text-xs font-black hover:bg-slate-800 disabled:opacity-40"
+              className="h-9 px-3 inline-flex items-center justify-center leading-none rounded-lg bg-slate-900 text-white text-xs font-black hover:bg-slate-800 disabled:opacity-40"
             >
               Rechercher
             </button>
