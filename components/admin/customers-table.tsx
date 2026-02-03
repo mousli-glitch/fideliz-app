@@ -55,7 +55,7 @@ export function CustomersTable({
   })()
 
   const slugFromPath = (() => {
-    const parts = (pathname ?? "").split("/").filter(Boolean) // ["admin","le-test-final","customers"]
+    const parts = (pathname ?? "").split("/").filter(Boolean)
     if (parts[0] === "admin" && parts[1]) return parts[1]
     return ""
   })()
@@ -128,7 +128,7 @@ export function CustomersTable({
   // ✅ LIVE SEARCH (debounced)
   // -----------------------
   const AUTO_SEARCH = true
-  const AUTO_SEARCH_MIN_CHARS = 1 // mets 2 si tu veux éviter de lancer à la 1ère lettre
+  const AUTO_SEARCH_MIN_CHARS = 1
   const AUTO_SEARCH_DEBOUNCE_MS = 400
 
   const firstAutoRun = useRef(true)
@@ -150,7 +150,6 @@ export function CustomersTable({
     // si la valeur reflète déjà l’URL SSR, ne relance pas
     if (clean === cleanInitial) return
 
-    // si trop court, on attend (optionnel)
     if (clean && clean.length < AUTO_SEARCH_MIN_CHARS) return
 
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -246,35 +245,34 @@ export function CustomersTable({
     return null
   }, [totalCount])
 
+  const showClear = (searchInput || "").trim().length > 0 || (initialQuery || "").trim().length > 0
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       {/* Global search bar */}
       <div className="p-4 border-b border-slate-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-slate-50/50">
-        <div className="relative flex-1 max-w-xl">
-          {/* ✅ Icone gauche parfaitement centrée */}
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-            <Search className="text-slate-400" size={18} />
-          </div>
+        <div className="flex-1 max-w-xl">
+          {/* ✅ FIX ALIGN: tout en flex, plus d’absolute */}
+          <div className="w-full h-11 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-blue-500 transition">
+            <Search className="text-slate-400 shrink-0" size={18} />
 
-          <input
-            type="text"
-            placeholder="Rechercher dans tout le CRM (nom, email, téléphone)…"
-            className="w-full h-10 pl-10 pr-40 rounded-lg border border-slate-200 outline-none focus:border-blue-500 transition bg-white text-sm"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") applySearch()
-            }}
-            disabled={isPending}
-          />
+            <input
+              type="text"
+              placeholder="Rechercher dans tout le CRM (nom, email, téléphone)…"
+              className="flex-1 h-full bg-transparent outline-none text-sm text-slate-900 placeholder:text-slate-400"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applySearch()
+              }}
+              disabled={isPending}
+            />
 
-          {/* ✅ Actions droites parfaitement centrées (croix + bouton) */}
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2 h-10">
-            {initialQuery ? (
+            {showClear ? (
               <button
                 onClick={clearSearch}
                 disabled={isPending}
-                className="h-9 w-9 inline-flex items-center justify-center leading-none rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40"
+                className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40"
                 title="Réinitialiser"
               >
                 <X size={16} />
@@ -284,7 +282,7 @@ export function CustomersTable({
             <button
               onClick={applySearch}
               disabled={isPending}
-              className="h-9 px-3 inline-flex items-center justify-center leading-none rounded-lg bg-slate-900 text-white text-xs font-black hover:bg-slate-800 disabled:opacity-40"
+              className="h-8 px-3 inline-flex items-center justify-center rounded-lg bg-slate-900 text-white text-xs font-black hover:bg-slate-800 disabled:opacity-40"
             >
               Rechercher
             </button>
