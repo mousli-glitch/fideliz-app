@@ -13,10 +13,23 @@ function isUUID(str: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
 }
 
-export default async function AdminWinnersPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function AdminWinnersPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>
+  searchParams?: Promise<{ page?: string; q?: string }>
+}) {
   const { slug } = await params
+  const sp = (await searchParams) || {}
 
-  const FETCH_LIMIT = 30
+  // ✅ EXACTEMENT comme CRM, mais 50 lignes / page
+  const PAGE_SIZE = 50
+  const page = Math.max(1, parseInt(sp.page || "1", 10) || 1)
+  const q = (sp.q || "").trim()
+
+  const from = (page - 1) * PAGE_SIZE
+  const to = from + PAGE_SIZE - 1
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,10 +37,10 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
   )
 
   // 1) Restaurant
-  let query = supabase.from("restaurants").select("id, name")
-  query = isUUID(slug) ? query.eq("id", slug) : query.eq("slug", slug)
+  let restaurantQuery = supabase.from("restaurants").select("id, name")
+  restaurantQuery = isUUID(slug) ? restaurantQuery.eq("id", slug) : restaurantQuery.eq("slug", slug)
 
-  const { data: rawRestaurant, error: restoError } = await query.single()
+  const { data: rawRestaurant, error: restoError } = await restaurantQuery.single()
   if (restoError || !rawRestaurant) return notFound()
 
   const restaurant = rawRestaurant as unknown as Restaurant
@@ -38,7 +51,6 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .select("id")
     .eq("restaurant_id", restaurant.id)
 
-  // ✅ Header commun (sans exports)
   const Header = () => (
     <div className="flex flex-col md:flex-row justify-between items-center gap-4">
       <h1 className="text-3xl font-black text-slate-800">Gagnants & Lots 🏆</h1>
@@ -63,22 +75,33 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     return (
       <div className="p-6 max-w-7xl mx-auto space-y-6">
         <Header />
-
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <AdminWinnersTable initialWinners={[]} totalCount={0} />
+          <AdminWinnersTable initialWinners={[]} totalCount={0} page={1} totalPages={1} initialQuery="" />
         </div>
       </div>
     )
   }
 
-  // 3) Count total
-  const { count: totalWinners, error: countError } = await supabase
+  // ✅ Filtre SSR (comme CRM)
+  const orFilter = q
+    ? `first_name.ilike.%${q}%,email.ilike.%${q}%,prize_label_snapshot.ilike.%${q}%`
+    : null
+
+  // 3) Count total (pour totalPages)
+  let countQuery = supabase
     .from("winners")
     .select("*", { count: "exact", head: true })
     .in("game_id", gameIds)
 
-  // 4) Winners (page 1)
-  const { data: winnersData, error: fetchError } = await supabase
+  if (orFilter) countQuery = countQuery.or(orFilter)
+
+  const { count: totalWinners, error: countError } = await countQuery
+
+  const totalCount = typeof totalWinners === "number" ? totalWinners : 0
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
+
+  // 4) Winners (page N) — offset/range (exact CRM)
+  let winnersQuery = supabase
     .from("winners")
     .select(
       `
@@ -88,6 +111,7 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
         email,
         status,
         redeemed_at,
+        consumed_at,
         prize_label_snapshot,
         prizes(label, color)
       `
@@ -95,7 +119,11 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
     .in("game_id", gameIds)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
-    .limit(FETCH_LIMIT)
+    .range(from, to)
+
+  if (orFilter) winnersQuery = winnersQuery.or(orFilter)
+
+  const { data: winnersData, error: fetchError } = await winnersQuery
 
   if (fetchError) {
     return (
@@ -131,7 +159,10 @@ export default async function AdminWinnersPage({ params }: { params: Promise<{ s
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <AdminWinnersTable
           initialWinners={formattedWinners}
-          totalCount={typeof totalWinners === "number" ? totalWinners : undefined}
+          totalCount={totalCount}
+          page={page}
+          totalPages={totalPages}
+          initialQuery={q}
         />
       </div>
     </div>
