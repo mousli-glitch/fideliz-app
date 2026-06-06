@@ -58,7 +58,8 @@ export async function masterCreateSalesAction(data: any) {
   const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
     email,
     password,
-    email_confirm: true
+    email_confirm: true,
+    user_metadata: { role: 'sales' }
   })
 
   if (authError) return { success: false, error: authError.message }

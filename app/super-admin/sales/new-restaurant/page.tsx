@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
+import { createRestaurantAction } from '@/app/actions/create-restaurant'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Store, MapPin, Globe, Loader2, Save, Mail, Lock } from 'lucide-react'
 import Link from 'next/link'
@@ -35,53 +36,25 @@ export default function NewRestaurantSales() {
       return
     }
 
-    // --- ÉTAPE A : CRÉATION DU COMPTE RESTAURATEUR (Auth) ---
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    // Création complète côté SERVEUR (clé service role) : compte Auth + restaurant + profil lié.
+    // Évite la déconnexion du commercial et les blocages RLS du client navigateur.
+    const result = await createRestaurantAction({
+      name,
+      city,
+      slug,
       email,
       password,
+      salesId: salesUser.id, // le commercial = créateur
     })
 
-    if (authError || !authData.user) {
-      alert("Erreur création compte utilisateur : " + authError?.message)
+    if (!result.success) {
+      alert("Erreur : " + result.error)
       setLoading(false)
       return
     }
 
-    // --- ÉTAPE B : CRÉATION DU RESTAURANT ---
-    // On lie l'owner_id au nouveau client et created_by au commercial
-    const { data: newResto, error: restoError } = await (supabase.from('restaurants') as any)
-      .insert({
-        name,
-        city,
-        slug,
-        owner_id: authData.user.id, // Le client est le propriétaire
-        created_by: salesUser.id,   // Le commercial est le créateur
-        is_active: true
-      })
-      .select()
-      .single()
-
-    if (restoError) {
-      alert("Erreur création restaurant : " + restoError.message)
-      setLoading(false)
-      return
-    }
-
-    // --- ÉTAPE C : LIAISON DU PROFIL ADMIN ---
-    const { error: profileError } = await (supabase.from('profiles') as any)
-      .update({
-        role: 'restaurant',
-        restaurant_id: newResto.id,
-        is_active: true
-      })
-      .eq('id', authData.user.id)
-
-    if (profileError) {
-      alert("Compte créé mais erreur de liaison profil : " + profileError.message)
-    } else {
-      alert("Succès ! Restaurant créé et lié à votre portefeuille. 🎉")
-      router.push('/super-admin/sales/dashboard')
-    }
+    alert("Succès ! Restaurant créé et lié à votre portefeuille. 🎉")
+    router.push('/super-admin/sales/dashboard')
     setLoading(false)
   }
 
