@@ -70,7 +70,7 @@ export default function NewRestaurantSales() {
     // --- ÉTAPE C : LIAISON DU PROFIL ADMIN ---
     const { error: profileError } = await (supabase.from('profiles') as any)
       .update({
-        role: 'admin',
+        role: 'restaurant',
         restaurant_id: newResto.id,
         is_active: true
       })

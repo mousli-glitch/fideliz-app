@@ -17,7 +17,8 @@ export async function masterCreateRestaurant(data: any) {
   const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
     email,
     password,
-    email_confirm: true
+    email_confirm: true,
+    user_metadata: { role: 'restaurant' }
   })
 
   if (authError) return { success: false, error: authError.message }
@@ -36,14 +37,16 @@ export async function masterCreateRestaurant(data: any) {
 
   if (restoError) return { success: false, error: restoError.message }
 
-  await supabase
+  const { error: profileError } = await supabase
     .from('profiles')
     .update({
-      role: 'admin',
+      role: 'restaurant',
       restaurant_id: resto.id,
       is_active: true
     })
     .eq('id', authUser.user.id)
+
+  if (profileError) return { success: false, error: "Profil: " + profileError.message }
 
   return { success: true }
 }

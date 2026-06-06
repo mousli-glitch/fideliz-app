@@ -11,11 +11,12 @@ export async function createRestaurantAction(formData: any) {
 
   const { name, city, slug, email, password, salesId } = formData
 
-  // 1. Création de l'utilisateur AUTH (évite le bug User Already Registered)
+  // 1. Création de l'utilisateur AUTH (rôle 'restaurant' explicite pour le profil auto-créé)
   const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
     email,
     password,
-    email_confirm: true
+    email_confirm: true,
+    user_metadata: { role: 'restaurant' }
   })
 
   if (authError) return { success: false, error: "Erreur Auth: " + authError.message }
@@ -36,15 +37,17 @@ export async function createRestaurantAction(formData: any) {
 
   if (restoError) return { success: false, error: "Erreur DB Restaurant: " + restoError.message }
 
-  // 3. Mise à jour du Profil
-  await supabase
+  // 3. Mise à jour du Profil (rôle valide : 'restaurant')
+  const { error: profileError } = await supabase
     .from('profiles')
     .update({
-      role: 'admin',
+      role: 'restaurant',
       restaurant_id: resto.id,
       is_active: true
     })
     .eq('id', authUser.user.id)
+
+  if (profileError) return { success: false, error: "Erreur DB Profil: " + profileError.message }
 
   revalidatePath('/super-admin/root')
   return { success: true }
