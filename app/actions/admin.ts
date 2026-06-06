@@ -26,21 +26,7 @@ export async function getAdminWinners() {
   return data
 }
 
-// 2. Valider un gain (Redeem)
-export async function redeemWinnerAction(winnerId: string) {
-  const { error } = await supabaseAdmin
-    .from('winners')
-    .update({ 
-      status: 'consumed',
-      consumed_at: new Date().toISOString()
-    })
-    .eq('id', winnerId)
-
-  if (error) throw new Error(error.message)
-  return { success: true }
-}
-
-// 3. Récupérer les stats
+// Récupérer les stats
 export async function getAdminStats() {
     const { count: winnersCount } = await supabaseAdmin.from('winners').select('*', { count: 'exact', head: true })
     const { count: gamesCount } = await supabaseAdmin.from('games').select('*', { count: 'exact', head: true })
