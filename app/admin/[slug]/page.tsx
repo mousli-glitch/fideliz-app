@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js"
-import { Users, Gamepad2, Trophy, TrendingUp, Settings, DollarSign, ArrowUpRight, Zap } from "lucide-react"
+import { Users, Gamepad2, Trophy, TrendingUp, Settings, DollarSign, ArrowUpRight, Zap, Check } from "lucide-react"
 import Link from "next/link"
 import ParticipationsChart from "@/components/admin/participations-chart"
+import GainsDonut from "@/components/admin/gains-donut"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0 
@@ -77,6 +78,40 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
     return { label, value: buckets[key] || 0 }
   })
 
+  // 5. Répartition des gains (à partir des comptages déjà disponibles)
+  const availableCount = Math.max(0, winnersCount - redeemedCount)
+
+  // 6. Lots du jeu actif (stock restant / initial)
+  let activePrizes: any[] = []
+  if (activeGame) {
+    const { data } = await (supabase.from("prizes") as any)
+      .select("label, quantity, initial_quantity")
+      .eq("game_id", activeGame.id)
+      .order("weight", { ascending: false })
+    activePrizes = data || []
+  }
+
+  // 7. Activité récente (5 derniers gagnants)
+  let recentWinners: any[] = []
+  if (allGameIds.length > 0) {
+    const { data } = await (supabase.from("winners") as any)
+      .select("first_name, prize_label_snapshot, status, created_at, redeemed_at")
+      .in("game_id", allGameIds)
+      .order("created_at", { ascending: false })
+      .limit(5)
+    recentWinners = data || []
+  }
+
+  const timeAgo = (iso: string) => {
+    if (!iso) return ""
+    const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+    if (min < 1) return "à l'instant"
+    if (min < 60) return `${min} min`
+    const h = Math.floor(min / 60)
+    if (h < 24) return `${h} h`
+    return `${Math.floor(h / 24)} j`
+  }
+
   return (
     <div className="p-4 md:p-8">
       {/* ... (Le reste de ton JSX reste strictement identique) ... */}
@@ -136,6 +171,68 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
           <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4">Participations · 14 derniers jours</h3>
           <ParticipationsChart data={chartData} />
         </div>
+
+        {/* RÉPARTITION DES GAINS + ACTIVITÉ RÉCENTE */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4">Répartition des gains</h3>
+            <GainsDonut available={availableCount} redeemed={redeemedCount} />
+          </div>
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4">Activité récente</h3>
+            {recentWinners.length === 0 ? (
+              <p className="text-sm text-slate-400 italic">Aucune activité pour le moment.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentWinners.map((w, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm gap-2">
+                    <span className="flex items-center gap-2 text-slate-700">
+                      {w.status === 'redeemed'
+                        ? <Check size={15} className="text-green-600 shrink-0" />
+                        : <Trophy size={15} className="text-amber-500 shrink-0" />}
+                      <span><strong>{w.first_name || 'Client'}</strong> {w.status === 'redeemed' ? 'a validé' : 'a gagné'} « {w.prize_label_snapshot || 'un lot'} »</span>
+                    </span>
+                    <span className="text-slate-400 text-xs shrink-0">{timeAgo(w.redeemed_at || w.created_at)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* STOCK DU JEU ACTIF */}
+        {activeGame && activePrizes.length > 0 && (
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4">Stock du jeu actif</h3>
+            <div className="space-y-3">
+              {activePrizes.map((p, i) => {
+                const init = p.initial_quantity
+                const rem = p.quantity
+                if (init == null || rem == null) {
+                  return (
+                    <div key={i} className="flex items-center justify-between text-sm">
+                      <span className="font-medium text-slate-700">{p.label}</span>
+                      <span className="text-slate-400">Illimité</span>
+                    </div>
+                  )
+                }
+                const pct = init > 0 ? Math.round((rem / init) * 100) : 0
+                const low = rem <= Math.max(1, init * 0.15)
+                return (
+                  <div key={i}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="font-medium text-slate-700">{p.label}</span>
+                      <span className={low ? 'text-red-600 font-bold' : 'text-slate-500'}>{rem} / {init}{low ? ' — bientôt épuisé' : ''}</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-100 rounded-full">
+                      <div className={`h-1.5 rounded-full ${low ? 'bg-red-500' : 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="space-y-4">
           <h3 className="text-xl font-black text-slate-800 tracking-tight">Pilotage</h3>
