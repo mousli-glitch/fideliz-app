@@ -7,7 +7,6 @@ export const revalidate = 0
 
 export default async function AdminDashboardPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const PANIER_MOYEN = 15 
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +15,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
 
   // 1. RÉCUPÉRATION UNIQUE DU RESTO PAR SLUG
   const { data: restaurant } = await (supabase.from("restaurants") as any)
-     .select("id, name")
+     .select("id, name, avg_basket")
      .eq("slug", slug)
      .single()
   
@@ -30,25 +29,23 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
   const allGameIds = (games as any[])?.map(g => g.id) || []
   const activeGame = (games as any[])?.find(g => g.status === 'active')
 
-  let winnersCount = 0
-  let redeemedCount = 0
+  // 3. COMPTAGES (parallélisés pour la rapidité)
+  const [winnersRes, redeemedRes, contactsRes] = await Promise.all([
+    allGameIds.length > 0
+      ? (supabase.from("winners") as any).select("*", { count: "exact", head: true }).in("game_id", allGameIds)
+      : Promise.resolve({ count: 0 }),
+    allGameIds.length > 0
+      ? (supabase.from("winners") as any).select("*", { count: "exact", head: true }).in("game_id", allGameIds).eq("status", "redeemed")
+      : Promise.resolve({ count: 0 }),
+    (supabase.from("contacts") as any).select("*", { count: "exact", head: true }).eq("restaurant_id", restaurant.id),
+  ])
 
-  // 3. COMPTAGE GAGNANTS : Double vérification de sécurité
-  if (allGameIds.length > 0) {
-    const { count: total } = await (supabase.from("winners") as any)
-        .select("*", { count: "exact", head: true })
-        .in("game_id", allGameIds)
+  const winnersCount = winnersRes.count || 0
+  const redeemedCount = redeemedRes.count || 0
+  const contactsCount = contactsRes.count || 0
 
-    const { count: redeemed } = await (supabase.from("winners") as any)
-        .select("*", { count: "exact", head: true })
-        .in("game_id", allGameIds)
-        .eq("status", "redeemed")
-
-    winnersCount = total || 0
-    redeemedCount = redeemed || 0
-  }
-
-  const estimatedRevenue = redeemedCount * PANIER_MOYEN
+  const avgBasket = Number(restaurant.avg_basket) || 15
+  const estimatedRevenue = redeemedCount * avgBasket
   const conversionRate = winnersCount > 0 ? Math.round((redeemedCount / winnersCount) * 100) : 0
 
   return (
@@ -85,7 +82,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
                 <Users size={20} />
              </div>
              <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Base Clients</p>
-             <h2 className="text-3xl font-black text-slate-800">{winnersCount}</h2>
+             <h2 className="text-3xl font-black text-slate-800">{contactsCount}</h2>
           </div>
 
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">

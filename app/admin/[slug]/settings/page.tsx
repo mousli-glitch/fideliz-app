@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { updateRestaurantAction } from "@/app/actions/admin"
-import { Loader2, Save, Store, Globe, Mail, Copy, Check } from "lucide-react"
+import { updateRestaurantSettings } from "@/app/actions/update-restaurant-settings"
+import { Loader2, Save, Store, Globe, Mail, Copy, Check, Wallet } from "lucide-react"
 import { useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 
@@ -39,11 +39,16 @@ export default function AdminSettingsPage() {
     e.preventDefault()
     setSaving(true)
     try {
-      await updateRestaurantAction(restaurant.id, {
+      const res = await updateRestaurantSettings(restaurant.id, {
         name: restaurant.name,
-        contact_email: restaurant.contact_email,
+        contact_email: restaurant.contact_email || null,
+        avg_basket: Number(restaurant.avg_basket) || 15,
       })
-      alert("✅ Paramètres mis à jour !")
+      if (res.success) {
+        alert("✅ Paramètres mis à jour !")
+      } else {
+        alert("Erreur lors de la sauvegarde : " + res.error)
+      }
     } catch (err) {
       alert("Erreur lors de la sauvegarde")
     } finally {
@@ -96,6 +101,22 @@ export default function AdminSettingsPage() {
                 onChange={(e) => setRestaurant({...restaurant, contact_email: e.target.value})}
                 className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                <Wallet size={16} className="text-slate-400"/> Panier moyen (€)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                placeholder="15"
+                value={restaurant.avg_basket ?? ""}
+                onChange={(e) => setRestaurant({...restaurant, avg_basket: e.target.value})}
+                className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50"
+              />
+              <p className="text-xs text-slate-400 mt-1 italic">Sert à estimer le CA généré par le jeu sur votre dashboard.</p>
             </div>
           </div>
         </div>
