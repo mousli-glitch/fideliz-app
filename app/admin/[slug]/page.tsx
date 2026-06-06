@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { Users, Gamepad2, Trophy, TrendingUp, Settings, DollarSign, ArrowUpRight, Zap } from "lucide-react"
 import Link from "next/link"
+import ParticipationsChart from "@/components/admin/participations-chart"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0 
@@ -47,6 +48,34 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
   const avgBasket = Number(restaurant.avg_basket) || 15
   const estimatedRevenue = redeemedCount * avgBasket
   const conversionRate = winnersCount > 0 ? Math.round((redeemedCount / winnersCount) * 100) : 0
+
+  // 4. Série des 14 derniers jours (pour le graphique d'évolution)
+  const DAYS = 14
+  const since = new Date()
+  since.setHours(0, 0, 0, 0)
+  since.setDate(since.getDate() - (DAYS - 1))
+
+  let dailyRows: any[] = []
+  if (allGameIds.length > 0) {
+    const { data } = await (supabase.from("winners") as any)
+      .select("created_at")
+      .in("game_id", allGameIds)
+      .gte("created_at", since.toISOString())
+    dailyRows = data || []
+  }
+
+  const buckets: Record<string, number> = {}
+  for (const row of dailyRows) {
+    const key = new Date(row.created_at).toISOString().slice(0, 10)
+    buckets[key] = (buckets[key] || 0) + 1
+  }
+  const chartData = Array.from({ length: DAYS }).map((_, i) => {
+    const d = new Date(since)
+    d.setDate(since.getDate() + i)
+    const key = d.toISOString().slice(0, 10)
+    const label = i === DAYS - 1 ? "Auj." : `J-${DAYS - 1 - i}`
+    return { label, value: buckets[key] || 0 }
+  })
 
   return (
     <div className="p-4 md:p-8">
@@ -100,6 +129,12 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
              <p className="text-slate-400 text-xs font-black uppercase tracking-widest mb-1">Jeux Joués</p>
              <h2 className="text-3xl font-black text-slate-800">{winnersCount}</h2>
           </div>
+        </div>
+
+        {/* GRAPHIQUE D'ÉVOLUTION DES PARTICIPATIONS */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+          <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4">Participations · 14 derniers jours</h3>
+          <ParticipationsChart data={chartData} />
         </div>
 
         <div className="space-y-4">
