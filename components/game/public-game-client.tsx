@@ -306,17 +306,24 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         first_name: formData.firstName, 
         opt_in: formData.optIn
       })
-      if (!result.success || !result.ticket) throw new Error(result.error || "Erreur inconnue")
+      if (!result.success || !result.ticket) {
+        if (result.error === 'already_played') {
+          alert("Vous avez déjà participé à ce jeu avec cet e-mail. À bientôt ! 🙂")
+          setIsSubmitting(false)
+          return
+        }
+        if (result.error === 'stock_empty') {
+          alert("Désolé, le dernier exemplaire de ce lot vient de partir !")
+          setIsSubmitting(false)
+          return
+        }
+        throw new Error(result.error || "Erreur inconnue")
+      }
       setDbWinnerId(result.ticket.qr_code)
       setStep('TICKET')
     } catch (err: any) {
       console.error("Erreur:", err)
-      // Si erreur stock épuisé au moment de valider
-      if (err.message.includes('stock')) {
-          alert("Désolé, le dernier lot vient de partir ! Voici un lot de consolation.");
-          // Ici on pourrait rediriger ou donner un lot par défaut
-      }
-      setDbWinnerId("ERREUR-CONTACT-STAFF") 
+      setDbWinnerId("ERREUR-CONTACT-STAFF")
       setStep('TICKET')
     } finally {
       setIsSubmitting(false)
