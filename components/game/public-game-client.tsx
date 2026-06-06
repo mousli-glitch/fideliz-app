@@ -668,8 +668,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                                 J'accepte d'être contacté par <span className="font-bold">{restaurant.name}</span> pour bénéficier de promotions réservées uniquement aux membres.
                             </label>
                         </div>
-                       
-                        <button 
+
+                        <p className={`text-[11px] ${subTextClass} opacity-80 leading-snug`}>
+                            Vos données (prénom, e-mail, téléphone) sont traitées par <span className="font-bold">{restaurant.name}</span> pour gérer votre participation et la remise de votre lot. Vous disposez d'un droit d'accès, de rectification et de suppression. En savoir plus : <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline">politique de confidentialité</a>.
+                        </p>
+
+                        <button
                             type="submit" 
                             disabled={isSubmitting} 
                             className={`w-full text-white font-bold text-lg py-4 rounded-xl mt-4 shadow-md transition-all flex items-center justify-center gap-3 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`} 
