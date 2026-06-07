@@ -125,63 +125,69 @@ export default function ScannerPage() {
           <p className="mt-4 font-bold text-slate-600">Traitement…</p>
         </div>
       ) : review ? (
-        /* ÉTAPE DE CONFIRMATION */
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
-          <div className="w-14 h-14 mx-auto rounded-full bg-blue-50 flex items-center justify-center mb-4">
-            <Gift className="text-blue-600" size={28} />
-          </div>
-          <p className="text-slate-500 font-medium">Client : <span className="font-bold text-slate-800">{review.firstName}</span></p>
-          <p className="text-2xl font-black text-slate-900 mt-1">{review.prizeLabel}</p>
-
-          {/* Conditions du gain (vérifiées par l'appli, le caissier décide) */}
-          <div className="mt-4 bg-slate-50 rounded-xl p-4 text-left text-sm space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-500">Minimum de commande</span>
-              <span className="font-bold text-slate-800">{review.minSpend > 0 ? `${review.minSpend} €` : "Aucun"}</span>
-            </div>
-            {review.expiresAt && (
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Validité</span>
-                <span className={`font-bold ${review.expired ? "text-red-600" : "text-slate-800"}`}>
-                  {review.expired ? "Expiré le " : "Jusqu'au "}{new Date(review.expiresAt).toLocaleDateString("fr-FR")}
-                </span>
-              </div>
-            )}
-            {review.wonAt && (
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500">Gagné le</span>
-                <span className="font-bold text-slate-800">{new Date(review.wonAt).toLocaleDateString("fr-FR")}</span>
-              </div>
-            )}
-          </div>
-
+        /* ÉTAPE DE CONFIRMATION AVEC VERDICT */
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          {/* VERDICT EN UN COUP D'ŒIL */}
           {review.status === "redeemed" ? (
-            <div className="mt-6 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl p-4 font-bold flex items-center justify-center gap-2">
-              <AlertTriangle size={20} /> Déjà utilisé{review.redeemedAt ? ` le ${new Date(review.redeemedAt).toLocaleString("fr-FR")}` : ""}
+            <div className="bg-red-600 text-white py-4 px-6 flex items-center justify-center gap-2 font-black text-lg">
+              <XCircle size={24} /> NE PAS ACCEPTER · Déjà utilisé
+            </div>
+          ) : review.expired ? (
+            <div className="bg-red-600 text-white py-4 px-6 flex items-center justify-center gap-2 font-black text-lg">
+              <XCircle size={24} /> NE PAS ACCEPTER · Expiré
             </div>
           ) : (
-            <>
-              {review.expired && (
-                <p className="mt-3 text-sm font-bold text-red-600 flex items-center justify-center gap-1">
-                  <AlertTriangle size={16} /> Attention : ce ticket est expiré.
-                </p>
+            <div className="bg-green-600 text-white py-4 px-6 flex items-center justify-center gap-2 font-black text-lg">
+              <CheckCircle2 size={24} /> GAIN VALABLE
+            </div>
+          )}
+
+          <div className="p-8 text-center">
+            <p className="text-slate-500 font-medium">Client : <span className="font-bold text-slate-800">{review.firstName}</span></p>
+            <p className="text-2xl font-black text-slate-900 mt-1">{review.prizeLabel}</p>
+
+            {review.status !== "redeemed" && !review.expired && review.minSpend > 0 && (
+              <p className="mt-3 text-sm font-bold text-amber-600 flex items-center justify-center gap-1">
+                <AlertTriangle size={15} /> À vérifier : commande ≥ {review.minSpend} €
+              </p>
+            )}
+
+            <div className="mt-4 bg-slate-50 rounded-xl p-4 text-left text-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Minimum de commande</span>
+                <span className="font-bold text-slate-800">{review.minSpend > 0 ? `${review.minSpend} €` : "Aucun"}</span>
+              </div>
+              {review.expiresAt && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Validité</span>
+                  <span className={`font-bold ${review.expired ? "text-red-600" : "text-slate-800"}`}>
+                    {review.expired ? "Expiré le " : "Jusqu'au "}{new Date(review.expiresAt).toLocaleDateString("fr-FR")}
+                  </span>
+                </div>
               )}
+              {review.wonAt && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Gagné le</span>
+                  <span className="font-bold text-slate-800">{new Date(review.wonAt).toLocaleDateString("fr-FR")}</span>
+                </div>
+              )}
+            </div>
+
+            {review.status === "redeemed" ? (
+              <button onClick={reset} className="mt-6 w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 active:scale-95 transition-all">
+                Retour
+              </button>
+            ) : (
               <div className="mt-6 grid grid-cols-2 gap-3">
                 <button onClick={reset} className="bg-slate-100 text-slate-700 py-4 rounded-xl font-bold hover:bg-slate-200 active:scale-95 transition-all">
                   Annuler
                 </button>
-                <button onClick={confirmValidate} className="bg-green-600 text-white py-4 rounded-xl font-black hover:bg-green-700 active:scale-95 transition-all shadow-lg shadow-green-100">
-                  Valider le gain
+                <button onClick={confirmValidate} className={`py-4 rounded-xl font-black text-white active:scale-95 transition-all shadow-lg ${review.expired ? "bg-amber-500 hover:bg-amber-600 shadow-amber-100" : "bg-green-600 hover:bg-green-700 shadow-green-100"}`}>
+                  {review.expired ? "Valider quand même" : "Valider le gain"}
                 </button>
               </div>
-            </>
-          )}
-
-          {review.status === "redeemed" && (
-            <button onClick={reset} className="mt-6 bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-800 active:scale-95 transition-all">
-              Retour
-            </button>
-          )}
+            )}
+          </div>
         </div>
       ) : active ? (
         /* CAMÉRA */
