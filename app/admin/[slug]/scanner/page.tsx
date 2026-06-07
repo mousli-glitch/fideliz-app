@@ -133,6 +133,28 @@ export default function ScannerPage() {
           <p className="text-slate-500 font-medium">Client : <span className="font-bold text-slate-800">{review.firstName}</span></p>
           <p className="text-2xl font-black text-slate-900 mt-1">{review.prizeLabel}</p>
 
+          {/* Conditions du gain (vérifiées par l'appli, le caissier décide) */}
+          <div className="mt-4 bg-slate-50 rounded-xl p-4 text-left text-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Minimum de commande</span>
+              <span className="font-bold text-slate-800">{review.minSpend > 0 ? `${review.minSpend} €` : "Aucun"}</span>
+            </div>
+            {review.expiresAt && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Validité</span>
+                <span className={`font-bold ${review.expired ? "text-red-600" : "text-slate-800"}`}>
+                  {review.expired ? "Expiré le " : "Jusqu'au "}{new Date(review.expiresAt).toLocaleDateString("fr-FR")}
+                </span>
+              </div>
+            )}
+            {review.wonAt && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Gagné le</span>
+                <span className="font-bold text-slate-800">{new Date(review.wonAt).toLocaleDateString("fr-FR")}</span>
+              </div>
+            )}
+          </div>
+
           {review.status === "redeemed" ? (
             <div className="mt-6 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl p-4 font-bold flex items-center justify-center gap-2">
               <AlertTriangle size={20} /> Déjà utilisé{review.redeemedAt ? ` le ${new Date(review.redeemedAt).toLocaleString("fr-FR")}` : ""}

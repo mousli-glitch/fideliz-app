@@ -14,7 +14,7 @@ export async function getWinnerInfoAction(winnerId: string) {
   try {
     const { data: win, error } = await supabaseAdmin
       .from("winners")
-      .select("id, status, redeemed_at, expires_at, first_name, game_id, prizes ( label, color )")
+      .select("id, status, redeemed_at, expires_at, first_name, created_at, prize_label_snapshot, game_id, prizes ( label, color )")
       .eq("id", winnerId)
       .single()
 
@@ -37,7 +37,7 @@ export async function getWinnerInfoAction(winnerId: string) {
     // Étanchéité : le ticket doit appartenir au restaurant du staff (sauf root)
     const { data: game } = await supabaseAdmin
       .from("games")
-      .select("restaurant_id")
+      .select("restaurant_id, min_spend")
       .eq("id", (win as any).game_id)
       .single()
 
@@ -48,14 +48,20 @@ export async function getWinnerInfoAction(winnerId: string) {
     const prize = Array.isArray((win as any).prizes) ? (win as any).prizes[0] : (win as any).prizes
     const expired = (win as any).expires_at ? new Date((win as any).expires_at) < new Date() : false
 
+    const rawMin = (game as any)?.min_spend
+    const minSpend = rawMin && /^[0-9]+$/.test(String(rawMin)) ? parseInt(String(rawMin)) : 0
+
     return {
       success: true,
       winnerId: (win as any).id,
       firstName: (win as any).first_name || "Client",
-      prizeLabel: prize?.label || "Lot",
+      prizeLabel: (win as any).prize_label_snapshot || prize?.label || "Lot",
       status: (win as any).status as string,
       redeemedAt: (win as any).redeemed_at as string | null,
+      expiresAt: (win as any).expires_at as string | null,
+      wonAt: (win as any).created_at as string | null,
       expired,
+      minSpend,
     }
   } catch {
     return { success: false, message: "Erreur lors de la lecture du ticket." }
