@@ -1,6 +1,6 @@
 "use client"
 
-import { QRCodeSVG } from "qrcode.react"
+import { QRCodeSVG, QRCodeCanvas } from "qrcode.react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 
@@ -14,9 +14,20 @@ export default function QrCard({ slug, baseUrl, url }: QrCardProps) {
   // 🔥 LOGIQUE CORRIGÉE :
   // Si on fournit 'url', on l'utilise telle quelle.
   // Sinon, on garde l'ancienne méthode (baseUrl + /play/ + slug) pour la rétrocompatibilité.
-  const targetUrl = url 
-    ? url 
+  const targetUrl = url
+    ? url
     : `${baseUrl}/play/${slug}`
+
+  const downloadPng = () => {
+    const canvas = document.getElementById("qr-download-canvas") as HTMLCanvasElement | null
+    if (!canvas) return
+    const link = document.createElement("a")
+    link.href = canvas.toDataURL("image/png")
+    link.download = `qr-${slug || "fideliz"}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   return (
     <div className="min-h-screen bg-zinc-100 flex flex-col items-center justify-center p-4 print:p-0 print:bg-white">
@@ -27,9 +38,19 @@ export default function QrCard({ slug, baseUrl, url }: QrCardProps) {
         <p className="text-zinc-500 break-all max-w-md mx-auto">
           Cible : <span className="text-blue-600 font-mono text-xs">{targetUrl}</span>
         </p>
-        <Button onClick={() => window.print()} className="bg-black text-white hover:bg-zinc-800">
-          🖨️ Imprimer (A6)
-        </Button>
+        <div className="flex items-center justify-center gap-3 flex-wrap">
+          <Button onClick={() => window.print()} className="bg-black text-white hover:bg-zinc-800">
+            🖨️ Imprimer (A6)
+          </Button>
+          <Button onClick={downloadPng} variant="outline">
+            ⬇️ Télécharger (PNG HD)
+          </Button>
+        </div>
+      </div>
+
+      {/* Canvas haute résolution caché, servant uniquement au téléchargement PNG */}
+      <div className="absolute -left-[9999px] -top-[9999px]" aria-hidden="true">
+        <QRCodeCanvas id="qr-download-canvas" value={targetUrl} size={1000} level="H" includeMargin />
       </div>
 
       {/* LA CARTE A6 (Zone imprimée) */}
