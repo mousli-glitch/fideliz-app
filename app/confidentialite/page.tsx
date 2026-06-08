@@ -116,6 +116,13 @@ export default function ConfidentialitePage() {
                 </tbody>
               </table>
             </div>
+            <p className="mt-3">
+              À l'expiration de ces durées, Fidéliz privilégie l'<strong>anonymisation</strong> plutôt que la suppression pure :
+              les données permettant d'identifier la personne (prénom, e-mail, téléphone) sont effacées de façon irréversible,
+              tandis que les seules données statistiques et anonymes (nombre de participations, de gains, dates…) peuvent être
+              conservées sans limite de durée, car elles ne constituent plus des données personnelles au sens du RGPD. Le délai
+              repart à zéro à chaque nouvelle interaction de la personne avec le commerce.
+            </p>
           </section>
 
           <section>
