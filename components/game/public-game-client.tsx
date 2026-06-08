@@ -665,12 +665,16 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         <div className="flex items-start gap-3 mt-4">
                             <input type="checkbox" id="optin" checked={formData.optIn} onChange={(e) => setFormData({...formData, optIn: e.target.checked})} className="mt-1 w-5 h-5 rounded accent-blue-600" />
                             <label htmlFor="optin" className={`text-xs ${subTextClass}`}>
-                                J'accepte d'être contacté par <span className="font-bold">{restaurant.name}</span> pour bénéficier de promotions réservées uniquement aux membres.
+                                J'accepte de recevoir par e-mail et/ou SMS les offres, actualités et promotions de <span className="font-bold">{restaurant.name}</span>. Je peux retirer mon consentement à tout moment.
                             </label>
                         </div>
 
                         <p className={`text-[11px] ${subTextClass} opacity-80 leading-snug`}>
-                            Vos données (prénom, e-mail, téléphone) sont traitées par <span className="font-bold">{restaurant.name}</span> pour gérer votre participation et la remise de votre lot. Vous disposez d'un droit d'accès, de rectification et de suppression. En savoir plus : <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline">politique de confidentialité</a>.
+                            Les informations collectées sont utilisées par <span className="font-bold">{restaurant.name}</span>, responsable du traitement, pour gérer votre participation, l'attribution et la validation de votre lot. Solution technique fournie par Fidéliz (ComDesign), sous-traitant. Vous disposez de droits (accès, rectification, effacement, opposition, limitation, retrait du consentement). En savoir plus : <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline">politique de confidentialité</a>.
+                        </p>
+
+                        <p className={`text-[11px] ${subTextClass} opacity-70 leading-snug`}>
+                            En participant, vous confirmez avoir au moins 15 ans ou disposer de l'autorisation de votre représentant légal.
                         </p>
 
                         <button
@@ -728,6 +732,10 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                           <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
                       </div>
                        
+                      <p className="w-full text-[10px] text-gray-500 text-center mb-4 leading-snug">
+                          Ticket personnel, valable jusqu'à la date indiquée. À présenter au commerce pour validation. Une fois validé, il ne pourra plus être réutilisé.
+                      </p>
+
                       <div className="grid grid-cols-2 gap-3 w-full" data-html2canvas-ignore="true">
                           <button onClick={handleDownloadTicket} className="flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors">
                               <Download size={16}/> Enregistrer
