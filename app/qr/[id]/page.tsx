@@ -30,7 +30,7 @@ export default async function QRPage({ params }: { params: Promise<{ id: string 
   }
 
   // 3. On construit l'URL INTELLIGENTE
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://fideliz-app-fawn.vercel.app"
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.fideliz-app.fr"
   
   // 🔥 C'est ici qu'on retire le "/play/" qui posait problème
   // L'URL sera : https://.../scan/pointb
