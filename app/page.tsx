@@ -1,8 +1,7 @@
+import { redirect } from "next/navigation"
+
+// La racine de l'application (app.fideliz-app.fr) redirige vers le site vitrine.
+// L'application reste accessible via ses routes : /login, /play/[slug], /admin, etc.
 export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      <h1 className="text-4xl font-bold">Fideliz V1</h1>
-      <p>Initialisation du socle...</p>
-    </main>
-  )
+  redirect("https://fideliz-app.fr")
 }
