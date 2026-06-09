@@ -99,8 +99,15 @@ function LoginForm() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setErrorMsg('')
+
+    // Champs vides
+    if (!email.trim() || !password.trim()) {
+      setErrorMsg("Veuillez renseigner votre adresse e-mail et votre mot de passe.")
+      return
+    }
+
+    setLoading(true)
 
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
@@ -108,7 +115,9 @@ function LoginForm() {
     })
 
     if (authError) {
-      setErrorMsg("Identifiants incorrects.")
+      // Supabase ne distingue volontairement pas "e-mail inexistant" de "mot de passe faux"
+      // (protection contre l'énumération d'e-mails). Message combiné, conforme aux bonnes pratiques.
+      setErrorMsg("E-mail ou mot de passe incorrect.")
       setLoading(false)
       return
     }
