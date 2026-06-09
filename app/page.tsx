@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 
-// La racine de l'application (app.fideliz-app.fr) redirige vers le site vitrine.
-// L'application reste accessible via ses routes : /login, /play/[slug], /admin, etc.
+// La racine de l'application redirige vers la page de connexion (et non vers la vitrine,
+// qui est sur son propre domaine fideliz-app.fr). Les joueurs accèdent au jeu via /play/[slug].
 export default function Home() {
-  redirect("https://fideliz-app.fr")
+  redirect("/login")
 }
