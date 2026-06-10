@@ -140,7 +140,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
               <Gamepad2 size={18} /> Créer un jeu
             </Link>
           )}
-          <Link href={`/admin/${slug}/winners`} className="flex items-center justify-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3.5 font-black text-slate-800 hover:border-emerald-300 hover:shadow-sm active:scale-[0.98] transition-all text-sm">
+          <Link href={`/admin/${slug}/scanner`} className="flex items-center justify-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3.5 font-black text-slate-800 hover:border-emerald-300 hover:shadow-sm active:scale-[0.98] transition-all text-sm">
             <Trophy size={18} className="text-emerald-600" /> Validation Staff
           </Link>
           <Link href={`/admin/${slug}/customers`} className="flex items-center justify-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3.5 font-black text-slate-800 hover:border-purple-300 hover:shadow-sm active:scale-[0.98] transition-all text-sm">
