@@ -129,6 +129,25 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
           </div>
         </div>
 
+        {/* ACTIONS RAPIDES (accès immédiat, sous le titre) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {activeGame ? (
+            <Link href={`/admin/${slug}/games/${activeGame.id}`} className="flex items-center justify-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3.5 font-black text-slate-800 hover:border-blue-300 hover:shadow-sm active:scale-[0.98] transition-all text-sm">
+              <Settings size={18} className="text-blue-600" /> Configuration
+            </Link>
+          ) : (
+            <Link href={`/admin/${slug}/games/new`} className="flex items-center justify-center gap-2 bg-blue-600 text-white rounded-2xl px-4 py-3.5 font-black hover:bg-blue-700 active:scale-[0.98] transition-all text-sm shadow-sm">
+              <Gamepad2 size={18} /> Créer un jeu
+            </Link>
+          )}
+          <Link href={`/admin/${slug}/winners`} className="flex items-center justify-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3.5 font-black text-slate-800 hover:border-emerald-300 hover:shadow-sm active:scale-[0.98] transition-all text-sm">
+            <Trophy size={18} className="text-emerald-600" /> Validation Staff
+          </Link>
+          <Link href={`/admin/${slug}/customers`} className="flex items-center justify-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3.5 font-black text-slate-800 hover:border-purple-300 hover:shadow-sm active:scale-[0.98] transition-all text-sm">
+            <Users size={18} className="text-purple-600" /> Portefeuille CRM
+          </Link>
+        </div>
+
         {/* CARTES DE STATS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-2xl relative overflow-hidden group">
@@ -234,33 +253,6 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
           </div>
         )}
 
-        <div className="space-y-4">
-          <h3 className="text-xl font-black text-slate-800 tracking-tight">Pilotage</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {activeGame ? (
-              <Link href={`/admin/${slug}/games/${activeGame.id}`} className="group bg-white border border-slate-200 p-8 rounded-[2rem] shadow-sm flex flex-col items-center text-center">
-                <Settings className="text-blue-600 mb-6" size={32} />
-                <h4 className="font-black text-slate-800 text-lg">Configuration</h4>
-                <div className="mt-6 px-4 py-1.5 bg-green-100 text-green-700 text-[10px] font-black rounded-full">EN DIRECT</div>
-              </Link>
-            ) : (
-              <Link href={`/admin/${slug}/games/new`} className="bg-blue-600 p-8 rounded-[2rem] flex flex-col items-center text-center text-white shadow-lg">
-                <Gamepad2 size={32} className="mb-6" />
-                <h4 className="font-black text-lg">Créer un Jeu</h4>
-              </Link>
-            )}
-
-            <Link href={`/admin/${slug}/winners`} className="group bg-white border border-slate-200 p-8 rounded-[2rem] shadow-sm flex flex-col items-center text-center">
-              <Trophy className="text-emerald-600 mb-6" size={32} />
-              <h4 className="font-black text-slate-800 text-lg">Validation Staff</h4>
-            </Link>
-
-            <Link href={`/admin/${slug}/customers`} className="group bg-white border border-slate-200 p-8 rounded-[2rem] shadow-sm flex flex-col items-center text-center">
-              <Users className="text-purple-600 mb-6" size={32} />
-              <h4 className="font-black text-slate-800 text-lg">Portefeuille CRM</h4>
-            </Link>
-          </div>
-        </div>
       </div>
     </div>
   )

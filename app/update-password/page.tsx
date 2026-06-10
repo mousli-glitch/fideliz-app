@@ -70,7 +70,16 @@ export default function UpdatePassword() {
     })
 
     if (error) {
-      setErrorMsg("Erreur technique : " + error.message)
+      const m = error.message.toLowerCase()
+      if (m.includes("weak") || m.includes("pwned") || m.includes("compromis") || m.includes("easy to guess")) {
+        setErrorMsg("Ce mot de passe est trop courant ou a déjà fuité. Choisissez-en un plus robuste (lettres + chiffres, unique).")
+      } else if (m.includes("at least") || m.includes("characters") || m.includes("short")) {
+        setErrorMsg("Le mot de passe est trop court.")
+      } else if (m.includes("different from the old") || m.includes("same")) {
+        setErrorMsg("Le nouveau mot de passe doit être différent de l'ancien.")
+      } else {
+        setErrorMsg("Impossible de mettre à jour le mot de passe. Veuillez réessayer.")
+      }
       setLoading(false)
     } else {
       alert("✅ Mot de passe modifié ! Redirection...")
