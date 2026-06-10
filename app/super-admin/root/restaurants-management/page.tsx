@@ -4,10 +4,11 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import Navbar from '@/components/Navbar'
-import { Store, MapPin, ArrowLeft, Search, Loader2, Power, Trash2, ExternalLink, User, Briefcase, Ban } from 'lucide-react'
+import { Store, MapPin, ArrowLeft, Search, Loader2, Power, Trash2, ExternalLink, User, Briefcase, Ban, Mail } from 'lucide-react'
 import Link from 'next/link'
 // 👇 IMPORT DE L'ACTION DE SUPPRESSION TOTALE (Ton fichier validé)
 import { deleteRestaurantFullAction } from '@/app/actions/delete-restaurant-full'
+import { updateRestaurantEmailAction } from '@/app/actions/update-restaurant-email'
 
 export default function RestaurantsManagement() {
   const [restaurants, setRestaurants] = useState<any[]>([])
@@ -132,6 +133,20 @@ export default function RestaurantsManagement() {
     setActionLoading(null)
   }
 
+  // --- ACTION : MODIFIER L'E-MAIL DU GÉRANT ---
+  const handleEditEmail = async (ownerId: string, currentEmail: string) => {
+    if (!ownerId) { alert("Aucun compte propriétaire associé à ce restaurant."); return }
+    const newEmail = window.prompt("Nouvelle adresse e-mail du gérant :", currentEmail || "")
+    if (newEmail === null) return
+    const trimmed = newEmail.trim()
+    if (!trimmed || trimmed.toLowerCase() === (currentEmail || "").toLowerCase()) return
+    setActionLoading(ownerId)
+    const res = await updateRestaurantEmailAction(ownerId, trimmed)
+    setActionLoading(null)
+    if (res.success) { alert("✅ E-mail mis à jour avec succès."); fetchData() }
+    else alert("❌ " + res.error)
+  }
+
   // --- 4. FILTRAGE ---
   const filteredRestos = restaurants.filter(r =>
     r.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -250,6 +265,14 @@ export default function RestaurantsManagement() {
                     </Link>
 
                     <div className="w-px h-10 bg-slate-700 hidden lg:block mx-2"></div>
+
+                    <button
+                      onClick={() => handleEditEmail(resto.owner_id, userMap[resto.owner_id])}
+                      disabled={actionLoading === resto.owner_id}
+                      className="flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-xs uppercase bg-slate-700 text-slate-200 hover:bg-blue-600 hover:text-white transition-all shadow-lg disabled:opacity-50"
+                    >
+                      {actionLoading === resto.owner_id ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />} E-mail
+                    </button>
 
                     {/* ✅ Bouton basé sur is_blocked (source de vérité) */}
                     <button
