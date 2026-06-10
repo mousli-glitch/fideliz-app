@@ -17,22 +17,36 @@ export default function UpdatePassword() {
   const supabase = createClient()
 
   useEffect(() => {
-    // V2 : On utilise onAuthStateChange pour écouter la connexion en temps réel
-    // C'est plus robuste si le navigateur met quelques millisecondes à charger le cookie
+    // FLUX ROBUSTE (anti pré-fetch Gmail) : si le lien contient un token_hash,
+    // on ne consomme le jeton qu'ici, au vrai clic (les robots de scan n'exécutent pas ce JS).
+    const params = new URLSearchParams(window.location.search)
+    const tokenHash = params.get('token_hash')
+    const type = params.get('type')
+
+    if (tokenHash && type) {
+      supabase.auth.verifyOtp({ type: type as any, token_hash: tokenHash }).then(({ error }) => {
+        if (error) {
+          setErrorMsg("Ce lien est invalide ou a expiré. Veuillez redemander un lien de réinitialisation.")
+          setHasSession(false)
+        } else {
+          setHasSession(true)
+        }
+        setCheckingSession(false)
+      })
+      return
+    }
+
+    // FLUX CLASSIQUE (code PKCE déjà échangé par /auth/callback)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("🔒 Auth Event:", event)
-      
       if (session) {
         setHasSession(true)
         setCheckingSession(false)
       } else if (event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') {
-        // On attend un tout petit peu avant de déclarer l'échec total
-        // pour laisser le temps au callback de faire son travail
         setTimeout(() => {
-            if (!session) {
-                setHasSession(false)
-                setCheckingSession(false)
-            }
+          if (!session) {
+            setHasSession(false)
+            setCheckingSession(false)
+          }
         }, 1000)
       }
     })
