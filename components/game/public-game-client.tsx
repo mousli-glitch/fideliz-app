@@ -694,15 +694,15 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             )}
 
             {step === 'TICKET' && winner && (
-            <motion.div key="ticket" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div key="ticket" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="fixed inset-0 z-[200] flex items-start sm:items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
                  <div ref={ticketRef} className="w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl relative bg-black border border-gray-800">
                       
-                  <div className="bg-gray-900 p-6 border-b border-dashed border-gray-700 relative flex items-center justify-center gap-4 text-left pb-10">
+                  <div className="bg-gray-900 p-4 sm:p-6 border-b border-dashed border-gray-700 relative flex items-center justify-center gap-4 text-left pb-8 sm:pb-10">
                       <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-black rounded-full z-10"></div>
                       <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
                        
                       {restaurant.logo_url && (
-                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-24 h-24 object-contain bg-white/5 rounded-lg p-1" />
+                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-16 h-16 sm:w-24 sm:h-24 object-contain bg-white/5 rounded-lg p-1" />
                       )}
                        
                       <div>
@@ -717,45 +717,49 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                       </div>
                   </div>
 
-                  <div className="p-8 flex flex-col items-center bg-black">
-                      <div className="bg-white p-3 rounded-xl mb-6 shadow-lg">
+                  <div className="p-5 sm:p-8 flex flex-col items-center bg-black">
+
+                      {/* 3. Message important (avant le QR) — écran uniquement */}
+                      <div className="w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 mb-5" data-html2canvas-ignore="true">
+                          <p className="text-xs font-bold text-yellow-400 text-center leading-snug">
+                              ⚠️ Faites une capture d'écran ou appuyez sur « Enregistrer mon ticket » avant de fermer cette page.
+                          </p>
+                      </div>
+
+                      {/* 4. QR code */}
+                      <div className="bg-white p-3 rounded-xl mb-3 shadow-lg">
                           {dbWinnerId ? (
                             <QRCode value={`${window.location.origin}/verify/${dbWinnerId}`} size={150} bgColor="#ffffff" fgColor="#000000" />
                           ) : (
                             <div className="w-[150px] h-[150px] bg-gray-800 animate-pulse rounded"></div>
                           )}
                       </div>
-                      <p className="text-sm font-bold text-white text-center mb-3 px-2">Présentez ce QR code en caisse pour récupérer votre récompense.</p>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Code unique</p>
-                      <p className="text-xs font-mono text-gray-300 break-all text-center mb-6 px-2">{dbWinnerId}</p>
-                       
-                      <div className="w-full text-left bg-gray-900 p-4 rounded-xl border border-gray-800 mb-6">
+
+                      {/* 5. Texte caisse */}
+                      <p className="text-sm font-bold text-white text-center mb-5 px-2">Présentez ce QR code en caisse pour récupérer votre récompense.</p>
+
+                      {/* 6. Validité + minimum de commande */}
+                      <div className="w-full text-left bg-gray-900 p-3 rounded-xl border border-gray-800 mb-5">
                           <div className="flex justify-between mb-2"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
                           <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
                       </div>
-                       
-                      <p className="w-full text-[10px] text-gray-500 text-center mb-4 leading-snug">
-                          Ticket personnel, valable une seule fois. À présenter au commerce pour validation.
+
+                      {/* 7 & 8. Boutons : principal puis secondaire — écran uniquement */}
+                      <div className="w-full flex flex-col gap-3" data-html2canvas-ignore="true">
+                          <button onClick={handleDownloadTicket} className="flex items-center justify-center gap-2 text-white font-black py-3.5 rounded-xl text-sm hover:opacity-90 transition-opacity shadow-lg" style={{ backgroundColor: primaryColor }}>
+                              <Download size={18}/> Enregistrer mon ticket
+                          </button>
+                          <button onClick={handleShareTicket} className="flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors">
+                              <Share2 size={16}/> Partager / Offrir
+                          </button>
+                      </div>
+
+                      {/* 9. Mentions */}
+                      <p className="w-full text-[10px] text-gray-500 text-center mt-4 leading-snug">
+                          Ticket valable une seule fois.
                       </p>
-
-                      <div className="w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 mb-4" data-html2canvas-ignore="true">
-                          <p className="text-xs font-bold text-yellow-400 text-center leading-snug">
-                              ⚠️ Important : faites une capture d'écran ou appuyez sur « Enregistrer » avant de fermer cette page.
-                          </p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3 w-full" data-html2canvas-ignore="true">
-                          <button onClick={handleDownloadTicket} className="flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors">
-                              <Download size={16}/> Enregistrer
-                          </button>
-                          <button onClick={handleShareTicket} className="flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl text-sm hover:opacity-90 transition-opacity" style={{ backgroundColor: primaryColor }}>
-                              <Share2 size={16}/> Offrir
-                          </button>
-                      </div>
-
-                      <p className="w-full text-[10px] text-gray-500 text-center mt-3 leading-snug" data-html2canvas-ignore="true">
-                          Vous pouvez offrir ce ticket à une autre personne — il restera valable une seule fois.<br/>
-                          Si l'enregistrement ne fonctionne pas, faites simplement une capture d'écran de ce ticket.
+                      <p className="w-full text-[10px] text-gray-500 text-center mt-1 leading-snug" data-html2canvas-ignore="true">
+                          Vous pouvez offrir ce ticket à une autre personne. Si l'enregistrement ne fonctionne pas, faites une capture d'écran.
                       </p>
                   </div>
                </div>
