@@ -725,7 +725,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                             <div className="w-[150px] h-[150px] bg-gray-800 animate-pulse rounded"></div>
                           )}
                       </div>
-                      <p className="text-xs font-bold text-gray-400 mb-6 uppercase tracking-wider">Code Unique</p>
+                      <p className="text-sm font-bold text-white text-center mb-3 px-2">Présentez ce QR code en caisse pour récupérer votre récompense.</p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Code unique</p>
+                      <p className="text-xs font-mono text-gray-300 break-all text-center mb-6 px-2">{dbWinnerId}</p>
                        
                       <div className="w-full text-left bg-gray-900 p-4 rounded-xl border border-gray-800 mb-6">
                           <div className="flex justify-between mb-2"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
@@ -733,8 +735,14 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                       </div>
                        
                       <p className="w-full text-[10px] text-gray-500 text-center mb-4 leading-snug">
-                          Ticket personnel, valable jusqu'à la date indiquée. À présenter au commerce pour validation. Une fois validé, il ne pourra plus être réutilisé.
+                          Ticket personnel, valable une seule fois. À présenter au commerce pour validation.
                       </p>
+
+                      <div className="w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 mb-4" data-html2canvas-ignore="true">
+                          <p className="text-xs font-bold text-yellow-400 text-center leading-snug">
+                              ⚠️ Important : faites une capture d'écran ou appuyez sur « Enregistrer » avant de fermer cette page.
+                          </p>
+                      </div>
 
                       <div className="grid grid-cols-2 gap-3 w-full" data-html2canvas-ignore="true">
                           <button onClick={handleDownloadTicket} className="flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-xl text-sm hover:bg-gray-700 transition-colors">
@@ -744,6 +752,11 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                               <Share2 size={16}/> Offrir
                           </button>
                       </div>
+
+                      <p className="w-full text-[10px] text-gray-500 text-center mt-3 leading-snug" data-html2canvas-ignore="true">
+                          Vous pouvez offrir ce ticket à une autre personne — il restera valable une seule fois.<br/>
+                          Si l'enregistrement ne fonctionne pas, faites simplement une capture d'écran de ce ticket.
+                      </p>
                   </div>
                </div>
             </motion.div>
