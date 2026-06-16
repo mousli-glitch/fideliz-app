@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, CheckCircle, AlertCircle, Calendar, Package, Wand2, Euro, Timer } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, CheckCircle, AlertCircle, Calendar, Package, Wand2, Euro, Timer, Repeat, ArrowUp, ArrowDown, X } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
@@ -36,6 +36,19 @@ const TITLE_STYLES = [
   { id: 'STYLE_3', label: 'Tournez / ET GAGNEZ', preview: 'ET GAGNEZ !' },
 ]
 
+// Actions marketing disponibles pour la séquence de rejouabilité
+const ACTION_TYPES = [
+  { id: 'GOOGLE_REVIEW', label: '⭐ Avis Google', placeholder: 'https://g.page/... ou lien de votre fiche Google' },
+  { id: 'INSTAGRAM', label: '📸 Instagram', placeholder: 'https://instagram.com/votrecompte' },
+  { id: 'FACEBOOK', label: '👍 Facebook', placeholder: 'https://facebook.com/votrepage' },
+  { id: 'TIKTOK', label: '🎵 TikTok', placeholder: 'https://tiktok.com/@votrecompte' },
+]
+const REPLAY_DELAYS = [
+  { h: 24, label: '24 h' },
+  { h: 48, label: '48 h' },
+  { h: 72, label: '72 h' },
+]
+
 export default function EditGamePage() {
   const params = useParams()
   const router = useRouter()
@@ -64,7 +77,11 @@ export default function EditGamePage() {
     is_date_limit_active: false,
     start_date: "",
     end_date: "",
-    is_stock_limit_active: false
+    is_stock_limit_active: false,
+    // Rejouabilité (brique 2)
+    replay_enabled: false,
+    replay_delay_hours: 24,
+    action_sequence: [] as { action: string; url: string }[]
   })
 
   const [designData, setDesignData] = useState<any>({
@@ -100,6 +117,22 @@ export default function EditGamePage() {
     setFormData((prev: any) => ({ ...prev, action_url: url }))
   }
 
+  // --- Séquence d'actions (rejouabilité) ---
+  const seq: { action: string; url: string }[] = formData.action_sequence || []
+  const setSeq = (next: { action: string; url: string }[]) =>
+    setFormData((prev: any) => ({ ...prev, action_sequence: next }))
+  const addAction = () => setSeq([...seq, { action: 'INSTAGRAM', url: '' }])
+  const removeAction = (i: number) => setSeq(seq.filter((_, idx) => idx !== i))
+  const updateAction = (i: number, field: 'action' | 'url', value: string) =>
+    setSeq(seq.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)))
+  const moveAction = (i: number, dir: -1 | 1) => {
+    const j = i + dir
+    if (j < 0 || j >= seq.length) return
+    const next = [...seq]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setSeq(next)
+  }
+
   useEffect(() => {
     const loadGame = async () => {
         const idToLoad = params?.id
@@ -127,7 +160,11 @@ export default function EditGamePage() {
                 is_date_limit_active: game.is_date_limit_active || false,
                 start_date: game.start_date ? game.start_date.split('T')[0] : "",
                 end_date: game.end_date ? game.end_date.split('T')[0] : "",
-                is_stock_limit_active: game.is_stock_limit_active || false
+                is_stock_limit_active: game.is_stock_limit_active || false,
+                // Rejouabilité
+                replay_enabled: game.replay_enabled || false,
+                replay_delay_hours: game.replay_delay_hours || 24,
+                action_sequence: Array.isArray(game.action_sequence) ? game.action_sequence : []
             })
 
             const isDark = restaurant?.text_color === '#FFFFFF'
@@ -177,7 +214,14 @@ export default function EditGamePage() {
          setActiveTab('INFOS')
          setErrorMsg("❌ Veuillez sélectionner un établissement Google valide.")
          window.scrollTo({ top: 0, behavior: 'smooth' })
-         return 
+         return
+    }
+
+    if (formData.replay_enabled && (formData.action_sequence || []).some((a: any) => !a.url || !a.url.trim())) {
+         setActiveTab('INFOS')
+         setErrorMsg("❌ Chaque action de la séquence de rejouabilité doit avoir un lien (URL).")
+         window.scrollTo({ top: 0, behavior: 'smooth' })
+         return
     }
 
     setSaving(true)
@@ -417,6 +461,96 @@ export default function EditGamePage() {
                                     )}
                                 </div>
                             </div>
+                        </div>
+
+                        {/* --- BLOC REJOUABILITÉ (Brique 2) --- */}
+                        <div className="border-t border-slate-100 pt-6 mt-4 space-y-4">
+                            <ToggleSwitch
+                                checked={formData.replay_enabled}
+                                onChange={(val: boolean) => setFormData({ ...formData, replay_enabled: val })}
+                                label="Rejouabilité (faire revenir le client)"
+                                subLabel="Le client peut rejouer après un délai, en échange d'une nouvelle action marketing."
+                                icon={Repeat}
+                            />
+
+                            {formData.replay_enabled && (
+                                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-6 animate-in slide-in-from-top-2 shadow-inner">
+                                    {/* Délai */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Délai avant de pouvoir rejouer</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {REPLAY_DELAYS.map((d) => (
+                                                <button
+                                                    key={d.h}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, replay_delay_hours: d.h })}
+                                                    className={`px-4 py-2 rounded-xl font-bold text-sm border-2 transition-all ${formData.replay_delay_hours === d.h ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}
+                                                >
+                                                    {d.label}
+                                                </button>
+                                            ))}
+                                            <div className="flex items-center gap-2 bg-white border-2 border-slate-200 rounded-xl px-3">
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={formData.replay_delay_hours}
+                                                    onChange={e => setFormData({ ...formData, replay_delay_hours: parseInt(e.target.value) || 1 })}
+                                                    className="w-16 py-2 outline-none font-bold text-slate-800 bg-transparent text-center"
+                                                />
+                                                <span className="text-slate-400 text-sm font-bold">h</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Séquence d'actions */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Séquence d'actions à chaque retour</label>
+                                        <p className="text-[11px] text-slate-400 mb-3 font-medium">À chaque nouvelle participation, le client se voit proposer l'action suivante de cette liste (puis on recommence).</p>
+
+                                        <div className="space-y-3">
+                                            {seq.length === 0 && (
+                                                <div className="text-center text-xs text-slate-400 italic py-4 border-2 border-dashed border-slate-200 rounded-xl">
+                                                    Aucune action. Sans action ajoutée, on réutilise l'objectif principal du jeu ci-dessus.
+                                                </div>
+                                            )}
+                                            {seq.map((a, i) => (
+                                                <div key={i} className="flex flex-col sm:flex-row gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex flex-col">
+                                                            <button type="button" onClick={() => moveAction(i, -1)} disabled={i === 0} className="text-slate-300 hover:text-blue-600 disabled:opacity-30"><ArrowUp size={14} /></button>
+                                                            <button type="button" onClick={() => moveAction(i, 1)} disabled={i === seq.length - 1} className="text-slate-300 hover:text-blue-600 disabled:opacity-30"><ArrowDown size={14} /></button>
+                                                        </div>
+                                                        <span className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-100 text-blue-700 text-[11px] font-black shrink-0">{i + 1}</span>
+                                                        <select
+                                                            value={a.action}
+                                                            onChange={e => updateAction(i, 'action', e.target.value)}
+                                                            className="p-2 border rounded-lg bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold"
+                                                        >
+                                                            {ACTION_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <input
+                                                        type="url"
+                                                        value={a.url}
+                                                        onChange={e => updateAction(i, 'url', e.target.value)}
+                                                        placeholder={ACTION_TYPES.find(t => t.id === a.action)?.placeholder || 'https://...'}
+                                                        className="flex-1 p-2 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                                    />
+                                                    <button type="button" onClick={() => removeAction(i)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors self-center"><X size={18} /></button>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <button type="button" onClick={addAction} className="mt-3 w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition-all flex items-center justify-center gap-2 text-sm">
+                                            <Plus size={18} /> Ajouter une action
+                                        </button>
+
+                                        <div className="mt-3 p-3 rounded-xl border border-amber-200 bg-amber-50">
+                                            <p className="text-[11px] text-amber-900 font-bold">⚠️ Pour rester conforme, l'avis Google doit rester facultatif (ne jamais exiger un avis positif).</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

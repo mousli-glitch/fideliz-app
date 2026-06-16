@@ -31,6 +31,13 @@ export async function updateGameAction(gameId: string, data: any) {
       end_date: data.form.is_date_limit_active && data.form.end_date ? new Date(data.form.end_date).toISOString() : null,
       is_stock_limit_active: data.form.is_stock_limit_active,
 
+      // REJOUABILITÉ (brique 2)
+      replay_enabled: !!data.form.replay_enabled,
+      replay_delay_hours: data.form.replay_delay_hours ? Number(data.form.replay_delay_hours) : 24,
+      action_sequence: data.form.replay_enabled
+        ? (data.form.action_sequence || []).filter((a: any) => a && a.url && a.url.trim())
+        : [],
+
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,

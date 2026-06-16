@@ -28,8 +28,8 @@ export async function registerWinnerAction(data: any) {
     }
 
     if (!result?.success) {
-      // Cas métier : already_played, stock_empty, game_not_found, prize_not_found
-      return { success: false, error: result?.error || "unknown_error" }
+      // Cas métier : already_played, stock_empty, replay_too_soon, game_not_found, prize_not_found
+      return { success: false, error: result?.error || "unknown_error", hours_left: result?.hours_left ?? null }
     }
 
     return {

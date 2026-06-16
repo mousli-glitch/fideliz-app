@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from "react"
 import { registerWinnerAction } from "@/app/actions/register-winner"
-import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle, CalendarDays } from "lucide-react"
+import { checkReplayStatusAction } from "@/app/actions/check-replay"
+import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle, CalendarDays, Mail, Loader2 } from "lucide-react"
 import confetti from "canvas-confetti"
 import { motion, AnimatePresence, Variants, useAnimation } from "framer-motion"
 import QRCode from "react-qr-code"
@@ -57,6 +58,10 @@ type Props = {
     start_date?: string;
     end_date?: string;
     is_stock_limit_active?: boolean;
+    // Rejouabilité
+    replay_enabled?: boolean;
+    replay_delay_hours?: number;
+    action_sequence?: { action: string; url: string }[];
   }
   prizes: { id: string; label: string; color: string; weight: number; quantity?: number | null }[]
   restaurant: { name: string; logo_url?: string; primary_color?: string; design?: any }
@@ -105,14 +110,23 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   }, [game, prizes]);
 
 
-  const [step, setStep] = useState<'LANDING' | 'INSTRUCTIONS' | 'VERIFYING' | 'WHEEL' | 'FORM' | 'TICKET'>('LANDING')
+  // Rejouabilité : si activée, on identifie le joueur AVANT de jouer
+  const replayEnabled = !!game.replay_enabled
+  const [step, setStep] = useState<'IDENTIFY' | 'TOO_SOON' | 'LANDING' | 'INSTRUCTIONS' | 'VERIFYING' | 'WHEEL' | 'FORM' | 'TICKET'>(replayEnabled ? 'IDENTIFY' : 'LANDING')
   const [spinning, setSpinning] = useState(false)
   const [winner, setWinner] = useState<any>(null)
   const [dbWinnerId, setDbWinnerId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [wheelRotation, setWheelRotation] = useState(0)
   const [formData, setFormData] = useState({ firstName: '', email: '', phone: '', optIn: false })
-  const [isWideLogo, setIsWideLogo] = useState(false) 
+  const [isWideLogo, setIsWideLogo] = useState(false)
+
+  // Action du moment : par défaut l'action unique du jeu ; remplacée par la séquence si rejouabilité
+  const [currentAction, setCurrentAction] = useState<string>(game.active_action)
+  const [currentActionUrl, setCurrentActionUrl] = useState<string>(game.action_url)
+  const [identifying, setIdentifying] = useState(false)
+  const [identifyError, setIdentifyError] = useState<string | null>(null)
+  const [hoursLeft, setHoursLeft] = useState<number | null>(null)
 
   const [lightOffset, setLightOffset] = useState(0);
   const [lightMode, setLightMode] = useState<'IDLE' | 'SPIN' | 'WIN'>('IDLE');
@@ -152,7 +166,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   }, [lightMode]);
 
   const getActionLabel = () => {
-    switch(game.active_action) {
+    switch(currentAction) {
         case 'GOOGLE_REVIEW': return "Noter sur Google";
         case 'FACEBOOK': return "S'abonner à Facebook";
         case 'INSTAGRAM': return "S'abonner à Instagram";
@@ -162,15 +176,51 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   }
 
   const PlatformIcon = () => {
-    if (game.active_action === 'INSTAGRAM') return <Instagram className="w-12 h-12 text-pink-600" />
-    if (game.active_action === 'FACEBOOK') return <Facebook className="w-12 h-12 text-blue-600" />
-    if (game.active_action === 'TIKTOK') return <TikTokIcon />
+    if (currentAction === 'INSTAGRAM') return <Instagram className="w-12 h-12 text-pink-600" />
+    if (currentAction === 'FACEBOOK') return <Facebook className="w-12 h-12 text-blue-600" />
+    if (currentAction === 'TIKTOK') return <TikTokIcon />
     return <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-12 h-12" alt="Google"/>
+  }
+
+  // Étape d'identification (rejouabilité) : on vérifie le délai et on récupère l'action du moment
+  const handleIdentifySubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIdentifyError(null)
+    if (!formData.email || !formData.email.includes('@')) {
+      setIdentifyError("Merci d'indiquer une adresse e-mail valide.")
+      return
+    }
+    setIdentifying(true)
+    try {
+      const res: any = await checkReplayStatusAction({
+        game_id: game.id,
+        email: formData.email,
+        phone: formData.phone || "",
+      })
+      if (!res.ok) {
+        // En cas d'erreur technique, on laisse jouer avec l'action par défaut (ne bloque pas le joueur)
+        setStep('LANDING')
+        return
+      }
+      if (res.status === 'too_soon') {
+        setHoursLeft(res.hours_left ?? null)
+        setStep('TOO_SOON')
+        return
+      }
+      // status 'ok' : on applique l'action du moment puis on entre dans le tunnel normal
+      if (res.action) setCurrentAction(res.action)
+      if (res.action_url) setCurrentActionUrl(res.action_url)
+      setStep('LANDING')
+    } catch {
+      setStep('LANDING')
+    } finally {
+      setIdentifying(false)
+    }
   }
 
   const handleActionClick = () => setStep('INSTRUCTIONS')
   const handleInstructionValidate = () => {
-    if (game.action_url) window.open(game.action_url, '_blank')
+    if (currentActionUrl) window.open(currentActionUrl, '_blank')
     setStep('VERIFYING')
   }
 
@@ -314,6 +364,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         }
         if (result.error === 'stock_empty') {
           alert("Désolé, le dernier exemplaire de ce lot vient de partir !")
+          setIsSubmitting(false)
+          return
+        }
+        if (result.error === 'replay_too_soon') {
+          setHoursLeft((result as any).hours_left ?? null)
+          setStep('TOO_SOON')
           setIsSubmitting(false)
           return
         }
@@ -518,18 +574,75 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
            </div>
         )}
         
-        {step !== 'TICKET' && (
+        {step !== 'TICKET' && step !== 'TOO_SOON' && (
             <div className="text-center mb-8 relative z-10">
                 <GameTitle />
             </div>
         )}
 
         <AnimatePresence mode="wait">
+            {step === 'IDENTIFY' && (
+            <motion.div key="identify" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
+                <div className={dynamicCardClass}>
+                    <div className="mb-4 flex justify-center">
+                        <div className={`p-4 rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}>
+                            <Mail className="w-8 h-8" style={{ color: primaryColor }} />
+                        </div>
+                    </div>
+                    <h2 className="text-xl font-bold mb-2">Avant de jouer</h2>
+                    <p className={`text-sm mb-6 ${subTextClass}`}>Indiquez votre e-mail pour accéder au jeu.</p>
+
+                    <form onSubmit={handleIdentifySubmit} className="space-y-3">
+                        <input required type="email" placeholder="Votre e-mail" value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`} />
+                        <input type="tel" placeholder="Mobile (facultatif)" value={formData.phone}
+                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                            className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`} />
+
+                        {identifyError && (
+                            <p className="text-red-500 text-xs font-bold">{identifyError}</p>
+                        )}
+
+                        <button type="submit" disabled={identifying}
+                            className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-transform text-lg flex items-center justify-center gap-2 ${identifying ? 'opacity-60 cursor-not-allowed' : 'active:scale-95'}`}
+                            style={{ backgroundColor: primaryColor }}>
+                            {identifying ? <><Loader2 className="animate-spin" size={20} /> Vérification...</> : "Continuer"}
+                        </button>
+                        <p className={`text-[11px] ${subTextClass} opacity-70 leading-snug`}>
+                            Votre e-mail sert à gérer votre participation. En savoir plus : <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline">politique de confidentialité</a>.
+                        </p>
+                    </form>
+                </div>
+            </motion.div>
+            )}
+
+            {step === 'TOO_SOON' && (
+            <motion.div key="too_soon" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="w-full">
+                <div className={dynamicCardClass}>
+                    <div className="mb-4 flex justify-center">
+                        <div className={`p-4 rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}>
+                            <Clock className="w-8 h-8 text-blue-500" />
+                        </div>
+                    </div>
+                    <h2 className="text-xl font-black mb-3">Vous avez déjà participé 🎉</h2>
+                    <p className={`text-sm ${subTextClass} leading-relaxed`}>
+                        {hoursLeft && hoursLeft > 0
+                            ? <>Revenez dans <span className="font-black text-white bg-blue-600 px-2 py-0.5 rounded-lg">{hoursLeft} h</span> pour rejouer et tenter un nouveau lot !</>
+                            : "Revenez bientôt pour rejouer et tenter un nouveau lot !"}
+                    </p>
+                    {restaurant.logo_url && (
+                        <img src={restaurant.logo_url} className="h-12 w-auto mx-auto opacity-50 mt-6" alt="Logo" />
+                    )}
+                </div>
+            </motion.div>
+            )}
+
             {step === 'LANDING' && (
             <motion.div key="landing" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
                     <div className="mb-4 flex justify-center"><PlatformIcon /></div>
-                    <h2 className={`text-xl font-bold mb-2`}>{game.active_action === 'GOOGLE_REVIEW' ? "Laissez un avis Google" : `Abonnez-vous à ${game.active_action}`}</h2>
+                    <h2 className={`text-xl font-bold mb-2`}>{currentAction === 'GOOGLE_REVIEW' ? "Laissez un avis Google" : `Abonnez-vous à ${currentAction}`}</h2>
                     <p className={`text-sm mb-6 ${subTextClass}`}>Laissez-nous un avis puis revenez ici.</p>
                     <button onClick={handleActionClick} className="w-full py-4 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95 text-lg" style={{ backgroundColor: primaryColor }}>
                         {getActionLabel()}
@@ -585,7 +698,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             <motion.div key="verifying" initial="hidden" animate="visible" exit="exit" variants={fadeIn} className="w-full">
                 <div className={dynamicCardClass}>
                     <h2 className={`text-2xl font-black mb-4`}>Vérification...</h2>
-                    <button onClick={() => window.open(game.action_url, '_blank')} className="font-bold py-3 px-6 rounded-full mb-8 inline-flex items-center gap-2 shadow-lg bg-white text-black hover:bg-gray-200 border border-slate-200">
+                    <button onClick={() => window.open(currentActionUrl, '_blank')} className="font-bold py-3 px-6 rounded-full mb-8 inline-flex items-center gap-2 shadow-lg bg-white text-black hover:bg-gray-200 border border-slate-200">
                         {getActionLabel()} <ExternalLink size={16}/>
                     </button>
                     <div className="flex flex-col items-center justify-center mb-4 gap-4">
