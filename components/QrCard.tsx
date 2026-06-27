@@ -12,7 +12,11 @@ interface QrCardProps {
   logoUrl?: string // Logo du restaurant à placer au centre du QR
 }
 
-export default function QrCard({ slug, baseUrl, url, logoUrl }: QrCardProps) {
+// Logo Fidéliz affiché au centre de TOUS les QR codes.
+// Déposer le fichier dans : public/fideliz-qr-logo.png (PNG carré recommandé).
+const FIDELIZ_QR_LOGO = "/fideliz-qr-logo.png"
+
+export default function QrCard({ slug, baseUrl, url }: QrCardProps) {
   // 🔥 LOGIQUE CORRIGÉE :
   // Si on fournit 'url', on l'utilise telle quelle.
   // Sinon, on garde l'ancienne méthode (baseUrl + /play/ + slug) pour la rétrocompatibilité.
@@ -20,43 +24,29 @@ export default function QrCard({ slug, baseUrl, url, logoUrl }: QrCardProps) {
     ? url
     : `${baseUrl}/play/${slug}`
 
-  // On précharge le logo en "data URL" (base64) ET on mesure ses dimensions réelles,
-  // pour l'intégrer au QR sans problème cross-origin et SANS l'écraser (ratio conservé).
+  // On charge le logo Fidéliz et on mesure ses dimensions réelles (pour ne pas l'écraser).
+  // Asset local same-origin : pas de souci de sécurité au téléchargement PNG.
+  // Si le fichier est absent, on retombe simplement sur un QR sans logo (aucun blocage).
   const [logo, setLogo] = useState<{ src: string; ratio: number } | null>(null)
   useEffect(() => {
-    if (!logoUrl) { setLogo(null); return }
     let cancelled = false
-    fetch(logoUrl)
-      .then((r) => r.blob())
-      .then((blob) => new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      }))
-      .then((dataUrl) => new Promise<{ src: string; ratio: number }>((resolve, reject) => {
-        const img = new window.Image()
-        img.onload = () => resolve({ src: dataUrl, ratio: (img.naturalWidth / img.naturalHeight) || 1 })
-        img.onerror = reject
-        img.src = dataUrl
-      }))
-      .then((value) => { if (!cancelled) setLogo(value) })
-      .catch(() => { /* logo indisponible -> QR simple, aucun blocage */ })
+    const img = new window.Image()
+    img.onload = () => { if (!cancelled) setLogo({ src: FIDELIZ_QR_LOGO, ratio: (img.naturalWidth / img.naturalHeight) || 1 }) }
+    img.onerror = () => { /* fichier absent -> QR sans logo */ }
+    img.src = FIDELIZ_QR_LOGO
     return () => { cancelled = true }
-  }, [logoUrl])
+  }, [])
 
-  // Réglages du logo central : on conserve le ratio du logo, et on limite le côté le plus
-  // long à ~24% du QR (sûr avec la correction d'erreur niveau H, qui tolère ~30%).
+  // Réglages du logo central : on conserve le ratio, et on limite le côté le plus long
+  // à ~22% du QR (sûr avec la correction d'erreur niveau H, qui tolère ~30%).
   const logoSettings = (size: number) => {
     if (!logo) return undefined
-    const maxFrac = 0.24
+    const maxFrac = 0.22
     let width: number, height: number
     if (logo.ratio >= 1) {
-      // logo plus large que haut
       width = size * maxFrac
       height = width / logo.ratio
     } else {
-      // logo plus haut que large
       height = size * maxFrac
       width = height * logo.ratio
     }

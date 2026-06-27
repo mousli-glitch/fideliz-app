@@ -561,7 +561,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       <div className="w-full max-w-md mx-auto relative z-10 flex flex-col items-center">
         
         {restaurant.logo_url && (
-           <div className="w-full flex justify-center mt-8 mb-2 z-20 px-6">
+           <div className="w-full flex justify-center mt-5 mb-8 z-20 px-6">
               <img
                 src={restaurant.logo_url}
                 alt="Logo"
@@ -699,7 +699,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     </button>
                     <div className="flex flex-col items-center justify-center mb-4 gap-4">
                         {restaurant.logo_url ? (
-                            <img src={restaurant.logo_url} className="h-16 w-auto max-w-[150px] object-contain animate-spin" alt="Loading" />
+                            <img src={restaurant.logo_url} className="max-h-12 w-auto max-w-[110px] object-contain animate-spin" alt="Loading" />
                         ) : (
                             <div className="w-16 h-16 border-4 border-t-slate-500 rounded-full animate-spin border-slate-800"></div>
                         )}
