@@ -79,22 +79,34 @@ export async function masterDeleteUser(userId: string) {
   const supabase = createAdminClient()
   
   try {
-    // 1. TRANSFERT DE SÉCURITÉ (On brise toutes les chaînes SQL)
-    // On cherche si l'utilisateur est PROPRIÉTAIRE ou CRÉATEUR
+    // 🔒 Sécurité : ne jamais supprimer le super-admin
+    if (userId === ROOT_ID) {
+      return { success: false, error: "Ce compte super-admin est protégé." }
+    }
+
+    // 1. RÉATTRIBUTION AU ROOT (sans voler le restaurant au vrai propriétaire)
+    //    a) Restaurants APPORTÉS par cet utilisateur (created_by) -> créateur = root,
+    //       on CONSERVE owner_id (le restaurateur réel garde son restaurant).
     await supabase
       .from('restaurants')
-      .update({ 
-        owner_id: ROOT_ID, // On te redonne la main
-        created_by: null   // On efface la trace du créateur pour libérer l'ID
-      })
-      .or(`owner_id.eq.${userId},created_by.eq.${userId}`)
+      .update({ created_by: ROOT_ID })
+      .eq('created_by', userId)
+
+    //    b) Restaurants POSSÉDÉS par cet utilisateur (owner_id) -> propriété au root.
+    await supabase
+      .from('restaurants')
+      .update({ owner_id: ROOT_ID })
+      .eq('owner_id', userId)
+
+    //    c) Nettoyer les liens de portefeuille commercial (pas de FK côté commercial).
+    await supabase.from('sales_restaurants').delete().eq('sales_user_id', userId)
 
     // 2. SUPPRESSION DU PROFIL PUBLIC
     const { error: profileError } = await supabase
       .from('profiles')
       .delete()
       .eq('id', userId)
-    
+
     if (profileError) throw profileError
 
     // 3. SUPPRESSION DÉFINITIVE DE L'AUTH (Le fantôme)

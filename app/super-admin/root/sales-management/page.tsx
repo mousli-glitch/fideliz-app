@@ -83,23 +83,8 @@ export default function SalesManagement() {
     if (!confirm(message)) return
     setDeleteLoading(id)
 
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-
-    // A. Transfert des orphelins (Ta logique intelligente)
-    if (currentUser && count > 0) {
-      const { error: updateError } = await (supabase.from('restaurants') as any)
-        .update({ owner_id: currentUser.id }) // On les donne au Root
-        .eq('owner_id', id) // Ceux qui appartenaient au commercial
-
-      if (updateError) {
-        alert("Erreur critique lors du transfert des restaurants. Suppression annulée.")
-        setDeleteLoading(null)
-        return
-      }
-    }
-
-    // B. SUPPRESSION TOTALE (Utilisation de notre script validé)
-    // C'est ici que ça change : on utilise deleteSalesUserAction pour tuer l'Auth
+    // La réattribution au root + le nettoyage des liens sont gérés côté serveur,
+    // de façon fiable et atomique, par deleteSalesUserAction.
     const result = await deleteSalesUserAction(id)
 
     if (!result.success) {
