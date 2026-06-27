@@ -14,7 +14,8 @@ export default async function QRPage({ params }: { params: Promise<{ id: string 
     .select(`
       *,
       restaurants (
-        slug
+        slug,
+        logo_url
       )
     `)
     .eq('id', id)
@@ -22,8 +23,9 @@ export default async function QRPage({ params }: { params: Promise<{ id: string 
 
   if (!game) return notFound()
 
-  // On récupère le slug du restaurant
+  // On récupère le slug et le logo du restaurant
   const restaurantSlug = (game as any).restaurants?.slug
+  const restaurantLogo = (game as any).restaurants?.logo_url || undefined
 
   if (!restaurantSlug) {
     return <div className="p-10 text-center">Erreur : Ce jeu n'est pas lié à un restaurant avec un slug valide.</div>
@@ -36,6 +38,6 @@ export default async function QRPage({ params }: { params: Promise<{ id: string 
   // L'URL sera : https://.../scan/pointb
   const smartUrl = `${appUrl}/scan/${restaurantSlug}`
 
-  // On passe 'url' explicitement à QrCard
-  return <QrCard url={smartUrl} slug={restaurantSlug} />
+  // On passe 'url' et le logo explicitement à QrCard
+  return <QrCard url={smartUrl} slug={restaurantSlug} logoUrl={restaurantLogo} />
 }
