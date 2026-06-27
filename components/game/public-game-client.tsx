@@ -51,8 +51,9 @@ type Props = {
     title_style?: string;
     bg_choice?: number;
     bg_image_url?: string;
-    card_style?: string; 
+    card_style?: string;
     wheel_palette?: 'MONACO' | 'GATSBY' | 'EMERALD';
+    overlay_style?: 'dark' | 'light' | 'none';
     // Nouveaux champs
     is_date_limit_active?: boolean;
     start_date?: string;
@@ -119,7 +120,6 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [wheelRotation, setWheelRotation] = useState(0)
   const [formData, setFormData] = useState({ firstName: '', email: '', phone: '', optIn: false })
-  const [isWideLogo, setIsWideLogo] = useState(false)
 
   // Action du moment : par défaut l'action unique du jeu ; remplacée par la séquence si rejouabilité
   const [currentAction, setCurrentAction] = useState<string>(game.active_action)
@@ -147,6 +147,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
   const primaryColor = restaurant.primary_color || '#E11D48';
   const isDarkMode = game?.card_style === 'dark';
+
+  // Voile posé sur le fond : 'dark' (défaut) assombrit, 'light' éclaircit, 'none' = aucun voile.
+  const overlayClass =
+    game?.overlay_style === 'none' ? '' :
+    game?.overlay_style === 'light' ? 'bg-white/40' :
+    'bg-black/50';
 
   const cardBgClass = isDarkMode ? "bg-black/95 border-gray-800 text-white" : "bg-white/95 border-white/50 text-slate-900";
   const subTextClass = isDarkMode ? "text-gray-400" : "text-slate-500";
@@ -483,21 +489,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const slideIn: Variants = { hidden: { x: '100%', opacity: 0 }, visible: { x: 0, opacity: 1, transition: { duration: 0.3 } }, exit: { x: '-100%', opacity: 0, transition: { duration: 0.3 } } };
   const fadeIn: Variants = { hidden: { opacity: 0, scale: 0.95 }, visible: { opacity: 1, scale: 1, transition: { duration: 0.4 } } }
 
-  const handleLogoLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    const { naturalWidth, naturalHeight } = e.currentTarget;
-    if (naturalWidth / naturalHeight > 1.3) {
-        setIsWideLogo(true)
-    } else {
-        setIsWideLogo(false) 
-    }
-  }
-
   // --- GESTION DES ÉCRANS DE BLOCAGE (DATES/STOCKS) ---
   if (gameState !== 'OPEN') {
     return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
              style={{ backgroundImage: `url(${currentBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-            <div className="absolute inset-0 bg-black/50 z-0"></div>
+            {overlayClass && <div className={`absolute inset-0 ${overlayClass} z-0`}></div>}
             
             <div className={`relative z-10 ${dynamicCardClass} max-w-sm`}>
                 <div className="flex justify-center mb-6">
@@ -547,8 +544,8 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 overflow-hidden relative" 
         style={{ backgroundImage: `url(${currentBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-      
-      <div className="absolute inset-0 bg-black/50 z-0"></div>
+
+      {overlayClass && <div className={`absolute inset-0 ${overlayClass} z-0`}></div>}
       
       <svg width="0" height="0" className="absolute">
         <defs>
@@ -565,11 +562,10 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         
         {restaurant.logo_url && (
            <div className="w-full flex justify-center mt-8 mb-2 z-20 px-6">
-              <img 
-                src={restaurant.logo_url} 
-                alt="Logo" 
-                onLoad={handleLogoLoad}
-                className={`${isWideLogo ? 'h-48' : 'h-32'} w-auto max-w-full object-contain drop-shadow-lg transition-all duration-500`} 
+              <img
+                src={restaurant.logo_url}
+                alt="Logo"
+                className="max-h-28 w-auto max-w-[230px] object-contain drop-shadow-lg"
               />
            </div>
         )}

@@ -24,12 +24,13 @@ export default function LogoUploader({ currentUrl, onUrlChange }: LogoUploaderPr
         img.src = event.target?.result as string
         img.onload = () => {
           const canvas = document.createElement("canvas")
-          // On garde une bonne qualité (300px)
-          const MAX_WIDTH = 300 
-          const MAX_HEIGHT = 300
+          // Haute résolution pour rester net sur les écrans haute densité (mobiles 2x/3x)
+          const MAX_WIDTH = 1000
+          const MAX_HEIGHT = 1000
           let width = img.width
           let height = img.height
 
+          // On ne réduit que si l'image dépasse la limite (on n'agrandit jamais un petit logo)
           if (width > height) {
             if (width > MAX_WIDTH) {
               height *= MAX_WIDTH / width
@@ -44,7 +45,13 @@ export default function LogoUploader({ currentUrl, onUrlChange }: LogoUploaderPr
           canvas.width = width
           canvas.height = height
           const ctx = canvas.getContext("2d")
-          
+
+          // Lissage haute qualité pour un redimensionnement net
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true
+            ctx.imageSmoothingQuality = "high"
+          }
+
           // ⚠️ IMPORTANT : Nettoyer le canvas pour garder la transparence
           ctx?.clearRect(0, 0, width, height)
           ctx?.drawImage(img, 0, 0, width, height)

@@ -42,7 +42,8 @@ export async function updateGameAction(gameId: string, data: any) {
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
       card_style: data.design.card_style,
-      wheel_palette: data.design.wheel_palette 
+      wheel_palette: data.design.wheel_palette,
+      overlay_style: data.design.overlay_style || 'dark'
     }).eq("id", gameId)
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)
