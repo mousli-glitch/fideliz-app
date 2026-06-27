@@ -497,7 +497,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
              style={{ backgroundImage: `url(${currentBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-            <div className="absolute inset-0 bg-black/80 z-0"></div>
+            <div className="absolute inset-0 bg-black/50 z-0"></div>
             
             <div className={`relative z-10 ${dynamicCardClass} max-w-sm`}>
                 <div className="flex justify-center mb-6">
@@ -548,7 +548,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 overflow-hidden relative" 
         style={{ backgroundImage: `url(${currentBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
       
-      <div className="absolute inset-0 bg-black/80 z-0"></div>
+      <div className="absolute inset-0 bg-black/50 z-0"></div>
       
       <svg width="0" height="0" className="absolute">
         <defs>

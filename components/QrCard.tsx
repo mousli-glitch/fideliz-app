@@ -20,11 +20,11 @@ export default function QrCard({ slug, baseUrl, url, logoUrl }: QrCardProps) {
     ? url
     : `${baseUrl}/play/${slug}`
 
-  // On précharge le logo en "data URL" (base64) pour qu'il s'intègre au QR sans
-  // problème de sécurité cross-origin au moment du téléchargement PNG.
-  const [logoData, setLogoData] = useState<string | null>(null)
+  // On précharge le logo en "data URL" (base64) ET on mesure ses dimensions réelles,
+  // pour l'intégrer au QR sans problème cross-origin et SANS l'écraser (ratio conservé).
+  const [logo, setLogo] = useState<{ src: string; ratio: number } | null>(null)
   useEffect(() => {
-    if (!logoUrl) { setLogoData(null); return }
+    if (!logoUrl) { setLogo(null); return }
     let cancelled = false
     fetch(logoUrl)
       .then((r) => r.blob())
@@ -34,16 +34,34 @@ export default function QrCard({ slug, baseUrl, url, logoUrl }: QrCardProps) {
         reader.onerror = reject
         reader.readAsDataURL(blob)
       }))
-      .then((dataUrl) => { if (!cancelled) setLogoData(dataUrl) })
+      .then((dataUrl) => new Promise<{ src: string; ratio: number }>((resolve, reject) => {
+        const img = new window.Image()
+        img.onload = () => resolve({ src: dataUrl, ratio: (img.naturalWidth / img.naturalHeight) || 1 })
+        img.onerror = reject
+        img.src = dataUrl
+      }))
+      .then((value) => { if (!cancelled) setLogo(value) })
       .catch(() => { /* logo indisponible -> QR simple, aucun blocage */ })
     return () => { cancelled = true }
   }, [logoUrl])
 
-  // Réglages du logo central (~22% du QR : sûr avec la correction d'erreur niveau H)
-  const logoSettings = (size: number) =>
-    logoData
-      ? { src: logoData, height: Math.round(size * 0.22), width: Math.round(size * 0.22), excavate: true }
-      : undefined
+  // Réglages du logo central : on conserve le ratio du logo, et on limite le côté le plus
+  // long à ~24% du QR (sûr avec la correction d'erreur niveau H, qui tolère ~30%).
+  const logoSettings = (size: number) => {
+    if (!logo) return undefined
+    const maxFrac = 0.24
+    let width: number, height: number
+    if (logo.ratio >= 1) {
+      // logo plus large que haut
+      width = size * maxFrac
+      height = width / logo.ratio
+    } else {
+      // logo plus haut que large
+      height = size * maxFrac
+      width = height * logo.ratio
+    }
+    return { src: logo.src, width: Math.round(width), height: Math.round(height), excavate: true }
+  }
 
   const downloadPng = () => {
     const canvas = document.getElementById("qr-download-canvas") as HTMLCanvasElement | null
