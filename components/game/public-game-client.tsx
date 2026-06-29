@@ -157,7 +157,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const cardBgClass = isDarkMode ? "bg-black/95 border-gray-800 text-white" : "bg-white/95 border-white/50 text-slate-900";
   const subTextClass = isDarkMode ? "text-gray-400" : "text-slate-500";
   const inputBgClass = isDarkMode ? "bg-gray-900 border-gray-700 text-white" : "bg-slate-50 border-slate-200 text-slate-900";
-  const dynamicCardClass = `rounded-3xl p-8 shadow-2xl mx-4 text-center relative border backdrop-blur-md transition-all duration-300 ${cardBgClass}`;
+  const dynamicCardClass = `rounded-3xl p-6 sm:p-8 shadow-2xl mx-3 sm:mx-4 text-center relative border backdrop-blur-md transition-all duration-300 ${cardBgClass}`;
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -424,7 +424,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     x={textTranslateX} 
                     y="0" 
                     fill="white" 
-                    fontSize={numSegments > 10 ? "0.045" : "0.06"} 
+                    fontSize={numSegments >= 10 ? "0.052" : numSegments >= 7 ? "0.066" : "0.082"}
                     fontWeight="900" 
                     textAnchor="middle" 
                     alignmentBaseline="middle" 
@@ -711,7 +711,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             
             {step === 'WHEEL' && (
             <motion.div key="wheel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center relative z-10 w-full">
-                <div className="relative w-[340px] h-[340px] md:w-[380px] md:h-[380px] mb-12">
+                <div className="relative w-[min(86vw,360px)] h-[min(86vw,360px)] md:w-[380px] md:h-[380px] mb-8 md:mb-12">
                     <div className="absolute inset-[-20px] rounded-full bg-yellow-500/10 blur-[40px]"></div>
 
                     <div className="absolute inset-0 z-20 rounded-full pointer-events-none overflow-visible">

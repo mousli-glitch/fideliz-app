@@ -60,7 +60,8 @@ export async function createGameAction(data: any) {
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,
       card_style: data.design.card_style || 'light',
-      wheel_palette: data.design.wheel_palette
+      wheel_palette: data.design.wheel_palette,
+      overlay_style: data.design.overlay_style || 'dark'
     }).select().single()
 
     if (gameError) throw new Error("Erreur création jeu: " + gameError.message)

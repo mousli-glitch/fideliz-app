@@ -65,7 +65,8 @@ export default function NewGamePage() {
       title_style: 'STYLE_1',
       bg_image_url: "",
       card_style: 'light',
-      wheel_palette: 'MONACO'
+      wheel_palette: 'MONACO',
+      overlay_style: 'dark'
   })
 
   // 4 Lots par défaut (Avec champ quantité null)
@@ -447,6 +448,27 @@ export default function NewGamePage() {
                                         <div onClick={() => setDesignData({...designData, card_style: 'dark'})} className={`cursor-pointer p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${designData.card_style === 'dark' ? 'border-blue-600 bg-slate-900 text-white shadow-sm' : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}>Mode Sombre</div>
                                     </div>
                                     <p className="text-[10px] text-slate-400 mt-2 italic">Définit la couleur de fond de la carte de jeu.</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Filtre sur le fond</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { id: 'dark', label: 'Sombre', hint: 'Fond clair' },
+                                            { id: 'none', label: 'Aucun', hint: 'Tel quel' },
+                                            { id: 'light', label: 'Clair', hint: 'Fond foncé' },
+                                        ].map((o) => (
+                                            <div
+                                                key={o.id}
+                                                onClick={() => setDesignData({ ...designData, overlay_style: o.id })}
+                                                className={`cursor-pointer p-3 rounded-xl border-2 text-center transition-all ${designData.overlay_style === o.id ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-200 hover:border-slate-300'}`}
+                                            >
+                                                <p className={`text-xs font-bold ${designData.overlay_style === o.id ? 'text-blue-700' : 'text-slate-600'}`}>{o.label}</p>
+                                                <p className="text-[9px] text-slate-400 mt-0.5">{o.hint}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-2 italic">« Sombre » assombrit le fond pour rendre le texte lisible. Choisissez « Aucun » ou « Clair » si votre fond est déjà clair.</p>
                                 </div>
                             </div>
                         </div>
