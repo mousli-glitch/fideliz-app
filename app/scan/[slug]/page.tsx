@@ -34,7 +34,7 @@ export default async function SmartScanPage({
   // ✅ On récupère aussi is_blocked
   const { data: restaurant, error: restaurantError } = await supabaseAdmin
     .from("restaurants")
-    .select("id, name, is_blocked")
+    .select("id, name, is_blocked, subscription_end")
     .eq("slug", scanSlug)
     .maybeSingle();
 
@@ -47,8 +47,12 @@ export default async function SmartScanPage({
     );
   }
 
-  // ✅ Si bloqué : message neutre (pas de nom, pas de slug)
-  if ((restaurant as any).is_blocked === true) {
+  // Abonnement expiré = jeu arrêté (traité comme un blocage, message neutre)
+  const subEnd = (restaurant as any).subscription_end
+  const isExpired = subEnd ? new Date(subEnd) < new Date() : false
+
+  // ✅ Si bloqué OU abonnement expiré : message neutre (pas de nom, pas de slug)
+  if ((restaurant as any).is_blocked === true || isExpired) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
         <div className="w-20 h-20 bg-white rounded-full shadow-sm flex items-center justify-center mb-6">

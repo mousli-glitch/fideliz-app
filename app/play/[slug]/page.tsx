@@ -60,8 +60,10 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
   if (!game) return <ErrorScreen title="Pas de jeu en cours" message={`Cette expérience n'est pas disponible pour le moment.`} />
 
   // ✅ BLOCAGE RESTAURANT (NEUTRE, SANS NOM)
-  // source de vérité = is_blocked (mais compat si blocked_at / is_active)
-  if (restaurant?.is_blocked === true || restaurant?.blocked_at || restaurant?.is_active === false) {
+  // source de vérité = is_blocked (mais compat si blocked_at / is_active) + abonnement expiré
+  const _subEnd = restaurant?.subscription_end
+  const _isExpired = _subEnd ? new Date(_subEnd) < new Date() : false
+  if (restaurant?.is_blocked === true || restaurant?.blocked_at || restaurant?.is_active === false || _isExpired) {
     return (
       <ErrorScreen
         title="Service momentanément indisponible"

@@ -17,7 +17,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
 
   // 1. RÉCUPÉRATION UNIQUE DU RESTO PAR SLUG
   const { data: restaurant } = await (supabase.from("restaurants") as any)
-     .select("id, name, avg_basket")
+     .select("id, name, avg_basket, subscription_end")
      .eq("slug", slug)
      .single()
   
@@ -112,10 +112,36 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
     return `${Math.floor(h / 24)} j`
   }
 
+  // --- Statut d'abonnement (bandeau gérant) ---
+  const _subEnd = restaurant.subscription_end ? new Date(restaurant.subscription_end) : null
+  const _now = new Date()
+  const _isExpired = _subEnd ? _subEnd < _now : false
+  const _daysLeft = _subEnd ? Math.ceil((_subEnd.getTime() - _now.getTime()) / 86400000) : null
+  const _expiringSoon = _daysLeft !== null && _daysLeft > 0 && _daysLeft <= 15
+
   return (
     <div className="p-4 md:p-8">
       {/* ... (Le reste de ton JSX reste strictement identique) ... */}
       <div className="max-w-6xl mx-auto space-y-10">
+
+        {_isExpired && (
+          <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-5 flex items-start gap-3">
+            <span className="text-2xl">⛔</span>
+            <div>
+              <p className="font-black text-red-800">Votre abonnement a expiré</p>
+              <p className="text-sm text-red-700 mt-0.5">Votre jeu est actuellement suspendu pour vos clients. Contactez Fidéliz pour le réactiver.</p>
+            </div>
+          </div>
+        )}
+        {_expiringSoon && (
+          <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5 flex items-start gap-3">
+            <span className="text-2xl">⏳</span>
+            <div>
+              <p className="font-black text-amber-800">Votre abonnement expire bientôt</p>
+              <p className="text-sm text-amber-700 mt-0.5">Il reste {_daysLeft} jour{_daysLeft! > 1 ? 's' : ''}. Pensez à le renouveler pour ne pas interrompre votre jeu.</p>
+            </div>
+          </div>
+        )}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Dashboard</h1>
