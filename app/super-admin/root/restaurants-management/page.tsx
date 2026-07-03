@@ -45,10 +45,10 @@ function SubscriptionControls({ resto, loading, onExtend, onSetDate, onClear }: 
       <CalendarClock size={12} className="text-slate-400" />
       <span className={`font-black uppercase tracking-wider px-2 py-1 rounded-full ${s.cls}`}>{s.label}</span>
 
-      <span className="text-slate-500 ml-1">Prolonger d'</span>
+      <span className="text-slate-500 ml-1">Valable</span>
       <button disabled={loading} onClick={() => onExtend(resto.id, 12)} className={btn}>1 an</button>
 
-      <span className="text-slate-500">ou de</span>
+      <span className="text-slate-500">ou</span>
       <input type="number" min={1} value={months} onChange={(e) => setMonths(e.target.value)} placeholder="6" className={`w-11 ${field}`} />
       <span className="text-slate-500">mois</span>
       {preview && <span className="text-green-400 font-black">→ {preview}</span>}
