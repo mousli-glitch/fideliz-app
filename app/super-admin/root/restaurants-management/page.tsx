@@ -11,6 +11,71 @@ import { deleteRestaurantFullAction } from '@/app/actions/delete-restaurant-full
 import { updateRestaurantEmailAction } from '@/app/actions/update-restaurant-email'
 import { setSubscriptionAction } from '@/app/actions/set-subscription'
 
+// Statut d'abonnement (badge)
+function getSubStatus(resto: any) {
+  if (!resto.subscription_end) return { label: 'Illimité', cls: 'bg-slate-700 text-slate-300' }
+  const end = new Date(resto.subscription_end)
+  const days = Math.ceil((end.getTime() - Date.now()) / 86400000)
+  const dateStr = end.toLocaleDateString('fr-FR')
+  if (days < 0) return { label: `Expiré (${dateStr})`, cls: 'bg-red-600 text-white' }
+  if (days <= 15) return { label: `Expire dans ${days} j (${dateStr})`, cls: 'bg-amber-500 text-white' }
+  return { label: `Actif jusqu'au ${dateStr}`, cls: 'bg-green-600 text-white' }
+}
+
+// Bloc de gestion de l'abonnement (boutons rapides + mois libre avec aperçu + calendrier)
+function SubscriptionControls({ resto, loading, onExtend, onSetDate, onClear }: any) {
+  const [months, setMonths] = useState<string>('')
+  const [date, setDate] = useState<string>('')
+
+  // base de calcul = date de fin si encore future, sinon aujourd'hui (= logique de prolongation réelle)
+  const now = new Date()
+  const cur = resto.subscription_end ? new Date(resto.subscription_end) : null
+  const base = cur && cur > now ? cur : now
+  const n = parseInt(months)
+  const preview = (!isNaN(n) && n > 0)
+    ? (() => { const d = new Date(base); d.setMonth(d.getMonth() + n); return d.toLocaleDateString('fr-FR') })()
+    : null
+
+  const s = getSubStatus(resto)
+  const btn = "text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-700 text-slate-200 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50"
+  const box = "flex flex-wrap items-center gap-2 bg-slate-900/60 px-2 py-1.5 rounded-lg"
+  const field = "bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-xs outline-none focus:border-blue-500"
+
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-700/50 space-y-2">
+      <div className="flex items-center gap-2">
+        <CalendarClock size={12} className="text-slate-400" />
+        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${s.cls}`}>{s.label}</span>
+        {loading && <Loader2 size={12} className="animate-spin text-slate-400" />}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button disabled={loading} onClick={() => onExtend(resto.id, 12)} className={btn}>+1 an</button>
+        <button disabled={loading} onClick={() => onExtend(resto.id, 4)} className={btn}>+4 mois</button>
+        <button disabled={loading} onClick={() => onExtend(resto.id, 1)} className={btn}>+1 mois</button>
+        {resto.subscription_end && (
+          <button disabled={loading} onClick={() => onClear(resto.id)} className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 transition-all disabled:opacity-50">Retirer</button>
+        )}
+      </div>
+
+      {/* Nombre de mois libre + aperçu de la date d'arrêt en direct */}
+      <div className={box}>
+        <span className="text-[10px] text-slate-400 font-bold">Mois :</span>
+        <input type="number" min={1} value={months} onChange={(e) => setMonths(e.target.value)} placeholder="ex. 6" className={`w-16 ${field}`} />
+        {preview && <span className="text-[10px] text-green-400 font-black">→ jusqu'au {preview}</span>}
+        <button disabled={!preview || loading} onClick={() => { onExtend(resto.id, n); setMonths('') }} className={btn}>Appliquer</button>
+      </div>
+
+      {/* Date exacte via calendrier natif */}
+      <div className={box}>
+        <span className="text-[10px] text-slate-400 font-bold">Ou date :</span>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={field} />
+        <button disabled={!date || loading} onClick={() => { onSetDate(resto.id, date); setDate('') }} className={btn}>Fixer</button>
+      </div>
+    </div>
+  )
+}
+
 export default function RestaurantsManagement() {
   const [restaurants, setRestaurants] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -157,23 +222,6 @@ export default function RestaurantsManagement() {
     else alert("❌ " + res.error)
   }
 
-  const askCustomDate = (id: string) => {
-    const val = window.prompt("Date de fin d'abonnement (format AAAA-MM-JJ) :", "")
-    if (!val) return
-    handleSub(id, { type: 'set', date: val.trim() })
-  }
-
-  // Statut d'abonnement pour l'affichage
-  const subInfo = (resto: any) => {
-    if (!resto.subscription_end) return { label: 'Illimité', cls: 'bg-slate-700 text-slate-300', expired: false }
-    const end = new Date(resto.subscription_end)
-    const days = Math.ceil((end.getTime() - Date.now()) / 86400000)
-    const dateStr = end.toLocaleDateString('fr-FR')
-    if (days < 0) return { label: `Expiré (${dateStr})`, cls: 'bg-red-600 text-white', expired: true }
-    if (days <= 15) return { label: `Expire dans ${days} j (${dateStr})`, cls: 'bg-amber-500 text-white', expired: false }
-    return { label: `Actif jusqu'au ${dateStr}`, cls: 'bg-green-600 text-white', expired: false }
-  }
-
   // --- 4. FILTRAGE ---
   const filteredRestos = restaurants.filter(r =>
     r.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -278,24 +326,13 @@ export default function RestaurantsManagement() {
                       </div>
 
                       {/* --- ABONNEMENT --- */}
-                      <div className="mt-3 pt-3 border-t border-slate-700/50">
-                        {(() => { const s = subInfo(resto); return (
-                          <div className="flex items-center gap-2 mb-2">
-                            <CalendarClock size={12} className="text-slate-400" />
-                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${s.cls}`}>{s.label}</span>
-                          </div>
-                        ) })()}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button onClick={() => handleSub(resto.id, { type: 'extend', months: 12 })} disabled={actionLoading === 'sub-' + resto.id} className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-700 text-slate-200 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50">+1 an</button>
-                          <button onClick={() => handleSub(resto.id, { type: 'extend', months: 4 })} disabled={actionLoading === 'sub-' + resto.id} className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-700 text-slate-200 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50">+4 mois</button>
-                          <button onClick={() => handleSub(resto.id, { type: 'extend', months: 1 })} disabled={actionLoading === 'sub-' + resto.id} className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-700 text-slate-200 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50">+1 mois</button>
-                          <button onClick={() => askCustomDate(resto.id)} disabled={actionLoading === 'sub-' + resto.id} className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 transition-all disabled:opacity-50">Date…</button>
-                          {resto.subscription_end && (
-                            <button onClick={() => { if (confirm('Retirer la limite d\'abonnement (accès illimité) ?')) handleSub(resto.id, { type: 'clear' }) }} disabled={actionLoading === 'sub-' + resto.id} className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 transition-all disabled:opacity-50">Retirer</button>
-                          )}
-                          {actionLoading === 'sub-' + resto.id && <Loader2 size={12} className="animate-spin text-slate-400" />}
-                        </div>
-                      </div>
+                      <SubscriptionControls
+                        resto={resto}
+                        loading={actionLoading === 'sub-' + resto.id}
+                        onExtend={(id: string, m: number) => handleSub(id, { type: 'extend', months: m })}
+                        onSetDate={(id: string, d: string) => handleSub(id, { type: 'set', date: d })}
+                        onClear={(id: string) => { if (confirm("Retirer la limite d'abonnement (accès illimité) ?")) handleSub(id, { type: 'clear' }) }}
+                      />
 
                     </div>
                   </div>
