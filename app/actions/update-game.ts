@@ -57,7 +57,10 @@ export async function updateGameAction(gameId: string, data: any) {
         label: p.label,
         color: "#000000", 
         weight: Number(p.weight),
-        quantity: data.form.is_stock_limit_active ? (Number(p.quantity) || 0) : null // Sauvegarde du Stock !
+        // Stock : si limite active, on garde le nombre saisi ; vide/null = illimité (null), PAS 0.
+        quantity: data.form.is_stock_limit_active
+          ? (p.quantity === null || p.quantity === undefined || p.quantity === "" ? null : Number(p.quantity))
+          : null
     }))
     
     if (prizesToInsert.length > 0) {

@@ -61,7 +61,18 @@ export async function createGameAction(data: any) {
       title_style: data.design.title_style,
       card_style: data.design.card_style || 'light',
       wheel_palette: data.design.wheel_palette,
-      overlay_style: data.design.overlay_style || 'dark'
+      overlay_style: data.design.overlay_style || 'dark',
+      // Conditions (dates / stock)
+      is_stock_limit_active: !!data.form.is_stock_limit_active,
+      is_date_limit_active: !!data.form.is_date_limit_active,
+      start_date: data.form.start_date ? new Date(data.form.start_date).toISOString() : null,
+      end_date: data.form.end_date ? new Date(data.form.end_date).toISOString() : null,
+      // Rejouabilité
+      replay_enabled: !!data.form.replay_enabled,
+      replay_delay_hours: data.form.replay_delay_hours ? Number(data.form.replay_delay_hours) : 24,
+      action_sequence: data.form.replay_enabled
+        ? (data.form.action_sequence || []).filter((a: any) => a && a.url && a.url.trim())
+        : []
     }).select().single()
 
     if (gameError) throw new Error("Erreur création jeu: " + gameError.message)
@@ -72,7 +83,9 @@ export async function createGameAction(data: any) {
           game_id: game.id,
           label: p.label,
           color: p.color || "#000000",
-          weight: Number(p.weight)
+          weight: Number(p.weight),
+          // Stock : null = illimité (∞), un nombre = plafond
+          quantity: p.quantity ?? null
         }))
         await supabaseAdmin.from("prizes").insert(prizesToInsert)
     }

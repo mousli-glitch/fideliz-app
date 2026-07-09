@@ -257,7 +257,7 @@ export default async function AdminDashboardPage({ params }: { params: Promise<{
                   return (
                     <div key={i} className="flex items-center justify-between text-sm">
                       <span className="font-medium text-slate-700">{p.label}</span>
-                      <span className="text-slate-400">Illimité</span>
+                      <span className="text-slate-400 font-bold">∞ Illimité</span>
                     </div>
                   )
                 }
