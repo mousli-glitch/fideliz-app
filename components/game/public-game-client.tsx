@@ -5,7 +5,7 @@ import { registerWinnerAction } from "@/app/actions/register-winner"
 import { checkReplayStatusAction } from "@/app/actions/check-replay"
 import { validateEmail, validatePhone } from "@/utils/contact-validation"
 import { playGameAction } from "@/app/actions/play-game"
-import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle, CalendarDays, Mail, Loader2 } from "lucide-react"
+import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle, CalendarDays, Mail, Loader2, User, Phone, Sparkles, ArrowRight } from "lucide-react"
 import confetti from "canvas-confetti"
 import { motion, AnimatePresence, Variants, useAnimation } from "framer-motion"
 import QRCode from "react-qr-code"
@@ -684,49 +684,60 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             {step === 'IDENTIFY' && (
             <motion.div key="identify" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
-                    <div className="mb-4 flex justify-center">
-                        <div className={`p-4 rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-slate-100'}`}>
-                            <Mail className="w-8 h-8" style={{ color: primaryColor }} />
+                    <div className="mb-5 flex justify-center">
+                        <div className="p-4 rounded-2xl shadow-lg" style={{ backgroundColor: primaryColor }}>
+                            <Sparkles className="w-7 h-7 text-white" />
                         </div>
                     </div>
-                    <h2 className="text-xl font-bold mb-2">Avant de jouer</h2>
-                    <p className={`text-sm mb-6 ${subTextClass}`}>Indiquez votre e-mail pour accéder au jeu.</p>
+                    <h2 className="text-2xl font-black mb-1 tracking-tight">{secureMode ? "C'est parti !" : "Avant de jouer"}</h2>
+                    <p className={`text-sm mb-6 ${subTextClass}`}>{secureMode ? "Vos infos, et la roue est à vous 🎡" : "Indiquez votre e-mail pour accéder au jeu."}</p>
 
                     <form onSubmit={handleIdentifySubmit} className="space-y-3">
                         {secureMode && (
-                            <input required placeholder="Prénom" value={formData.firstName}
-                                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                                className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`} />
+                            <div className="relative">
+                                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                                <input required placeholder="Prénom" value={formData.firstName}
+                                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                                    className={`w-full p-3.5 pl-11 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 placeholder-gray-500 transition ${inputBgClass}`} />
+                            </div>
                         )}
-                        <input required type="email" placeholder="Votre e-mail" value={formData.email}
-                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`} />
-                        <input type="tel" placeholder="Mobile (facultatif)" value={formData.phone}
-                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                            className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`} />
+                        <div className="relative">
+                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                            <input required type="email" placeholder="Votre e-mail" value={formData.email}
+                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                className={`w-full p-3.5 pl-11 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 placeholder-gray-500 transition ${inputBgClass}`} />
+                        </div>
+                        <div className="relative">
+                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                            <input type="tel" placeholder="Téléphone mobile (facultatif)" value={formData.phone}
+                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                className={`w-full p-3.5 pl-11 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 placeholder-gray-500 transition ${inputBgClass}`} />
+                        </div>
 
                         {secureMode && (
-                            <div className="flex items-start gap-3 mt-1 text-left">
+                            <label htmlFor="optin-id" className={`flex items-start gap-3 mt-1 text-left cursor-pointer rounded-xl p-2 transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}>
                                 <input type="checkbox" id="optin-id" checked={formData.optIn}
                                     onChange={(e) => setFormData({ ...formData, optIn: e.target.checked })}
-                                    className="mt-1 w-5 h-5 rounded accent-blue-600" />
-                                <label htmlFor="optin-id" className={`text-xs ${subTextClass}`}>
-                                    J'accepte de recevoir par e-mail et/ou SMS les offres de <span className="font-bold">{restaurant.name}</span>. Je peux me désinscrire à tout moment.
-                                </label>
-                            </div>
+                                    className="mt-0.5 w-5 h-5 rounded shrink-0" style={{ accentColor: primaryColor }} />
+                                <span className={`text-xs ${subTextClass}`}>
+                                    J'accepte de recevoir les offres de <span className="font-bold">{restaurant.name}</span>. Désinscription possible à tout moment.
+                                </span>
+                            </label>
                         )}
 
                         {identifyError && (
-                            <p className="text-red-500 text-xs font-bold">{identifyError}</p>
+                            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-2.5">
+                                <p className="text-red-500 text-xs font-bold text-center">{identifyError}</p>
+                            </div>
                         )}
 
                         <button type="submit" disabled={identifying}
-                            className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-transform text-lg flex items-center justify-center gap-2 ${identifying ? 'opacity-60 cursor-not-allowed' : 'active:scale-95'}`}
+                            className={`w-full py-4 rounded-2xl font-black text-white shadow-lg transition-all text-lg flex items-center justify-center gap-2 ${identifying ? 'opacity-60 cursor-not-allowed' : 'hover:brightness-110 active:scale-[0.98]'}`}
                             style={{ backgroundColor: primaryColor }}>
-                            {identifying ? <><Loader2 className="animate-spin" size={20} /> Vérification...</> : "Continuer"}
+                            {identifying ? <><Loader2 className="animate-spin" size={20} /> Un instant...</> : <>{secureMode ? "Jouer" : "Continuer"} <ArrowRight size={20} /></>}
                         </button>
                         <p className={`text-[11px] ${subTextClass} opacity-70 leading-snug`}>
-                            Votre e-mail sert à gérer votre participation. En savoir plus : <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline">politique de confidentialité</a>.
+                            Vos informations servent uniquement à gérer votre participation. <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline">Politique de confidentialité</a>.
                         </p>
                     </form>
                 </div>
