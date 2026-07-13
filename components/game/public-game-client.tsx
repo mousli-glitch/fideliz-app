@@ -206,7 +206,11 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       setIdentifyError(emailCheck.message || "Adresse e-mail invalide.")
       return
     }
-    if (secureMode && formData.phone && formData.phone.trim()) {
+    if (secureMode) {
+      if (!formData.phone || !formData.phone.trim()) {
+        setIdentifyError("Merci d'indiquer votre numéro de mobile.")
+        return
+      }
       const pc = validatePhone(formData.phone)
       if (pc.status === 'invalid') { setIdentifyError(pc.message || "Numéro de téléphone invalide."); return }
     }
@@ -709,7 +713,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         </div>
                         <div className="relative">
                             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
-                            <input type="tel" placeholder="Téléphone mobile (facultatif)" value={formData.phone}
+                            <input type="tel" required={secureMode} placeholder={secureMode ? "Téléphone mobile" : "Téléphone mobile (facultatif)"} value={formData.phone}
                                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                 className={`w-full p-3.5 pl-11 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 placeholder-gray-500 transition ${inputBgClass}`} />
                         </div>
@@ -736,9 +740,20 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                             style={{ backgroundColor: primaryColor }}>
                             {identifying ? <><Loader2 className="animate-spin" size={20} /> Un instant...</> : <>{secureMode ? "Jouer" : "Continuer"} <ArrowRight size={20} /></>}
                         </button>
-                        <p className={`text-[11px] ${subTextClass} opacity-70 leading-snug`}>
-                            Vos informations servent uniquement à gérer votre participation. <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline">Politique de confidentialité</a>.
-                        </p>
+                        {secureMode ? (
+                            <>
+                                <p className={`text-[11px] ${subTextClass} opacity-80 leading-snug`}>
+                                    Les informations collectées sont utilisées par <span className="font-bold">{restaurant.name}</span>, responsable du traitement, pour gérer votre participation, l'attribution et la validation de votre lot. Solution technique fournie par Fidéliz (ComDesign), sous-traitant. Vous disposez de droits (accès, rectification, effacement, opposition, limitation, retrait du consentement). En savoir plus : <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline">politique de confidentialité</a>.
+                                </p>
+                                <p className={`text-[11px] ${subTextClass} opacity-70 leading-snug`}>
+                                    En participant, vous confirmez avoir au moins 15 ans ou disposer de l'autorisation de votre représentant légal.
+                                </p>
+                            </>
+                        ) : (
+                            <p className={`text-[11px] ${subTextClass} opacity-70 leading-snug`}>
+                                Vos informations servent uniquement à gérer votre participation. <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline">Politique de confidentialité</a>.
+                            </p>
+                        )}
                     </form>
                 </div>
             </motion.div>
@@ -897,17 +912,26 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         <p className={`${subTextClass} font-bold`}>Vous avez gagné :</p>
                         <div className="mt-3 bg-yellow-100 text-yellow-800 py-3 px-6 rounded-xl inline-block font-black text-xl border-2 border-yellow-200">{winner.label}</div>
                     </div>
-                    <form onSubmit={handleFormSubmit} className="space-y-4">
-                        <input required placeholder="Prénom" value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
-                        <input required type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
-                        <input type="tel" placeholder="Mobile" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`}/>
-                       
-                        <div className="flex items-start gap-3 mt-4">
-                            <input type="checkbox" id="optin" checked={formData.optIn} onChange={(e) => setFormData({...formData, optIn: e.target.checked})} className="mt-1 w-5 h-5 rounded accent-blue-600" />
-                            <label htmlFor="optin" className={`text-xs ${subTextClass}`}>
-                                J'accepte de recevoir par e-mail et/ou SMS les offres, actualités et promotions de <span className="font-bold">{restaurant.name}</span>. Je peux retirer mon consentement à tout moment.
-                            </label>
+                    <form onSubmit={handleFormSubmit} className="space-y-3">
+                        <div className="relative">
+                            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                            <input required placeholder="Prénom" value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className={`w-full p-3.5 pl-11 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 placeholder-gray-500 transition ${inputBgClass}`}/>
                         </div>
+                        <div className="relative">
+                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                            <input required type="email" placeholder="Votre e-mail" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className={`w-full p-3.5 pl-11 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 placeholder-gray-500 transition ${inputBgClass}`}/>
+                        </div>
+                        <div className="relative">
+                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                            <input type="tel" placeholder="Téléphone mobile (facultatif)" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className={`w-full p-3.5 pl-11 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 placeholder-gray-500 transition ${inputBgClass}`}/>
+                        </div>
+
+                        <label htmlFor="optin" className={`flex items-start gap-3 mt-1 text-left cursor-pointer rounded-xl p-2 transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}>
+                            <input type="checkbox" id="optin" checked={formData.optIn} onChange={(e) => setFormData({...formData, optIn: e.target.checked})} className="mt-0.5 w-5 h-5 rounded shrink-0" style={{ accentColor: primaryColor }} />
+                            <span className={`text-xs ${subTextClass}`}>
+                                J'accepte de recevoir par e-mail et/ou SMS les offres, actualités et promotions de <span className="font-bold">{restaurant.name}</span>. Je peux retirer mon consentement à tout moment.
+                            </span>
+                        </label>
 
                         <p className={`text-[11px] ${subTextClass} opacity-80 leading-snug`}>
                             Les informations collectées sont utilisées par <span className="font-bold">{restaurant.name}</span>, responsable du traitement, pour gérer votre participation, l'attribution et la validation de votre lot. Solution technique fournie par Fidéliz (ComDesign), sous-traitant. Vous disposez de droits (accès, rectification, effacement, opposition, limitation, retrait du consentement). En savoir plus : <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="underline">politique de confidentialité</a>.
@@ -918,15 +942,14 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         </p>
 
                         <button
-                            type="submit" 
-                            disabled={isSubmitting} 
-                            className={`w-full text-white font-bold text-lg py-4 rounded-xl mt-4 shadow-md transition-all flex items-center justify-center gap-3 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`} 
+                            type="submit"
+                            disabled={isSubmitting}
+                            className={`w-full text-white font-black text-lg py-4 rounded-2xl mt-2 shadow-lg transition-all flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'hover:brightness-110 active:scale-[0.98]'}`}
                             style={{ backgroundColor: primaryColor }}
                         >
-                            {isSubmitting && (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            )}
-                            {isSubmitting ? "TRAITEMENT EN COURS..." : "RÉCUPÉRER MON LOT"}
+                            {isSubmitting
+                                ? <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> TRAITEMENT EN COURS...</>
+                                : <>RÉCUPÉRER MON LOT <ArrowRight size={20} /></>}
                         </button>
                     </form>
                 </div>
