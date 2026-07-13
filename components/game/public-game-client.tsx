@@ -689,7 +689,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             <motion.div key="identify" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
                     <h2 className="text-4xl font-black mb-2 uppercase tracking-tighter" style={{ color: primaryColor }}>{secureMode ? "C'est parti !" : "Avant de jouer"}</h2>
-                    <p className={`text-sm mb-6 font-bold ${subTextClass}`}>{secureMode ? "Vos infos, et la roue est à vous" : "Indiquez votre e-mail pour accéder au jeu."}</p>
+                    <p className={`text-sm mb-6 font-bold ${subTextClass}`}>{secureMode ? "Vos infos, et la roue est à vous 🎡" : "Indiquez votre e-mail pour accéder au jeu."}</p>
 
                     <form onSubmit={handleIdentifySubmit} className="space-y-3">
                         {secureMode && (
