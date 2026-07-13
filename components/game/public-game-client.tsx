@@ -5,7 +5,7 @@ import { registerWinnerAction } from "@/app/actions/register-winner"
 import { checkReplayStatusAction } from "@/app/actions/check-replay"
 import { validateEmail, validatePhone } from "@/utils/contact-validation"
 import { playGameAction } from "@/app/actions/play-game"
-import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle, CalendarDays, Mail, Loader2, User, Phone, Sparkles, ArrowRight } from "lucide-react"
+import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle, CalendarDays, Mail, Loader2, User, Phone, ArrowRight } from "lucide-react"
 import confetti from "canvas-confetti"
 import { motion, AnimatePresence, Variants, useAnimation } from "framer-motion"
 import QRCode from "react-qr-code"
@@ -688,13 +688,8 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
             {step === 'IDENTIFY' && (
             <motion.div key="identify" initial="hidden" animate="visible" exit="exit" variants={slideIn} className="w-full">
                 <div className={dynamicCardClass}>
-                    <div className="mb-5 flex justify-center">
-                        <div className="p-4 rounded-2xl shadow-lg" style={{ backgroundColor: primaryColor }}>
-                            <Sparkles className="w-7 h-7 text-white" />
-                        </div>
-                    </div>
-                    <h2 className="text-2xl font-black mb-1 tracking-tight">{secureMode ? "C'est parti !" : "Avant de jouer"}</h2>
-                    <p className={`text-sm mb-6 ${subTextClass}`}>{secureMode ? "Vos infos, et la roue est à vous 🎡" : "Indiquez votre e-mail pour accéder au jeu."}</p>
+                    <h2 className="text-4xl font-black mb-2 uppercase tracking-tighter" style={{ color: primaryColor }}>{secureMode ? "C'est parti !" : "Avant de jouer"}</h2>
+                    <p className={`text-sm mb-6 font-bold ${subTextClass}`}>{secureMode ? "Vos infos, et la roue est à vous" : "Indiquez votre e-mail pour accéder au jeu."}</p>
 
                     <form onSubmit={handleIdentifySubmit} className="space-y-3">
                         {secureMode && (
@@ -724,7 +719,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                                     onChange={(e) => setFormData({ ...formData, optIn: e.target.checked })}
                                     className="mt-0.5 w-5 h-5 rounded shrink-0" style={{ accentColor: primaryColor }} />
                                 <span className={`text-xs ${subTextClass}`}>
-                                    J'accepte de recevoir les offres de <span className="font-bold">{restaurant.name}</span>. Désinscription possible à tout moment.
+                                    J'accepte de recevoir par e-mail et/ou SMS les offres, actualités et promotions de <span className="font-bold">{restaurant.name}</span>. Je peux retirer mon consentement à tout moment.
                                 </span>
                             </label>
                         )}
@@ -738,7 +733,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         <button type="submit" disabled={identifying}
                             className={`w-full py-4 rounded-2xl font-black text-white shadow-lg transition-all text-lg flex items-center justify-center gap-2 ${identifying ? 'opacity-60 cursor-not-allowed' : 'hover:brightness-110 active:scale-[0.98]'}`}
                             style={{ backgroundColor: primaryColor }}>
-                            {identifying ? <><Loader2 className="animate-spin" size={20} /> Un instant...</> : <>{secureMode ? "Jouer" : "Continuer"} <ArrowRight size={20} /></>}
+                            {identifying ? <><Loader2 className="animate-spin" size={20} /> UN INSTANT...</> : <>{secureMode ? "JOUER" : "CONTINUER"} <ArrowRight size={20} /></>}
                         </button>
                         {secureMode ? (
                             <>
