@@ -459,7 +459,7 @@ export default function NewGamePage() {
                             <ToggleSwitch
                                 checked={formData.identify_first}
                                 onChange={(val: boolean) => setFormData({ ...formData, identify_first: val })}
-                                label="Demander l'e-mail avant de jouer (anti-triche)"
+                                label="Demander les informations avant de jouer"
                                 subLabel="Le joueur s'identifie avant la roue et le lot est tiré par le serveur : impossible de rejouer pour choisir son lot."
                                 icon={Timer}
                             />

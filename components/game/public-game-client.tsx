@@ -206,14 +206,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       setIdentifyError(emailCheck.message || "Adresse e-mail invalide.")
       return
     }
-    if (secureMode) {
-      if (!formData.phone || !formData.phone.trim()) {
-        setIdentifyError("Merci d'indiquer votre numéro de mobile.")
-        return
-      }
-      const pc = validatePhone(formData.phone)
-      if (pc.status === 'invalid') { setIdentifyError(pc.message || "Numéro de téléphone invalide."); return }
+    if (!formData.phone || !formData.phone.trim()) {
+      setIdentifyError("Merci d'indiquer votre numéro de mobile.")
+      return
     }
+    const pc = validatePhone(formData.phone)
+    if (pc.status === 'invalid') { setIdentifyError(pc.message || "Numéro de téléphone invalide."); return }
     setIdentifying(true)
     try {
       const res: any = await checkReplayStatusAction({
@@ -442,12 +440,14 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       alert(emailCheck.message || "Adresse e-mail invalide.")
       return
     }
-    if (formData.phone && formData.phone.trim()) {
-      const phoneCheck = validatePhone(formData.phone)
-      if (phoneCheck.status === 'invalid') {
-        alert(phoneCheck.message || "Numéro de téléphone invalide.")
-        return
-      }
+    if (!formData.phone || !formData.phone.trim()) {
+      alert("Merci d'indiquer votre numéro de mobile.")
+      return
+    }
+    const phoneCheck = validatePhone(formData.phone)
+    if (phoneCheck.status === 'invalid') {
+      alert(phoneCheck.message || "Numéro de téléphone invalide.")
+      return
     }
 
     setIsSubmitting(true)
@@ -708,7 +708,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         </div>
                         <div className="relative">
                             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
-                            <input type="tel" required={secureMode} placeholder={secureMode ? "Téléphone mobile" : "Téléphone mobile (facultatif)"} value={formData.phone}
+                            <input type="tel" required placeholder="Téléphone mobile" value={formData.phone}
                                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                 className={`w-full p-3.5 pl-11 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 placeholder-gray-500 transition ${inputBgClass}`} />
                         </div>
@@ -918,7 +918,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                         </div>
                         <div className="relative">
                             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
-                            <input type="tel" placeholder="Téléphone mobile (facultatif)" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className={`w-full p-3.5 pl-11 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 placeholder-gray-500 transition ${inputBgClass}`}/>
+                            <input type="tel" required placeholder="Téléphone mobile" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className={`w-full p-3.5 pl-11 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 placeholder-gray-500 transition ${inputBgClass}`}/>
                         </div>
 
                         <label htmlFor="optin" className={`flex items-start gap-3 mt-1 text-left cursor-pointer rounded-xl p-2 transition-colors ${isDarkMode ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}>
