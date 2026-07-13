@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react"
 import { registerWinnerAction } from "@/app/actions/register-winner"
 import { checkReplayStatusAction } from "@/app/actions/check-replay"
+import { validateEmail, validatePhone } from "@/utils/contact-validation"
+import { playGameAction } from "@/app/actions/play-game"
 import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle, CalendarDays, Mail, Loader2 } from "lucide-react"
 import confetti from "canvas-confetti"
 import { motion, AnimatePresence, Variants, useAnimation } from "framer-motion"
@@ -111,9 +113,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   }, [game, prizes]);
 
 
-  // Rejouabilité : si activée, on identifie le joueur AVANT de jouer
+  // Rejouabilité OU mode sécurisé : on identifie le joueur AVANT de jouer
   const replayEnabled = !!game.replay_enabled
-  const [step, setStep] = useState<'IDENTIFY' | 'TOO_SOON' | 'LANDING' | 'INSTRUCTIONS' | 'VERIFYING' | 'WHEEL' | 'FORM' | 'TICKET'>(replayEnabled ? 'IDENTIFY' : 'LANDING')
+  const identifyFirst = !!(game as any).identify_first
+  const secureMode = identifyFirst // tirage serveur + enregistrement dès le 1er tour
+  const needIdentify = replayEnabled || identifyFirst
+  const [step, setStep] = useState<'IDENTIFY' | 'TOO_SOON' | 'LANDING' | 'INSTRUCTIONS' | 'VERIFYING' | 'WHEEL' | 'FORM' | 'TICKET'>(needIdentify ? 'IDENTIFY' : 'LANDING')
   const [spinning, setSpinning] = useState(false)
   const [winner, setWinner] = useState<any>(null)
   const [dbWinnerId, setDbWinnerId] = useState<string | null>(null)
@@ -192,9 +197,18 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const handleIdentifySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIdentifyError(null)
-    if (!formData.email || !formData.email.includes('@')) {
-      setIdentifyError("Merci d'indiquer une adresse e-mail valide.")
+    if (secureMode && !formData.firstName.trim()) {
+      setIdentifyError("Merci d'indiquer votre prénom.")
       return
+    }
+    const emailCheck = validateEmail(formData.email)
+    if (emailCheck.status === 'invalid') {
+      setIdentifyError(emailCheck.message || "Adresse e-mail invalide.")
+      return
+    }
+    if (secureMode && formData.phone && formData.phone.trim()) {
+      const pc = validatePhone(formData.phone)
+      if (pc.status === 'invalid') { setIdentifyError(pc.message || "Numéro de téléphone invalide."); return }
     }
     setIdentifying(true)
     try {
@@ -204,6 +218,10 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         phone: formData.phone || "",
       })
       if (!res.ok) {
+        if (res.error === 'invalid_email') {
+          setIdentifyError((res as any).message || "Adresse e-mail invalide.")
+          return
+        }
         // En cas d'erreur technique, on laisse jouer avec l'action par défaut (ne bloque pas le joueur)
         setStep('LANDING')
         return
@@ -350,8 +368,84 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     }, 400)
   }
 
+  // MODE SÉCURISÉ : le serveur tire le lot et enregistre dès le 1er tour (impossible de rejouer / choisir).
+  const handleSecureSpin = async () => {
+    if (spinning) return
+    setSpinning(true)
+    setLightMode('SPIN')
+
+    let res: any
+    try {
+      res = await playGameAction({
+        game_id: game.id,
+        email: formData.email,
+        phone: formData.phone || "",
+        first_name: formData.firstName,
+        opt_in: formData.optIn,
+      })
+    } catch {
+      res = { success: false, error: 'network' }
+    }
+
+    if (!res || !res.success) {
+      setSpinning(false)
+      setLightMode('IDLE')
+      if (res?.error === 'replay_too_soon') { setHoursLeft(res.hours_left ?? null); setStep('TOO_SOON'); return }
+      if (res?.error === 'already_played') { setHoursLeft(null); setStep('TOO_SOON'); return }
+      if (res?.error === 'stock_empty') { alert("Désolé, il n'y a plus de lots disponibles !"); setGameState('SOLD_OUT'); return }
+      if (res?.error === 'invalid_email' || res?.error === 'invalid_phone' || res?.error === 'rate_limited') {
+        alert(res.message || "Participation impossible. Vérifiez vos informations."); setStep('IDENTIFY'); return
+      }
+      alert("Une erreur est survenue. Merci de réessayer.")
+      return
+    }
+
+    // Succès : le serveur a choisi le lot, on anime la roue jusqu'à lui
+    const selectedPrizeIndex = Math.max(0, prizes.findIndex(p => p.id === res.prize_id))
+    const numSegments = prizes.length
+    const segmentAngle = 360 / numSegments
+    const winningSegmentCenter = (selectedPrizeIndex * segmentAngle) + (segmentAngle / 2)
+    const extraSpins = 360 * (5 + Math.floor(Math.random() * 5))
+    const finalRotation = extraSpins + (360 - winningSegmentCenter)
+
+    await wheelControls.start({
+      rotate: finalRotation,
+      filter: ["blur(0px)", "blur(12px)", "blur(8px)", "blur(2px)", "blur(0px)"],
+      opacity: [1, 0.7, 0.8, 0.9, 1],
+      transition: { duration: 4.5, ease: [0.12, 0, 0.39, 1], times: [0, 0.1, 0.5, 0.8, 1] }
+    })
+
+    setLightMode('WIN')
+    setWinFlash(true)
+    setTimeout(() => setWinFlash(false), 200)
+    setWinner(prizes[selectedPrizeIndex])
+    setDbWinnerId(res.ticket.qr_code)
+    confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
+
+    setTimeout(() => {
+      setStep('TICKET')
+      setSpinning(false)
+      setLightMode('IDLE')
+    }, 400)
+  }
+
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Filtre anti-faux : on bloque seulement ce qui est clairement invalide
+    const emailCheck = validateEmail(formData.email)
+    if (emailCheck.status === 'invalid') {
+      alert(emailCheck.message || "Adresse e-mail invalide.")
+      return
+    }
+    if (formData.phone && formData.phone.trim()) {
+      const phoneCheck = validatePhone(formData.phone)
+      if (phoneCheck.status === 'invalid') {
+        alert(phoneCheck.message || "Numéro de téléphone invalide.")
+        return
+      }
+    }
+
     setIsSubmitting(true)
     try {
       const result = await registerWinnerAction({
@@ -376,6 +470,16 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         if (result.error === 'replay_too_soon') {
           setHoursLeft((result as any).hours_left ?? null)
           setStep('TOO_SOON')
+          setIsSubmitting(false)
+          return
+        }
+        if (result.error === 'invalid_email' || result.error === 'invalid_phone') {
+          alert((result as any).message || "Coordonnées invalides. Merci de vérifier votre e-mail / téléphone.")
+          setIsSubmitting(false)
+          return
+        }
+        if (result.error === 'rate_limited') {
+          alert((result as any).message || "Trop de participations depuis cet appareil. Merci de réessayer plus tard.")
           setIsSubmitting(false)
           return
         }
@@ -589,12 +693,28 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     <p className={`text-sm mb-6 ${subTextClass}`}>Indiquez votre e-mail pour accéder au jeu.</p>
 
                     <form onSubmit={handleIdentifySubmit} className="space-y-3">
+                        {secureMode && (
+                            <input required placeholder="Prénom" value={formData.firstName}
+                                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                                className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`} />
+                        )}
                         <input required type="email" placeholder="Votre e-mail" value={formData.email}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                             className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`} />
                         <input type="tel" placeholder="Mobile (facultatif)" value={formData.phone}
                             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                             className={`w-full p-3 rounded-xl border outline-none focus:border-blue-500 placeholder-gray-500 ${inputBgClass}`} />
+
+                        {secureMode && (
+                            <div className="flex items-start gap-3 mt-1 text-left">
+                                <input type="checkbox" id="optin-id" checked={formData.optIn}
+                                    onChange={(e) => setFormData({ ...formData, optIn: e.target.checked })}
+                                    className="mt-1 w-5 h-5 rounded accent-blue-600" />
+                                <label htmlFor="optin-id" className={`text-xs ${subTextClass}`}>
+                                    J'accepte de recevoir par e-mail et/ou SMS les offres de <span className="font-bold">{restaurant.name}</span>. Je peux me désinscrire à tout moment.
+                                </label>
+                            </div>
+                        )}
 
                         {identifyError && (
                             <p className="text-red-500 text-xs font-bold">{identifyError}</p>
@@ -750,7 +870,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                     </div>
                 </div>
               
-                <button onClick={handleSpin} disabled={spinning} className={`font-black text-xl py-4 px-12 rounded-full shadow-lg transition-all relative z-10 ${spinning ? 'bg-slate-400 text-slate-200 cursor-not-allowed' : 'bg-gradient-to-r from-yellow-400 to-yellow-600 text-slate-900 hover:scale-105 active:scale-95'}`}>
+                <button onClick={secureMode ? handleSecureSpin : handleSpin} disabled={spinning} className={`font-black text-xl py-4 px-12 rounded-full shadow-lg transition-all relative z-10 ${spinning ? 'bg-slate-400 text-slate-200 cursor-not-allowed' : 'bg-gradient-to-r from-yellow-400 to-yellow-600 text-slate-900 hover:scale-105 active:scale-95'}`}>
                     {spinning ? "BONNE CHANCE..." : "LANCER LA ROUE"}
                 </button>
             </motion.div>

@@ -54,7 +54,7 @@ export default function ConfidentialitePage() {
               <li>consentement marketing (si la personne l'accepte) ;</li>
               <li>date et heure de participation ; lot gagné ; statut du lot (disponible, validé, expiré) ; date d'expiration ;</li>
               <li>identifiant du ticket gagnant ; QR code de validation ; commerce concerné ;</li>
-              <li>informations techniques nécessaires au fonctionnement et à la sécurité du service.</li>
+              <li>informations techniques nécessaires au fonctionnement et à la sécurité du service, dont une <strong>adresse IP pseudonymisée (hachée)</strong> utilisée uniquement pour la prévention de la fraude et la limitation des abus (jamais conservée en clair, jamais utilisée à des fins publicitaires).</li>
             </ul>
             <p className="mt-2">
               Les champs obligatoires (en général prénom et e-mail) sont indiqués dans le formulaire. Aucune donnée sensible au sens du RGPD n'est volontairement collectée.

@@ -72,7 +72,11 @@ export async function createGameAction(data: any) {
       replay_delay_hours: data.form.replay_delay_hours ? Number(data.form.replay_delay_hours) : 24,
       action_sequence: data.form.replay_enabled
         ? (data.form.action_sequence || []).filter((a: any) => a && a.url && a.url.trim())
-        : []
+        : [],
+      // Anti-triche IP
+      ip_rate_limit_per_hour: data.form.ip_rate_limit_per_hour ? Number(data.form.ip_rate_limit_per_hour) : 5,
+      // Mode sécurisé (e-mail avant de jouer + tirage serveur)
+      identify_first: !!data.form.identify_first
     }).select().single()
 
     if (gameError) throw new Error("Erreur création jeu: " + gameError.message)

@@ -81,7 +81,11 @@ export default function EditGamePage() {
     // Rejouabilité (brique 2)
     replay_enabled: false,
     replay_delay_hours: 24,
-    action_sequence: [] as { action: string; url: string }[]
+    action_sequence: [] as { action: string; url: string }[],
+    // Anti-triche : participations max par heure et par appareil (IP)
+    ip_rate_limit_per_hour: 5,
+    // Mode sécurisé : e-mail demandé avant de jouer + tirage serveur
+    identify_first: false
   })
 
   const [designData, setDesignData] = useState<any>({
@@ -165,7 +169,9 @@ export default function EditGamePage() {
                 // Rejouabilité
                 replay_enabled: game.replay_enabled || false,
                 replay_delay_hours: game.replay_delay_hours || 24,
-                action_sequence: Array.isArray(game.action_sequence) ? game.action_sequence : []
+                action_sequence: Array.isArray(game.action_sequence) ? game.action_sequence : [],
+                ip_rate_limit_per_hour: game.ip_rate_limit_per_hour || 5,
+                identify_first: game.identify_first || false
             })
 
             const isDark = restaurant?.text_color === '#FFFFFF'
@@ -553,6 +559,31 @@ export default function EditGamePage() {
                                     </div>
                                 </div>
                             )}
+                        </div>
+
+                        {/* --- MODE SÉCURISÉ --- */}
+                        <div className="border-t border-slate-100 pt-6 mt-4 space-y-2">
+                            <ToggleSwitch
+                                checked={formData.identify_first}
+                                onChange={(val: boolean) => setFormData({ ...formData, identify_first: val })}
+                                label="Demander l'e-mail avant de jouer (anti-triche)"
+                                subLabel="Le joueur s'identifie avant la roue et le lot est tiré par le serveur : impossible de rejouer pour choisir son lot."
+                                icon={Timer}
+                            />
+                            <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-snug">💡 Plus sûr, mais l'e-mail est demandé avant de jouer (un peu plus de friction). Laissez désactivé pour un tunnel plus fluide (e-mail à la fin) si vous n'avez pas de souci de triche.</p>
+                        </div>
+
+                        {/* --- ANTI-TRICHE (IP) --- */}
+                        <div className="border-t border-slate-100 pt-6 mt-4">
+                            <label className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">🛡️ Anti-triche : participations max / heure / appareil</label>
+                            <div className="flex items-center gap-3">
+                                <input type="number" min={1}
+                                    value={formData.ip_rate_limit_per_hour}
+                                    onChange={e => setFormData({ ...formData, ip_rate_limit_per_hour: parseInt(e.target.value) || 1 })}
+                                    className="w-24 p-3 border rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-blue-500 text-lg font-bold text-center" />
+                                <span className="text-sm text-slate-500 font-medium">participations / heure</span>
+                            </div>
+                            <p className="text-[11px] text-amber-800 mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-snug">⚠️ Si vos clients jouent sur le <b>même WiFi</b> (celui du restaurant), gardez une valeur assez haute (ex. 10-15) pour ne pas bloquer de vrais clients. Descendez bas (ex. 1-2) seulement si chacun joue sur sa propre connexion mobile (4G).</p>
                         </div>
                     </div>
                 )}

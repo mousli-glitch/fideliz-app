@@ -10,11 +10,9 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Rate-limit : nombre max de participations par IP sur la fenêtre glissante
 const RATE_LIMIT_MAX = 5
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 heure
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 
-// IP hashée (RGPD) : on ne stocke jamais l'IP en clair
 async function getIpHash(): Promise<string | null> {
   try {
     const h = await headers()
@@ -28,14 +26,10 @@ async function getIpHash(): Promise<string | null> {
   }
 }
 
-// Enregistrement d'un gagnant via la fonction SQL transactionnelle `register_win` :
-// - décrémentation atomique du stock (jamais négatif)
-// - anti-rejeu (1 participation par e-mail et par jeu) / délai si rejouabilité
-// - création du contact CRM (non bloquante)
-// - rate-limit par IP (anti-spam rapide, sans bloquer les clients d'un même WiFi)
-export async function registerWinnerAction(data: any) {
+// MODE SÉCURISÉ : le joueur est identifié AVANT la roue ; le serveur fait le tirage
+// et enregistre la participation en une seule fois (impossible de rejouer / choisir son lot).
+export async function playGameAction(data: any) {
   try {
-    // Filtre anti-faux (backstop serveur) : bloque les contacts clairement invalides
     const emailCheck = validateEmail(data.email)
     if (emailCheck.status === 'invalid') {
       return { success: false, error: 'invalid_email', message: emailCheck.message }
@@ -49,32 +43,24 @@ export async function registerWinnerAction(data: any) {
       cleanPhone = phoneCheck.clean
     }
 
-    // Rate-limit par IP : trop de participations récentes depuis la même IP = on bloque temporairement.
-    // Le seuil est réglable par jeu (games.ip_rate_limit_per_hour), défaut 5.
+    // Rate-limit IP (seuil réglable par jeu)
     const ipHash = await getIpHash()
     if (ipHash) {
       let maxPerHour = RATE_LIMIT_MAX
       const { data: g } = await supabaseAdmin
-        .from('games')
-        .select('ip_rate_limit_per_hour')
-        .eq('id', data.game_id)
-        .single()
+        .from('games').select('ip_rate_limit_per_hour').eq('id', data.game_id).single()
       if (g && (g as any).ip_rate_limit_per_hour) maxPerHour = Number((g as any).ip_rate_limit_per_hour)
-
       const since = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
       const { count } = await supabaseAdmin
-        .from('winners')
-        .select('id', { count: 'exact', head: true })
-        .eq('ip_hash', ipHash)
-        .gt('created_at', since)
+        .from('winners').select('id', { count: 'exact', head: true })
+        .eq('ip_hash', ipHash).gt('created_at', since)
       if ((count ?? 0) >= maxPerHour) {
         return { success: false, error: 'rate_limited', message: "Trop de participations depuis cet appareil. Merci de réessayer plus tard." }
       }
     }
 
-    const { data: result, error } = await supabaseAdmin.rpc('register_win', {
+    const { data: result, error } = await supabaseAdmin.rpc('play_game', {
       p_game_id: data.game_id,
-      p_prize_id: data.prize_id,
       p_email: emailCheck.clean,
       p_phone: cleanPhone,
       p_first_name: data.first_name,
@@ -82,22 +68,21 @@ export async function registerWinnerAction(data: any) {
     })
 
     if (error) {
-      console.error("❌ Erreur RPC register_win:", error.message)
+      console.error("❌ Erreur RPC play_game:", error.message)
       return { success: false, error: error.message }
     }
-
     if (!result?.success) {
-      // Cas métier : already_played, stock_empty, replay_too_soon, game_not_found, prize_not_found
-      return { success: false, error: result?.error || "unknown_error", hours_left: result?.hours_left ?? null }
+      return { success: false, error: result?.error || 'unknown_error', hours_left: result?.hours_left ?? null, message: (result as any)?.message }
     }
 
-    // On enregistre l'IP hashée sur la participation (pour le rate-limit futur)
     if (ipHash && result.winner_id) {
       await supabaseAdmin.from('winners').update({ ip_hash: ipHash }).eq('id', result.winner_id)
     }
 
     return {
       success: true,
+      prize_id: result.prize_id,
+      prize_label: result.prize_label,
       ticket: {
         winner_id: result.winner_id,
         qr_code: result.qr_code,
@@ -106,7 +91,7 @@ export async function registerWinnerAction(data: any) {
       },
     }
   } catch (e: any) {
-    console.error("🚨 Crash registerWinnerAction:", e)
+    console.error("🚨 Crash playGameAction:", e)
     return { success: false, error: e.message }
   }
 }

@@ -37,6 +37,10 @@ export async function updateGameAction(gameId: string, data: any) {
       action_sequence: data.form.replay_enabled
         ? (data.form.action_sequence || []).filter((a: any) => a && a.url && a.url.trim())
         : [],
+      // Anti-triche IP
+      ip_rate_limit_per_hour: data.form.ip_rate_limit_per_hour ? Number(data.form.ip_rate_limit_per_hour) : 5,
+      // Mode sécurisé (e-mail avant de jouer + tirage serveur)
+      identify_first: !!data.form.identify_first,
 
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
