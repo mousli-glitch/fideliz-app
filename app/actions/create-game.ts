@@ -25,7 +25,7 @@ export async function createGameAction(data: any) {
     // Trouver le restaurant
     const { data: restaurant, error: restoError } = await supabaseAdmin
         .from("restaurants")
-        .select("id")
+        .select("id, replay_enabled, replay_delay_hours, action_sequence, identify_first, ip_rate_limit_per_hour")
         .eq("slug", data.slug)
         .single()
 
@@ -67,16 +67,12 @@ export async function createGameAction(data: any) {
       is_date_limit_active: !!data.form.is_date_limit_active,
       start_date: data.form.start_date ? new Date(data.form.start_date).toISOString() : null,
       end_date: data.form.end_date ? new Date(data.form.end_date).toISOString() : null,
-      // Rejouabilité
-      replay_enabled: !!data.form.replay_enabled,
-      replay_delay_hours: data.form.replay_delay_hours ? Number(data.form.replay_delay_hours) : 24,
-      action_sequence: data.form.replay_enabled
-        ? (data.form.action_sequence || []).filter((a: any) => a && a.url && a.url.trim())
-        : [],
-      // Anti-triche IP
-      ip_rate_limit_per_hour: data.form.ip_rate_limit_per_hour ? Number(data.form.ip_rate_limit_per_hour) : 5,
-      // Mode sécurisé (e-mail avant de jouer + tirage serveur)
-      identify_first: !!data.form.identify_first
+      // Config héritée du RESTAURANT (rejouabilité, mode sécurisé, anti-triche)
+      replay_enabled: !!(restaurant as any).replay_enabled,
+      replay_delay_hours: (restaurant as any).replay_delay_hours || 24,
+      action_sequence: (restaurant as any).action_sequence || [],
+      ip_rate_limit_per_hour: (restaurant as any).ip_rate_limit_per_hour || 5,
+      identify_first: !!(restaurant as any).identify_first
     }).select().single()
 
     if (gameError) throw new Error("Erreur création jeu: " + gameError.message)
