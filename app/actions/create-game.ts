@@ -62,8 +62,9 @@ export async function createGameAction(data: any) {
       card_style: data.design.card_style || 'light',
       wheel_palette: data.design.wheel_palette,
       overlay_style: data.design.overlay_style || 'dark',
-      // Conditions (dates / stock)
+      // Conditions (dates / stock / menu)
       is_stock_limit_active: !!data.form.is_stock_limit_active,
+      requires_menu: !!data.form.requires_menu,
       is_date_limit_active: !!data.form.is_date_limit_active,
       start_date: data.form.start_date ? new Date(data.form.start_date).toISOString() : null,
       end_date: data.form.end_date ? new Date(data.form.end_date).toISOString() : null,

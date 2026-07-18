@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createGameAction } from "@/app/actions/create-game"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Sun, Rocket, Trash2, Plus, AlertCircle, CheckCircle, Calendar, Package, Wand2, Euro, Timer } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Sun, Rocket, Trash2, Plus, AlertCircle, CheckCircle, Calendar, Package, Wand2, Euro, Timer, Utensils } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader"
@@ -53,6 +53,7 @@ export default function NewGamePage() {
     validity_days: 30, 
     min_spend: 0,
     has_min_spend: false,
+    requires_menu: false,
     is_date_limit_active: false,
     start_date: "",
     end_date: "",
@@ -322,6 +323,14 @@ export default function NewGamePage() {
                                     )}
                                 </div>
                             </div>
+
+                            <ToggleSwitch
+                                checked={formData.requires_menu}
+                                onChange={(val: boolean) => setFormData({ ...formData, requires_menu: val })}
+                                label="Menu consommé obligatoire"
+                                subLabel="Le client doit avoir consommé un menu pour bénéficier de son lot."
+                                icon={Utensils}
+                            />
                         </div>
 
                     </div>

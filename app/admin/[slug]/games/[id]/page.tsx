@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, CheckCircle, AlertCircle, Calendar, Package, Wand2, Euro, Timer } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, CheckCircle, AlertCircle, Calendar, Package, Wand2, Euro, Timer, Utensils } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
@@ -61,6 +61,7 @@ export default function EditGamePage() {
     validity_days: 30, 
     min_spend: 0,
     has_min_spend: false,
+    requires_menu: false,
     // Nouveaux champs
     is_date_limit_active: false,
     start_date: "",
@@ -126,6 +127,7 @@ export default function EditGamePage() {
                 validity_days: game.validity_days || 30,
                 min_spend: game.min_spend ? Number(game.min_spend) : 0,
                 has_min_spend: Number(game.min_spend) > 0,
+                requires_menu: game.requires_menu || false,
                 // Chargement des nouveaux champs
                 is_date_limit_active: game.is_date_limit_active || false,
                 start_date: game.start_date ? game.start_date.split('T')[0] : "",
@@ -422,6 +424,14 @@ export default function EditGamePage() {
                                     )}
                                 </div>
                             </div>
+
+                            <ToggleSwitch
+                                checked={formData.requires_menu}
+                                onChange={(val: boolean) => setFormData({ ...formData, requires_menu: val })}
+                                label="Menu consommé obligatoire"
+                                subLabel="Le client doit avoir consommé un menu pour bénéficier de son lot."
+                                icon={Utensils}
+                            />
                         </div>
 
                     </div>

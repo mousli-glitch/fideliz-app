@@ -61,6 +61,7 @@ type Props = {
     start_date?: string;
     end_date?: string;
     is_stock_limit_active?: boolean;
+    requires_menu?: boolean;
     // Rejouabilité
     replay_enabled?: boolean;
     replay_delay_hours?: number;
@@ -1000,6 +1001,9 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                       <div className="w-full text-left bg-gray-900 p-3 rounded-xl border border-gray-800 mb-5">
                           <div className="flex justify-between mb-2"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
                           <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
+                          {game.requires_menu && (
+                            <div className="flex justify-between mt-2"><span className="text-xs text-gray-400 font-bold">Condition :</span><span className="text-xs font-bold text-white">Menu consommé</span></div>
+                          )}
                       </div>
 
                       {/* 7 & 8. Boutons : principal puis secondaire — écran uniquement */}

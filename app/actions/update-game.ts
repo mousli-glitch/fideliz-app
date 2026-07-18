@@ -30,6 +30,8 @@ export async function updateGameAction(gameId: string, data: any) {
       start_date: data.form.is_date_limit_active && data.form.start_date ? new Date(data.form.start_date).toISOString() : null,
       end_date: data.form.is_date_limit_active && data.form.end_date ? new Date(data.form.end_date).toISOString() : null,
       is_stock_limit_active: data.form.is_stock_limit_active,
+      // Condition : consommation d'un menu obligatoire
+      requires_menu: !!data.form.requires_menu,
 
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
