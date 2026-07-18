@@ -134,6 +134,36 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const [identifyError, setIdentifyError] = useState<string | null>(null)
   const [hoursLeft, setHoursLeft] = useState<number | null>(null)
 
+  // Luminosité du logo : un logo foncé doit être posé sur un fond blanc pour rester visible
+  // sur le ticket (dont l'en-tête est sombre). Par défaut on suppose « foncé » (cas le plus courant).
+  const [logoIsLight, setLogoIsLight] = useState<boolean>(false)
+  useEffect(() => {
+    if (!restaurant.logo_url) return
+    let cancelled = false
+    const img = new window.Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const size = 40
+        const c = document.createElement('canvas')
+        c.width = size; c.height = size
+        const ctx = c.getContext('2d')
+        if (!ctx) return
+        ctx.drawImage(img, 0, 0, size, size)
+        const d = ctx.getImageData(0, 0, size, size).data
+        let sum = 0, count = 0
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 40) continue // on ignore les pixels transparents
+          sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
+          count++
+        }
+        if (!cancelled) setLogoIsLight(count > 0 && sum / count > 150)
+      } catch { /* image non lisible : on garde « foncé » -> fond blanc */ }
+    }
+    img.src = restaurant.logo_url
+    return () => { cancelled = true }
+  }, [restaurant.logo_url])
+
   const [lightOffset, setLightOffset] = useState(0);
   const [lightMode, setLightMode] = useState<'IDLE' | 'SPIN' | 'WIN'>('IDLE');
   const [winFlash, setWinFlash] = useState(false); 
@@ -961,7 +991,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                       <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-black rounded-full z-10"></div>
                        
                       {restaurant.logo_url && (
-                          <img src={restaurant.logo_url} alt={restaurant.name} className="w-16 h-16 sm:w-24 sm:h-24 object-contain bg-white/5 rounded-lg p-1" />
+                          <img src={restaurant.logo_url} alt={restaurant.name} className={`w-16 h-16 sm:w-24 sm:h-24 object-contain rounded-lg p-1.5 ${logoIsLight ? 'bg-white/5' : 'bg-white'}`} />
                       )}
                        
                       <div>
@@ -1000,9 +1030,10 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                       {/* 6. Validité + minimum de commande */}
                       <div className="w-full text-left bg-gray-900 p-3 rounded-xl border border-gray-800 mb-5">
                           <div className="flex justify-between mb-2"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
-                          <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
-                          {game.requires_menu && (
-                            <div className="flex justify-between mt-2"><span className="text-xs text-gray-400 font-bold">Condition :</span><span className="text-xs font-bold text-white">Menu consommé</span></div>
+                          {game.requires_menu ? (
+                            <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Condition :</span><span className="text-xs font-bold text-white">Menu consommé obligatoire</span></div>
+                          ) : (
+                            <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
                           )}
                       </div>
 
