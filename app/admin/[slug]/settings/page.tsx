@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { updateRestaurantSettings } from "@/app/actions/update-restaurant-settings"
-import { Loader2, Save, Store, Globe, Mail, Copy, Check, Wallet, ShieldCheck, Repeat, Timer, Plus, ArrowUp, ArrowDown, X } from "lucide-react"
+import { getGoogleLocationsAction, saveGoogleLocationAction } from "@/app/actions/google-business"
+import { Loader2, Save, Store, Globe, Mail, Copy, Check, Wallet, ShieldCheck, Repeat, Timer, Plus, ArrowUp, ArrowDown, X, Star, MapPin } from "lucide-react"
 import { useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 
@@ -40,6 +41,37 @@ export default function AdminSettingsPage() {
 
   const params = useParams()
   const supabase = createClient()
+
+  // Avis Google : choix de l'établissement
+  const [gLocations, setGLocations] = useState<any[]>([])
+  const [gLoadingLocations, setGLoadingLocations] = useState(false)
+  const [gError, setGError] = useState<string | null>(null)
+
+  const googleConnected = !!(restaurant?.google_refresh_token || restaurant?.google_access_token)
+
+  const loadGoogleLocations = async () => {
+    setGLoadingLocations(true)
+    setGError(null)
+    try {
+      const res = await getGoogleLocationsAction(restaurant.id)
+      if (res.success && res.locations) setGLocations(res.locations)
+      else setGError(res.error || "Impossible de récupérer vos établissements.")
+    } catch (e: any) {
+      setGError(e.message)
+    } finally {
+      setGLoadingLocations(false)
+    }
+  }
+
+  const chooseGoogleLocation = async (locId: string) => {
+    const res = await saveGoogleLocationAction(restaurant.id, locId)
+    if (res.success) {
+      setRestaurant({ ...restaurant, google_location_id: locId })
+      setGLocations([])
+    } else {
+      alert("❌ " + res.error)
+    }
+  }
 
   // Séquence d'actions (rejouabilité)
   const seq: { action: string; url: string }[] = Array.isArray(restaurant?.action_sequence) ? restaurant.action_sequence : []
@@ -88,6 +120,7 @@ export default function AdminSettingsPage() {
         replay_delay_hours: restaurant.replay_delay_hours ? Number(restaurant.replay_delay_hours) : 24,
         action_sequence: restaurant.replay_enabled ? seq.filter((a) => a && a.url && a.url.trim()) : [],
         ip_rate_limit_per_hour: restaurant.ip_rate_limit_per_hour ? Number(restaurant.ip_rate_limit_per_hour) : 5,
+        ai_tone: restaurant.ai_tone || 'amical',
       })
       if (res.success) {
         alert("✅ Paramètres mis à jour !")
@@ -269,6 +302,82 @@ export default function AdminSettingsPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* SECTION 4 : AVIS GOOGLE (BÊTA) */}
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-bold text-slate-800">
+              <Star size={20} className="text-yellow-500" /> Avis Google
+            </div>
+            <span className="text-[10px] font-black uppercase bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">Bêta</span>
+          </div>
+
+          {!googleConnected ? (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500">Connectez votre fiche Google pour voir vos avis clients et y répondre (avec l'aide de l'IA) directement depuis Fidéliz.</p>
+              <a
+                href={`/api/auth/google?state=${restaurant.slug}`}
+                className="inline-flex items-center gap-3 bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-600 transition-all"
+              >
+                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5 bg-white rounded-full p-0.5" alt="" />
+                Connecter mon compte Google
+              </a>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-100 rounded-xl px-4 py-3 text-sm font-bold">
+                <Check size={16} /> Compte Google connecté
+              </div>
+
+              {!restaurant.google_location_id ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-slate-500">Dernière étape : choisissez votre établissement.</p>
+                  {gLocations.length === 0 ? (
+                    <button type="button" onClick={loadGoogleLocations} disabled={gLoadingLocations}
+                      className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50">
+                      {gLoadingLocations ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
+                      Chercher mes établissements
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      {gLocations.map((loc) => (
+                        <button key={loc.id} type="button" onClick={() => chooseGoogleLocation(loc.id)}
+                          className="w-full text-left p-3 border-2 border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all">
+                          <p className="font-bold text-slate-800 text-sm">{loc.title}</p>
+                          <p className="text-xs text-slate-400">{loc.address}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {gError && <p className="text-xs text-red-500 font-bold">{gError}</p>}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-slate-600 text-sm font-medium">
+                  <MapPin size={16} className="text-blue-500" /> Établissement lié ✓
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Ton des réponses IA</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'amical', label: '😊 Amical' },
+                    { id: 'professionnel', label: '👔 Professionnel' },
+                    { id: 'dynamique', label: '⚡ Dynamique' },
+                  ].map((t) => (
+                    <button key={t.id} type="button" onClick={() => setRestaurant({ ...restaurant, ai_tone: t.id })}
+                      className={`p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${(restaurant.ai_tone || 'amical') === t.id ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2 italic">Utilisé pour générer vos réponses dans l'onglet « Avis Google ».</p>
+              </div>
+
+              <a href={`/api/auth/google?state=${restaurant.slug}`} className="text-xs text-slate-400 underline hover:text-slate-600">Reconnecter le compte Google</a>
+            </div>
+          )}
         </div>
 
         {/* Bouton Sauvegarder */}

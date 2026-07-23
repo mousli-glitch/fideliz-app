@@ -21,6 +21,8 @@ type RestaurantSettingsUpdate = {
   replay_delay_hours?: number
   action_sequence?: { action: string; url: string }[]
   ip_rate_limit_per_hour?: number
+  // Avis Google : ton des réponses IA
+  ai_tone?: string
 }
 
 // Champs de config qui doivent être répercutés sur les jeux du restaurant

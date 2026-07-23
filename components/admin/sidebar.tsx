@@ -1,6 +1,6 @@
 "use client"
 
-import { LayoutDashboard, Gamepad2, Trophy, Settings, Users, LogOut, X, ScanLine } from "lucide-react"
+import { LayoutDashboard, Gamepad2, Trophy, Settings, Users, LogOut, X, ScanLine, Star } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
@@ -111,6 +111,20 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any; onClose?: ()
           }`}
         >
           <ScanLine size={20} className="group-hover:scale-110 transition-transform" /> Scanner
+        </Link>
+
+        <Link
+          href={safeHref("/reviews")}
+          onClick={onClose}
+          className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+            isActive("/reviews")
+              ? "bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50"
+              : "hover:bg-slate-800 text-slate-400"
+          }`}
+        >
+          <Star size={20} className={`group-hover:scale-110 transition-transform ${isActive("/reviews") ? "text-white" : "text-yellow-500"}`} /> Avis Google
+          <span className="ml-auto text-[9px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">Bêta</span>
+          <span className="ml-auto text-[9px] font-black uppercase bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">Bêta</span>
         </Link>
 
         <Link
