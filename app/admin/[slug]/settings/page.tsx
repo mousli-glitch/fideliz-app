@@ -120,8 +120,8 @@ export default function AdminSettingsPage() {
         replay_delay_hours: restaurant.replay_delay_hours ? Number(restaurant.replay_delay_hours) : 24,
         action_sequence: restaurant.replay_enabled ? seq.filter((a) => a && a.url && a.url.trim()) : [],
         ip_rate_limit_per_hour: restaurant.ip_rate_limit_per_hour ? Number(restaurant.ip_rate_limit_per_hour) : 5,
-        ai_tone: restaurant.ai_tone || 'amical',
-      })
+        auto_reply_tone: restaurant.auto_reply_tone || 'amical',
+      } as any)
       if (res.success) {
         alert("✅ Paramètres mis à jour !")
       } else {
@@ -366,8 +366,8 @@ export default function AdminSettingsPage() {
                     { id: 'professionnel', label: '👔 Professionnel' },
                     { id: 'dynamique', label: '⚡ Dynamique' },
                   ].map((t) => (
-                    <button key={t.id} type="button" onClick={() => setRestaurant({ ...restaurant, ai_tone: t.id })}
-                      className={`p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${(restaurant.ai_tone || 'amical') === t.id ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                    <button key={t.id} type="button" onClick={() => setRestaurant({ ...restaurant, auto_reply_tone: t.id })}
+                      className={`p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${(restaurant.auto_reply_tone || 'amical') === t.id ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
                       {t.label}
                     </button>
                   ))}

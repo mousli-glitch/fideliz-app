@@ -142,37 +142,52 @@ export async function getGoogleLocationsAction(restaurantId: string) {
 
     // ÉTAPE 2 : Récupérer les établissements pour chaque compte
     let allLocations: any[] = []
+    let lastLocError: string | null = null
 
     for (const account of accounts) {
       console.log(`🔎 Recherche lieux pour le compte: ${account.name} (${account.accountName})`)
-      
-      const locationsUrl = `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title,storeCode,metadata,formattedAddress`
-      
+
+      // ⚠️ readMask : uniquement des champs VALIDES de l'API Business Information.
+      // "formattedAddress" n'existe PAS ici (provoque un 400) → on utilise "storefrontAddress".
+      const locationsUrl = `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title,storeCode,storefrontAddress&pageSize=100`
+
       const locResponse = await fetch(locationsUrl, {
         headers: { Authorization: `Bearer ${accessToken}` }
       })
 
       const locData = await locResponse.json()
-      console.log(`📩 Réponse API Locations pour ${account.name}:`, JSON.stringify(locData, null, 2))
 
       if (locResponse.ok && locData.locations) {
-          // On mémorise le compte parent de chaque établissement (nécessaire pour l'API des avis)
           allLocations = [...allLocations, ...locData.locations.map((l: any) => ({ ...l, _accountName: account.name }))]
       } else if (!locResponse.ok) {
-          console.error(`❌ Erreur API Locations pour ${account.name}:`, locData)
+          console.error(`❌ Erreur API Locations pour ${account.name}:`, JSON.stringify(locData))
+          lastLocError = locData?.error?.message || `Erreur ${locResponse.status}`
       }
     }
 
     console.log(`✅ Total établissements trouvés : ${allLocations.length}`)
 
-    const formattedLocations = allLocations.map((loc: any) => ({
-      // ⚠️ On stocke le chemin COMPLET (accounts/XXX/locations/YYY) : c'est le format
-      // exigé par l'API des avis. Le format court "locations/YYY" provoque un 404.
-      id: `${loc._accountName}/${loc.name}`,
-      title: loc.title,
-      address: loc.formattedAddress || "Adresse non spécifiée",
-      storeCode: loc.storeCode || "N/A"
-    }))
+    // Aucun établissement : on remonte une VRAIE erreur (fini le silence)
+    if (allLocations.length === 0) {
+      if (lastLocError) {
+        return { success: false, error: `Google : ${lastLocError}. Vérifiez que l'API « Business Information » est activée et que ce compte gère bien une fiche.` }
+      }
+      return { success: false, error: "Aucun établissement trouvé sur ce compte Google. Connectez le compte qui possède la fiche du restaurant." }
+    }
+
+    const formattedLocations = allLocations.map((loc: any) => {
+      const a = loc.storefrontAddress
+      const address = a
+        ? [(a.addressLines || []).join(" "), a.locality, a.postalCode].filter(Boolean).join(", ")
+        : "Adresse non spécifiée"
+      return {
+        // On stocke le chemin COMPLET (accounts/XXX/locations/YYY) : format exigé par l'API des avis.
+        id: `${loc._accountName}/${loc.name}`,
+        title: loc.title,
+        address,
+        storeCode: loc.storeCode || "N/A"
+      }
+    })
 
     return { success: true, locations: formattedLocations }
 
