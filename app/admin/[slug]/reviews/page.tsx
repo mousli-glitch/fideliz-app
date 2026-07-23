@@ -14,7 +14,10 @@ export default function AdminReviewsPage() {
   const [generatingId, setGeneratingId] = useState<string | null>(null)
   const [publishingId, setPublishingId] = useState<string | null>(null)
   const [responses, setResponses] = useState<Record<string, string>>({})
-  
+  const [ratingFilter, setRatingFilter] = useState<number | null>(null)
+  const [sortOrder, setSortOrder] = useState<'recent' | 'old'>('recent')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'todo' | 'done'>('all')
+
   const params = useParams()
   const supabase = createClient()
 
@@ -50,6 +53,7 @@ export default function AdminReviewsPage() {
                     : r.starRating,
                   comment: r.comment || "(Avis sans texte)",
                   date: new Date(r.createTime).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
+                  createTimeRaw: r.createTime,
                   reply: r.reply // Réponse existante
                 }))
                 setReviews(formatted)
@@ -68,16 +72,16 @@ export default function AdminReviewsPage() {
   const handleGenerateAI = async (reviewId: string, comment: string, rating?: number) => {
     setGeneratingId(reviewId)
     try {
-      const aiResponseString = await generateAIResponse(
+      const res = await generateAIResponse(
         comment,
         restaurant?.auto_reply_tone || 'amical',
         restaurant?.name || 'Notre établissement',
         rating
       )
-      if (aiResponseString) {
-        setResponses(prev => ({ ...prev, [reviewId]: aiResponseString }))
+      if (res.ok) {
+        setResponses(prev => ({ ...prev, [reviewId]: res.text }))
       } else {
-        alert("La génération n'a pas abouti. Réessayez dans un instant.")
+        alert("Génération impossible : " + res.error)
       }
     } catch (err) {
       console.error("Erreur IA:", err)
@@ -126,6 +130,18 @@ export default function AdminReviewsPage() {
     }
   }
 
+  // Liste filtrée + triée
+  const visibleReviews = reviews
+    .filter(r => ratingFilter == null || r.rating === ratingFilter)
+    .filter(r => statusFilter === 'all' ? true : statusFilter === 'done' ? !!r.reply : !r.reply)
+    .sort((a, b) => {
+      const ta = new Date(a.createTimeRaw || 0).getTime()
+      const tb = new Date(b.createTimeRaw || 0).getTime()
+      return sortOrder === 'recent' ? tb - ta : ta - tb
+    })
+  const avgRating = reviews.length ? (reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) : 0
+  const pendingCount = reviews.filter(r => !r.reply).length
+
   // Écran de chargement
   if (loading) {
     return (
@@ -154,11 +170,27 @@ export default function AdminReviewsPage() {
 
   return (
     <div className="max-w-5xl mx-auto p-8 space-y-8">
-      <div>
-        <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
-          <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-8 h-8"/> Gestion des Avis Google
-        </h1>
-        <p className="text-slate-500 font-medium mt-1">Répondez à vos clients en un clic grâce à l'IA Fideliz.</p>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-8 h-8"/> Avis Google
+          </h1>
+          <p className="text-slate-500 font-medium mt-1">Répondez à vos clients en un clic grâce à l'IA Fidéliz.</p>
+        </div>
+        <div className="flex gap-3">
+          <div className="bg-white border border-slate-200 rounded-2xl px-4 py-2 text-center shadow-sm">
+            <p className="text-lg font-black text-slate-800 flex items-center gap-1 justify-center">{avgRating.toFixed(1)} <Star size={16} className="text-yellow-500 fill-yellow-500" /></p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Note moyenne</p>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl px-4 py-2 text-center shadow-sm">
+            <p className="text-lg font-black text-slate-800">{reviews.length}</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Avis</p>
+          </div>
+          <div className={`rounded-2xl px-4 py-2 text-center shadow-sm border ${pendingCount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
+            <p className={`text-lg font-black ${pendingCount > 0 ? 'text-amber-600' : 'text-slate-800'}`}>{pendingCount}</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">À traiter</p>
+          </div>
+        </div>
       </div>
 
       {/* RÉPONSE AUTOMATIQUE */}
@@ -213,11 +245,44 @@ export default function AdminReviewsPage() {
         )}
       </div>
 
+      {/* BARRE DE FILTRES */}
+      {reviews.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-wrap items-center gap-2 shadow-sm">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-400 px-2">Notes</span>
+          <button onClick={() => setRatingFilter(null)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${ratingFilter == null ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>Toutes</button>
+          {[5, 4, 3, 2, 1].map((n) => (
+            <button key={n} onClick={() => setRatingFilter(ratingFilter === n ? null : n)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${ratingFilter === n ? 'bg-yellow-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              {n} <Star size={11} className={ratingFilter === n ? 'fill-white' : 'fill-yellow-500 text-yellow-500'} />
+            </button>
+          ))}
+
+          <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block" />
+
+          <button onClick={() => setStatusFilter(statusFilter === 'todo' ? 'all' : 'todo')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'todo' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>À traiter</button>
+          <button onClick={() => setStatusFilter(statusFilter === 'done' ? 'all' : 'done')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statusFilter === 'done' ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Répondu</button>
+
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-wider text-slate-400">Trier</span>
+            <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as any)}
+              className="text-xs font-bold border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+              <option value="recent">Plus récents</option>
+              <option value="old">Plus anciens</option>
+            </select>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-6">
         {reviews.length === 0 ? (
           <p className="text-center p-20 text-slate-400 font-bold bg-white rounded-2xl border border-slate-200">Aucun avis trouvé sur votre fiche Google pour le moment.</p>
+        ) : visibleReviews.length === 0 ? (
+          <p className="text-center p-12 text-slate-400 font-bold bg-white rounded-2xl border border-slate-200">Aucun avis ne correspond à ce filtre.</p>
         ) : (
-          reviews.map((review) => (
+          visibleReviews.map((review) => (
             <div key={review.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row">
               {/* L'AVIS CLIENT */}
               <div className="p-6 md:w-1/2 border-b md:border-b-0 md:border-r border-slate-100 bg-slate-50/50">

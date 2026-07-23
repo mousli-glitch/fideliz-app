@@ -53,15 +53,15 @@ export async function GET(request: Request) {
         const rating = STAR_MAP[review.starRating] || Number(review.starRating) || 0
         if (rating < minRating) { skipped++; continue }
 
-        const text = await generateAIResponse(
+        const gen = await generateAIResponse(
           review.comment || "",
           tone,
           resto.name,
           rating
         )
-        if (!text) { failed++; continue }
+        if (!gen.ok) { failed++; continue }
 
-        const pub = await replyToGoogleReviewAction(resto.id, review.reviewId, text)
+        const pub = await replyToGoogleReviewAction(resto.id, review.reviewId, gen.text)
         if (pub.success) {
           replied++
           // Trace dans les logs système (visible côté root)

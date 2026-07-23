@@ -6,17 +6,19 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
+export type AIResult = { ok: true; text: string } | { ok: false; error: string }
+
 // Génère une réponse à un avis Google, adaptée au TON choisi ET à la NOTE de l'avis.
-// Renvoie null en cas d'échec (jamais un texte d'excuse, pour ne pas risquer de le publier).
+// Renvoie une raison d'échec claire (jamais un texte d'excuse publiable par erreur).
 export async function generateAIResponse(
   reviewText: string,
   tone: string,
   restaurantName: string,
   rating?: number
-) {
+): Promise<AIResult> {
   if (!process.env.OPENAI_API_KEY) {
     console.error("❌ Clé API OpenAI manquante")
-    return null
+    return { ok: false, error: "Clé OpenAI absente en production (à ajouter dans les variables Vercel)." }
   }
 
   const toneInstructions = {
@@ -58,9 +60,13 @@ Rédige une réponse à ce client en respectant STRICTEMENT ces consignes :
     })
 
     const text = response.choices[0]?.message?.content?.trim()
-    return text && text.length > 0 ? text : null
-  } catch (error) {
+    if (!text) return { ok: false, error: "L'IA a renvoyé une réponse vide." }
+    return { ok: true, text }
+  } catch (error: any) {
     console.error("Erreur OpenAI:", error)
-    return null
+    const msg = error?.status === 401 ? "Clé OpenAI invalide."
+      : error?.status === 429 ? "Quota/crédit OpenAI épuisé (vérifiez la facturation OpenAI)."
+      : error?.message || "Erreur de connexion à l'IA."
+    return { ok: false, error: msg }
   }
 }
