@@ -5,7 +5,7 @@ import { Star, MessageSquare, Loader2, Send, Sparkles, RefreshCcw, AlertCircle, 
 import { useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { generateAIResponse } from "@/app/actions/ai"
-import { getGoogleReviews, replyToGoogleReviewAction, saveAutoReplySettingsAction } from "@/app/actions/google-business"
+import { getStoredReviews, syncGoogleReviews, saveReviewDraft, replyToGoogleReviewAction, saveAutoReplySettingsAction } from "@/app/actions/google-business"
 
 export default function AdminReviewsPage() {
   const [restaurant, setRestaurant] = useState<any>(null)
@@ -17,50 +17,63 @@ export default function AdminReviewsPage() {
   const [ratingFilter, setRatingFilter] = useState<number | null>(null)
   const [sortOrder, setSortOrder] = useState<'recent' | 'old'>('recent')
   const [statusFilter, setStatusFilter] = useState<'all' | 'todo' | 'done'>('all')
+  const [googleStats, setGoogleStats] = useState<{ avg: number; total: number } | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [lastSync, setLastSync] = useState<string | null>(null)
 
   const params = useParams()
   const supabase = createClient()
 
-  // 1. Charger les données du resto et ses vrais avis
+  // Lit les avis DEPUIS LA BASE (instantané, aucun appel Google) et remplit l'affichage.
+  const loadFromDb = async (restaurantId: string) => {
+    const res = await getStoredReviews(restaurantId)
+    if (res.success) {
+      setReviews(res.reviews)
+      if (typeof res.avg === 'number' && res.avg > 0) {
+        setGoogleStats({ avg: res.avg, total: res.total || res.reviews.length })
+      }
+      setLastSync(res.syncedAt)
+      // Pré-remplit les brouillons IA sauvegardés
+      const drafts: Record<string, string> = {}
+      res.reviews.forEach((r: any) => { if (r.aiDraft) drafts[r.id] = r.aiDraft })
+      if (Object.keys(drafts).length) setResponses(prev => ({ ...drafts, ...prev }))
+    }
+  }
+
+  // Synchronise Google -> base, puis recharge l'affichage depuis la base.
+  const runSync = async (restaurantId: string, force = false) => {
+    setSyncing(true)
+    try {
+      await syncGoogleReviews(restaurantId, { force })
+      await loadFromDb(restaurantId)
+    } catch (err) {
+      console.error("Erreur synchro avis:", err)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // 1. Charger les données du resto puis ses avis (base d'abord, synchro Google en fond)
   useEffect(() => {
     const loadAllData = async () => {
       setLoading(true)
       const slugSecurise = params?.slug ? String(params.slug) : ""
-      
-      // Récupérer le resto dans Supabase
+
       const { data: resto } = await (supabase
         .from('restaurants') as any)
         .select('*')
         .eq('slug', slugSecurise)
         .single()
-      
+
       if (resto) {
         setRestaurant(resto)
-        
-        // On vérifie access_token et location_id
         if (resto.google_access_token && resto.google_location_id) {
-          try {
-            // On passe l'ID du resto (UUID)
-            const res = await getGoogleReviews(resto.id)
-            
-            if (res.success && res.reviews) {
-                const formatted = res.reviews.map((r: any) => ({
-                  id: r.reviewId,
-                  author: r.reviewer.displayName,
-                  photo: r.reviewer.profilePhotoUrl,
-                  rating: typeof r.starRating === 'string' 
-                    ? ({ 'ONE': 1, 'TWO': 2, 'THREE': 3, 'FOUR': 4, 'FIVE': 5 } as any)[r.starRating] || 5
-                    : r.starRating,
-                  comment: r.comment || "(Avis sans texte)",
-                  date: new Date(r.createTime).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
-                  createTimeRaw: r.createTime,
-                  reply: r.reply // Réponse existante
-                }))
-                setReviews(formatted)
-            }
-          } catch (err) {
-            console.error("Erreur chargement avis:", err)
-          }
+          // 1) Affichage immédiat depuis la base
+          await loadFromDb(resto.id)
+          setLoading(false)
+          // 2) Synchro Google en arrière-plan (throttlée à 1/min côté serveur)
+          runSync(resto.id, false)
+          return
         }
       }
       setLoading(false)
@@ -80,6 +93,8 @@ export default function AdminReviewsPage() {
       )
       if (res.ok) {
         setResponses(prev => ({ ...prev, [reviewId]: res.text }))
+        // Sauvegarde le brouillon en base (survit aux synchros / rechargements)
+        saveReviewDraft(restaurant.id, reviewId, res.text).catch(() => {})
       } else {
         alert("Génération impossible : " + res.error)
       }
@@ -120,6 +135,8 @@ export default function AdminReviewsPage() {
           ? { ...r, reply: { comment: text.trim(), updateTime: new Date().toISOString() } }
           : r))
         setResponses(prev => { const n = { ...prev }; delete n[reviewId]; return n })
+        // Persiste la réponse en base + efface le brouillon (elle est maintenant publiée)
+        saveReviewDraft(restaurant.id, reviewId, null).catch(() => {})
       } else {
         alert("❌ " + (res.error || "Impossible de publier la réponse."))
       }
@@ -128,6 +145,18 @@ export default function AdminReviewsPage() {
     } finally {
       setPublishingId(null)
     }
+  }
+
+  // Formate un horodatage "il y a X" pour l'indicateur de dernière synchro
+  const syncedAgo = (iso: string | null) => {
+    if (!iso) return null
+    const diff = Date.now() - new Date(iso).getTime()
+    const min = Math.floor(diff / 60000)
+    if (min < 1) return "à l'instant"
+    if (min < 60) return `il y a ${min} min`
+    const h = Math.floor(min / 60)
+    if (h < 24) return `il y a ${h} h`
+    return `il y a ${Math.floor(h / 24)} j`
   }
 
   // Liste filtrée + triée
@@ -139,7 +168,9 @@ export default function AdminReviewsPage() {
       const tb = new Date(b.createTimeRaw || 0).getTime()
       return sortOrder === 'recent' ? tb - ta : ta - tb
     })
-  const avgRating = reviews.length ? (reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length) : 0
+  // Note moyenne + total = valeurs réelles de la fiche Google (pas l'échantillon chargé)
+  const avgRating = googleStats?.avg ?? (reviews.length ? reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length : 0)
+  const totalReviews = googleStats?.total ?? reviews.length
   const pendingCount = reviews.filter(r => !r.reply).length
 
   // Écran de chargement
@@ -175,7 +206,20 @@ export default function AdminReviewsPage() {
           <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
             <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-8 h-8"/> Avis Google
           </h1>
-          <p className="text-slate-500 font-medium mt-1">Répondez à vos clients en un clic grâce à l'IA Fidéliz.</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-slate-500 font-medium">Répondez à vos clients en un clic grâce à l'IA Fidéliz.</p>
+            <button
+              onClick={() => restaurant?.id && runSync(restaurant.id, true)}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50"
+            >
+              <RefreshCcw size={13} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'Synchro…' : 'Rafraîchir'}
+            </button>
+            {lastSync && !syncing && (
+              <span className="text-[11px] text-slate-400">à jour {syncedAgo(lastSync)}</span>
+            )}
+          </div>
         </div>
         <div className="flex gap-3">
           <div className="bg-white border border-slate-200 rounded-2xl px-4 py-2 text-center shadow-sm">
@@ -183,8 +227,8 @@ export default function AdminReviewsPage() {
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Note moyenne</p>
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl px-4 py-2 text-center shadow-sm">
-            <p className="text-lg font-black text-slate-800">{reviews.length}</p>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Avis</p>
+            <p className="text-lg font-black text-slate-800">{totalReviews}</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Avis Google</p>
           </div>
           <div className={`rounded-2xl px-4 py-2 text-center shadow-sm border ${pendingCount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
             <p className={`text-lg font-black ${pendingCount > 0 ? 'text-amber-600' : 'text-slate-800'}`}>{pendingCount}</p>
@@ -297,7 +341,7 @@ export default function AdminReviewsPage() {
                     )}
                     <div>
                         <p className="font-black text-slate-900">{review.author}</p>
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{review.date}</p>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{review.createTimeRaw ? new Date(review.createTimeRaw).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</p>
                     </div>
                   </div>
                   <div className="flex gap-0.5 text-yellow-500">

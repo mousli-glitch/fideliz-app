@@ -221,21 +221,27 @@ export async function getGoogleReviews(restaurantId: string) {
   try {
     let reviews: any[] = []
     let pageToken: string | undefined
-    for (let page = 0; page < 3; page++) { // 3 pages x 50 = 150 avis max
+    let averageRating = 0
+    let totalReviewCount = 0
+    let complete = false // true seulement si on a lu TOUTES les pages sans erreur
+    for (let page = 0; page < 40; page++) { // jusqu'à 40 pages x 50 = 2000 avis (sécurité anti-boucle)
       const url = `https://mybusiness.googleapis.com/v4/${locationId}/reviews?pageSize=50${pageToken ? `&pageToken=${pageToken}` : ""}`
       const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       if (!response.ok) {
         const txt = await response.text()
         console.error("❌ Erreur API Avis:", txt)
         if (page === 0) throw new Error("Google a refusé la lecture des avis. Vérifiez la connexion dans les Paramètres.")
-        break
+        break // fetch partiel : on garde ce qu'on a mais complete reste false
       }
       const data = await response.json()
       reviews = [...reviews, ...(data.reviews || [])]
+      // Note moyenne + total réels de la fiche Google (présents à chaque page)
+      if (typeof data.averageRating === "number") averageRating = data.averageRating
+      if (typeof data.totalReviewCount === "number") totalReviewCount = data.totalReviewCount
       pageToken = data.nextPageToken
-      if (!pageToken) break
+      if (!pageToken) { complete = true; break } // plus de page = liste entière récupérée
     }
-    return { success: true, reviews }
+    return { success: true, reviews, averageRating, totalReviewCount, complete }
   } catch (error: any) {
     return { success: false, error: error.message }
   }
@@ -255,6 +261,125 @@ export async function saveAutoReplySettingsAction(
     })
     .eq("id", restaurantId)
 
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  SYNCHRO "MIROIR" : la base = copie fidèle de Google
+// ─────────────────────────────────────────────────────────────
+const STAR_TO_NUM: Record<string, number> = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 }
+
+// 6. Synchroniser les avis d'un resto : Google -> base (ajout, MAJ, suppression).
+//    - throttle : pas plus d'1 synchro / minute sauf force=true.
+//    - suppression des avis disparus UNIQUEMENT si le fetch Google est complet (sécurité).
+export async function syncGoogleReviews(restaurantId: string, opts: { force?: boolean } = {}) {
+  // Throttle : évite de spammer Google si la page est rechargée en boucle
+  if (!opts.force) {
+    const { data: r } = await supabaseAdmin
+      .from("restaurants")
+      .select("google_reviews_synced_at")
+      .eq("id", restaurantId)
+      .single()
+    const last = (r as any)?.google_reviews_synced_at ? new Date((r as any).google_reviews_synced_at).getTime() : 0
+    if (last && Date.now() - last < 60_000) {
+      return { success: true, skipped: true as const }
+    }
+  }
+
+  const res = await getGoogleReviews(restaurantId)
+  if (!res.success || !res.reviews) {
+    return { success: false, error: (res as any).error || "Lecture des avis impossible." }
+  }
+
+  const rows = res.reviews.map((rev: any) => ({
+    restaurant_id: restaurantId,
+    review_id: rev.reviewId,
+    author: rev.reviewer?.displayName || "Client Google",
+    photo: rev.reviewer?.profilePhotoUrl || null,
+    rating: typeof rev.starRating === "string" ? (STAR_TO_NUM[rev.starRating] || null) : (rev.starRating || null),
+    comment: rev.comment || null,
+    review_created_at: rev.createTime || null,
+    google_reply: rev.reply?.comment || null,
+    google_reply_updated_at: rev.reply?.updateTime || null,
+    synced_at: new Date().toISOString(),
+  }))
+
+  // Upsert : on n'inclut PAS ai_draft -> le brouillon existant est préservé.
+  if (rows.length > 0) {
+    const { error: upErr } = await supabaseAdmin
+      .from("avis")
+      .upsert(rows, { onConflict: "restaurant_id,review_id" })
+    if (upErr) return { success: false, error: upErr.message }
+  }
+
+  // Réconciliation des suppressions : on retire les avis que Google ne renvoie plus.
+  // UNIQUEMENT si le fetch était complet, pour ne jamais supprimer sur un fetch partiel.
+  if ((res as any).complete) {
+    const currentIds = rows.map((r) => r.review_id)
+    let del = supabaseAdmin.from("avis").delete().eq("restaurant_id", restaurantId)
+    if (currentIds.length > 0) {
+      // supprime tout ce qui n'est pas dans la liste actuelle
+      del = del.not("review_id", "in", `(${currentIds.map((id) => `"${id}"`).join(",")})`)
+    }
+    await del
+  }
+
+  // Synthèse (note moyenne + total réels de Google) sur le resto
+  await supabaseAdmin
+    .from("restaurants")
+    .update({
+      google_reviews_avg: (res as any).averageRating || null,
+      google_reviews_total: (res as any).totalReviewCount || rows.length,
+      google_reviews_synced_at: new Date().toISOString(),
+    })
+    .eq("id", restaurantId)
+
+  return { success: true, count: rows.length, complete: !!(res as any).complete }
+}
+
+// 7. Lire les avis DEPUIS LA BASE (rapide, aucun appel Google).
+export async function getStoredReviews(restaurantId: string) {
+  const [{ data: avis }, { data: resto }] = await Promise.all([
+    supabaseAdmin
+      .from("avis")
+      .select("review_id, author, photo, rating, comment, review_created_at, google_reply, ai_draft")
+      .eq("restaurant_id", restaurantId)
+      .order("review_created_at", { ascending: false }),
+    supabaseAdmin
+      .from("restaurants")
+      .select("google_reviews_avg, google_reviews_total, google_reviews_synced_at")
+      .eq("id", restaurantId)
+      .single(),
+  ])
+
+  const reviews = (avis || []).map((a: any) => ({
+    id: a.review_id,
+    author: a.author || "Client Google",
+    photo: a.photo || null,
+    rating: a.rating || 0,
+    comment: a.comment || "(Avis sans texte)",
+    createTimeRaw: a.review_created_at,
+    reply: a.google_reply ? { comment: a.google_reply } : null,
+    aiDraft: a.ai_draft || null,
+  }))
+
+  return {
+    success: true,
+    reviews,
+    avg: (resto as any)?.google_reviews_avg ?? null,
+    total: (resto as any)?.google_reviews_total ?? reviews.length,
+    syncedAt: (resto as any)?.google_reviews_synced_at ?? null,
+  }
+}
+
+// 8. Sauver / effacer un brouillon de réponse IA (NOTRE donnée, survit aux synchros).
+export async function saveReviewDraft(restaurantId: string, reviewId: string, draft: string | null) {
+  const { error } = await supabaseAdmin
+    .from("avis")
+    .update({ ai_draft: draft && draft.trim() ? draft : null })
+    .eq("restaurant_id", restaurantId)
+    .eq("review_id", reviewId)
   if (error) return { success: false, error: error.message }
   return { success: true }
 }
