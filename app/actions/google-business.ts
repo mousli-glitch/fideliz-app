@@ -252,13 +252,30 @@ export async function saveAutoReplySettingsAction(
   restaurantId: string,
   settings: { auto_reply_enabled: boolean; auto_reply_tone: string; auto_reply_min_rating: number }
 ) {
+  // On ne pose auto_reply_since QUE lors du passage OFF -> ON, pour que le cron
+  // ne réponde qu'aux avis reçus après activation (jamais au backlog d'anciens avis).
+  const { data: current } = await supabaseAdmin
+    .from("restaurants")
+    .select("auto_reply_enabled, auto_reply_since")
+    .eq("id", restaurantId)
+    .single()
+
+  const wasEnabled = !!(current as any)?.auto_reply_enabled
+  const nowEnabled = !!settings.auto_reply_enabled
+
+  const patch: any = {
+    auto_reply_enabled: nowEnabled,
+    auto_reply_tone: settings.auto_reply_tone || "amical",
+    auto_reply_min_rating: Math.min(5, Math.max(1, Number(settings.auto_reply_min_rating) || 4)),
+  }
+  // Transition OFF -> ON : on (re)fixe le point de départ à maintenant.
+  if (nowEnabled && !wasEnabled) {
+    patch.auto_reply_since = new Date().toISOString()
+  }
+
   const { error } = await supabaseAdmin
     .from("restaurants")
-    .update({
-      auto_reply_enabled: !!settings.auto_reply_enabled,
-      auto_reply_tone: settings.auto_reply_tone || "amical",
-      auto_reply_min_rating: Math.min(5, Math.max(1, Number(settings.auto_reply_min_rating) || 4)),
-    })
+    .update(patch)
     .eq("id", restaurantId)
 
   if (error) return { success: false, error: error.message }

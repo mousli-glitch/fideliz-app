@@ -363,7 +363,6 @@ export default function AdminSettingsPage() {
                   <p className="text-xs text-slate-400 font-medium">Vos avis clients, gérés depuis Fidéliz</p>
                 </div>
               </div>
-              <span className="text-[10px] font-black uppercase bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full shrink-0">Bêta</span>
             </div>
 
             {/* Indicateur d'étapes : 1 Connexion → 2 Établissement → 3 Prêt */}

@@ -123,8 +123,6 @@ export function Sidebar({ restaurant, onClose }: { restaurant: any; onClose?: ()
           }`}
         >
           <Star size={20} className={`group-hover:scale-110 transition-transform ${isActive("/reviews") ? "text-white" : "text-yellow-500"}`} /> Avis Google
-          <span className="ml-auto text-[9px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">Bêta</span>
-          <span className="ml-auto text-[9px] font-black uppercase bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">Bêta</span>
         </Link>
 
         <Link

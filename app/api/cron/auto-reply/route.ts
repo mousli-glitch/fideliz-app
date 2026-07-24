@@ -28,7 +28,7 @@ export async function GET(request: Request) {
 
   const { data: restaurants } = await supabaseAdmin
     .from("restaurants")
-    .select("id, name, slug, auto_reply_tone, auto_reply_min_rating")
+    .select("id, name, slug, auto_reply_tone, auto_reply_min_rating, auto_reply_since")
     .eq("auto_reply_enabled", true)
     .not("google_refresh_token", "is", null)
 
@@ -45,10 +45,16 @@ export async function GET(request: Request) {
 
       const minRating = Number((resto as any).auto_reply_min_rating) || 4
       const tone = (resto as any).auto_reply_tone || "amical"
+      // Point de départ : on ne répond qu'aux avis reçus APRÈS l'activation de l'auto-reply.
+      const since = (resto as any).auto_reply_since ? new Date((resto as any).auto_reply_since).getTime() : 0
 
       for (const review of res.reviews) {
         if (replied >= MAX_REPLIES_PER_RESTAURANT) break
         if (review.reply) continue // déjà répondu (manuellement, automatiquement ou sur Google)
+
+        // Avis antérieur à l'activation : on ne touche pas au backlog d'anciens avis.
+        const createdAt = review.createTime ? new Date(review.createTime).getTime() : 0
+        if (since && createdAt && createdAt < since) { skipped++; continue }
 
         const rating = STAR_MAP[review.starRating] || Number(review.starRating) || 0
         if (rating < minRating) { skipped++; continue }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Star, MessageSquare, Loader2, Send, Sparkles, RefreshCcw, AlertCircle, CheckCircle } from "lucide-react"
+import { Star, MessageSquare, Loader2, Send, Sparkles, RefreshCcw, AlertCircle, CheckCircle, Plus, Minus } from "lucide-react"
 import { useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { generateAIResponse } from "@/app/actions/ai"
@@ -21,6 +21,7 @@ export default function AdminReviewsPage() {
   const [googleStats, setGoogleStats] = useState<{ avg: number; total: number } | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   const params = useParams()
   const supabase = createClient()
@@ -292,7 +293,7 @@ export default function AdminReviewsPage() {
               </div>
               <div className="min-w-0">
                 <p className={`text-sm font-bold ${restaurant?.auto_reply_enabled ? 'text-blue-900' : 'text-slate-700'}`}>Réponse automatique</p>
-                <p className="text-xs text-slate-400 mt-0.5">L'IA répond seule aux nouveaux avis, une fois par jour.</p>
+                <p className="text-xs text-slate-400 mt-0.5">L'IA répond seule aux avis reçus <span className="font-semibold">après activation</span>, une fois par jour.</p>
               </div>
             </div>
             <div className={`w-12 h-7 flex items-center rounded-full p-1 shrink-0 transition-colors ${restaurant?.auto_reply_enabled ? 'bg-blue-600' : 'bg-slate-200'}`}>
@@ -380,7 +381,25 @@ export default function AdminReviewsPage() {
                     ))}
                   </div>
                 </div>
-                <p className="text-slate-700 italic font-medium leading-relaxed">"{review.comment}"</p>
+                {(() => {
+                  const long = (review.comment || '').length > 220
+                  const isOpen = !!expanded[review.id]
+                  const shown = long && !isOpen ? review.comment.slice(0, 220).trimEnd() + '…' : review.comment
+                  return (
+                    <>
+                      <p className="text-slate-700 italic font-medium leading-relaxed">"{shown}"</p>
+                      {long && (
+                        <button
+                          type="button"
+                          onClick={() => setExpanded(p => ({ ...p, [review.id]: !isOpen }))}
+                          className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
+                        >
+                          {isOpen ? <><Minus size={13} /> Voir moins</> : <><Plus size={13} /> Voir l'avis en entier</>}
+                        </button>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
 
               {/* LE LABO IA ou RÉPONSE DÉJÀ FAITE */}
@@ -400,18 +419,19 @@ export default function AdminReviewsPage() {
                 ) : (
                     // CAS 2 : Pas encore de réponse => Interface IA
                     !responses[review.id] ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
-                        <Sparkles size={24} />
-                        </div>
+                    <div className="flex flex-col items-center justify-center py-6 text-center gap-3">
                         <button
                         onClick={() => handleGenerateAI(review.id, review.comment, review.rating)}
                         disabled={generatingId === review.id}
-                        className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-600 transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
+                        className="group w-full inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3.5 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:shadow-xl hover:shadow-blue-300 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-60 disabled:hover:translate-y-0 disabled:shadow-lg"
                         >
-                        {generatingId === review.id ? <Loader2 className="animate-spin" /> : <Sparkles size={18} />}
-                        Générer une réponse IA
+                        {generatingId === review.id
+                          ? <><Loader2 size={18} className="animate-spin" /> Génération…</>
+                          : <><Sparkles size={18} className="group-hover:rotate-12 transition-transform" /> Générer une réponse IA</>}
                         </button>
+                        <p className="text-[11px] text-slate-400">
+                          Ton : <span className="font-bold text-slate-500">{{ amical: 'Amical 😊', professionnel: 'Professionnel 🤵', dynamique: 'Dynamique ⚡' }[(restaurant?.auto_reply_tone || 'amical') as string] || 'Amical 😊'}</span> · modifiable en haut de page
+                        </p>
                     </div>
                     ) : (
                     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-500">
