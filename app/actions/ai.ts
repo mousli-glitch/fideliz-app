@@ -21,11 +21,15 @@ export async function generateAIResponse(
     return { ok: false, error: "Clé OpenAI absente en production (à ajouter dans les variables Vercel)." }
   }
 
+  // Chaque ton a un style NETTEMENT différent (vocabulaire, ponctuation, emojis, longueur).
   const toneInstructions = {
-    amical: "Ton chaleureux, amical et décontracté. Un ou deux emojis maximum.",
-    professionnel: "Ton poli, formel et professionnel. Très courtois. Pas d'emoji.",
-    dynamique: "Ton énergique, court et percutant. Moderne. Un emoji maximum.",
-  }[tone] || "Ton chaleureux, amical et décontracté."
+    amical:
+      "TON AMICAL — comme un gérant chaleureux qui parle à un habitué. Vouvoiement, mais langage simple et naturel (« Merci beaucoup », « Ça nous fait très plaisir », « À très vite »). Une touche personnelle et souriante. 1 à 2 emojis bien placés (😊 🙏 ✨).",
+    professionnel:
+      "TON PROFESSIONNEL — courtois, soigné, élégant. Vouvoiement strict, formules raffinées (« Nous vous remercions sincèrement », « Votre satisfaction est notre priorité », « Au plaisir de vous accueillir à nouveau »). AUCUN emoji, ponctuation sobre (pas de points d'exclamation multiples).",
+    dynamique:
+      "TON DYNAMIQUE — énergique et enthousiaste ! Phrases courtes et percutantes. Vocabulaire moderne et positif (« Merci pour ce super retour ! », « L'équipe a hâte de vous revoir ! »). 1 emoji maximum en fin de message (🔥 ⚡ 🚀). 2 phrases maximum.",
+  }[tone] || "TON AMICAL — chaleureux et naturel, vouvoiement, 1 à 2 emojis."
 
   // Consigne adaptée à la note : on ne remercie pas pareil un 5 étoiles et un 1 étoile.
   const hasText = !!reviewText && reviewText.trim() !== "" && reviewText !== "(Avis sans texte)"

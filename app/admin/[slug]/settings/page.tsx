@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react"
 import { updateRestaurantSettings } from "@/app/actions/update-restaurant-settings"
 import { getGoogleLocationsAction, saveGoogleLocationAction } from "@/app/actions/google-business"
-import { Loader2, Save, Store, Globe, Mail, Copy, Check, Wallet, ShieldCheck, Repeat, Timer, Plus, ArrowUp, ArrowDown, X, Star, MapPin } from "lucide-react"
+import { Loader2, Save, Store, Globe, Mail, Copy, Check, Wallet, ShieldCheck, Repeat, Timer, Plus, ArrowUp, ArrowDown, X, Star, MapPin, Gamepad2 } from "lucide-react"
 import { useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
+import { GoogleLogo } from "@/components/GoogleLogo"
 
 const ACTION_TYPES = [
   { id: 'GOOGLE_REVIEW', label: '⭐ Avis Google', placeholder: 'https://g.page/... ou lien de votre fiche Google' },
@@ -38,6 +39,7 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [tab, setTab] = useState<'etablissement' | 'jeu' | 'avis'>('etablissement')
 
   const params = useParams()
   const supabase = createClient()
@@ -101,6 +103,15 @@ export default function AdminSettingsPage() {
     load()
   }, [params.slug])
 
+  // Avis Google : si le compte est connecté mais l'établissement pas encore choisi,
+  // on charge la liste automatiquement (le client n'a plus de bouton à chercher).
+  useEffect(() => {
+    if (restaurant?.id && googleConnected && !restaurant.google_location_id && gLocations.length === 0 && !gLoadingLocations && !gError) {
+      loadGoogleLocations()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restaurant?.id, googleConnected, restaurant?.google_location_id])
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -120,7 +131,6 @@ export default function AdminSettingsPage() {
         replay_delay_hours: restaurant.replay_delay_hours ? Number(restaurant.replay_delay_hours) : 24,
         action_sequence: restaurant.replay_enabled ? seq.filter((a) => a && a.url && a.url.trim()) : [],
         ip_rate_limit_per_hour: restaurant.ip_rate_limit_per_hour ? Number(restaurant.ip_rate_limit_per_hour) : 5,
-        auto_reply_tone: restaurant.auto_reply_tone || 'amical',
       } as any)
       if (res.success) {
         alert("✅ Paramètres mis à jour !")
@@ -144,17 +154,43 @@ export default function AdminSettingsPage() {
   if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin w-10 h-10 text-blue-600"/></div>
   if (!restaurant) return <div className="p-10 text-center">Aucun restaurant trouvé pour ce lien.</div>
 
+  const TABS = [
+    { id: 'etablissement' as const, label: 'Établissement', icon: Store },
+    { id: 'jeu' as const, label: 'Jeu', icon: Gamepad2 },
+    { id: 'avis' as const, label: 'Avis Google', icon: Star },
+  ]
+
   return (
-    <div className="max-w-4xl mx-auto p-8 space-y-8">
+    <div className="max-w-4xl mx-auto p-4 sm:p-8 space-y-6">
       <div>
-        <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
-          <Store className="text-blue-600" /> Paramètres
+        <h1 className="text-2xl sm:text-3xl font-black text-slate-800 flex items-center gap-2.5">
+          <Store className="text-blue-600" size={28} /> Paramètres
         </h1>
-        <p className="text-slate-500 font-medium mt-1">Gérez les informations de contact et les réglages de votre établissement.</p>
+        <p className="text-slate-500 font-medium mt-1 text-sm sm:text-base">Gérez votre établissement, votre jeu et vos avis Google.</p>
+      </div>
+
+      {/* NAVIGATION PAR ONGLETS (sticky, tactile) */}
+      <div className="sticky top-2 z-20 bg-slate-100/80 backdrop-blur rounded-2xl p-1.5 flex gap-1 shadow-sm border border-slate-200/60">
+        {TABS.map((t) => {
+          const active = tab === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-2 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 ${active ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <t.icon size={16} className={active ? 'text-blue-600' : 'text-slate-400'} />
+              <span>{t.label}</span>
+            </button>
+          )
+        })}
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
 
+        {tab === 'etablissement' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
         {/* SECTION 1 : INFOS GÉNÉRALES */}
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -219,6 +255,11 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
+        </div>
+        )}
+
+        {tab === 'jeu' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
         {/* SECTION 3 : COMPORTEMENT DU JEU & ANTI-TRICHE */}
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-5">
           <div>
@@ -304,93 +345,143 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
+        </div>
+        )}
+
+        {tab === 'avis' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
         {/* SECTION 4 : AVIS GOOGLE (BÊTA) */}
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 font-bold text-slate-800">
-              <Star size={20} className="text-yellow-500" /> Avis Google
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-6 sm:p-8 pb-0">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-center shrink-0">
+                  <GoogleLogo size={24} />
+                </div>
+                <div>
+                  <p className="font-black text-slate-800">Avis Google</p>
+                  <p className="text-xs text-slate-400 font-medium">Vos avis clients, gérés depuis Fidéliz</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-black uppercase bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full shrink-0">Bêta</span>
             </div>
-            <span className="text-[10px] font-black uppercase bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">Bêta</span>
+
+            {/* Indicateur d'étapes : 1 Connexion → 2 Établissement → 3 Prêt */}
+            {(() => {
+              const step = !googleConnected ? 1 : !restaurant.google_location_id ? 2 : 3
+              const steps = ['Connexion', 'Établissement', 'Prêt']
+              return (
+                <div className="flex items-center mt-6">
+                  {steps.map((label, i) => {
+                    const n = i + 1
+                    const done = step > n
+                    const active = step === n
+                    return (
+                      <div key={label} className={`flex items-center ${n < 3 ? 'flex-1' : ''}`}>
+                        <div className="flex flex-col items-center gap-1">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black transition-all ${done ? 'bg-green-500 text-white' : active ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 'bg-slate-100 text-slate-400'}`}>
+                            {done ? <Check size={16} /> : n}
+                          </div>
+                          <span className={`text-[10px] font-bold ${active ? 'text-blue-600' : done ? 'text-green-600' : 'text-slate-400'}`}>{label}</span>
+                        </div>
+                        {n < 3 && <div className={`h-1 flex-1 mx-2 mb-4 rounded-full ${step > n ? 'bg-green-400' : 'bg-slate-200'}`} />}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
 
-          {!googleConnected ? (
-            <div className="space-y-3">
-              <p className="text-sm text-slate-500">Connectez votre fiche Google pour voir vos avis clients et y répondre (avec l'aide de l'IA) directement depuis Fidéliz.</p>
-              <a
-                href={`/api/auth/google?state=${restaurant.slug}`}
-                className="inline-flex items-center gap-3 bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-600 transition-all"
-              >
-                <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-5 h-5 bg-white rounded-full p-0.5" alt="" />
-                Connecter mon compte Google
-              </a>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-100 rounded-xl px-4 py-3 text-sm font-bold">
-                <Check size={16} /> Compte Google connecté
+          <div className="p-6 sm:p-8 pt-5">
+            {!googleConnected ? (
+              /* ÉTAPE 1 : connexion */
+              <div className="space-y-4">
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  Connectez la fiche Google de votre établissement : vous verrez tous vos avis dans Fidéliz, et l'IA vous aidera à y répondre en un clic.
+                </p>
+                <a
+                  href={`/api/auth/google?state=${restaurant.slug}`}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-3 bg-white border-2 border-slate-200 text-slate-700 px-6 py-3.5 rounded-2xl font-bold hover:border-blue-500 hover:shadow-md transition-all active:scale-[0.98]"
+                >
+                  <GoogleLogo size={18} />
+                  Se connecter avec Google
+                </a>
               </div>
-
-              {!restaurant.google_location_id ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-slate-500">Dernière étape : choisissez votre établissement.</p>
-                  {gLocations.length === 0 ? (
-                    <button type="button" onClick={loadGoogleLocations} disabled={gLoadingLocations}
-                      className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50">
-                      {gLoadingLocations ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
-                      Chercher mes établissements
+            ) : !restaurant.google_location_id ? (
+              /* ÉTAPE 2 : choix de l'établissement (liste chargée automatiquement) */
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600 font-medium">Sélectionnez votre établissement :</p>
+                {gLoadingLocations ? (
+                  <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl text-slate-500 text-sm font-bold">
+                    <Loader2 size={18} className="animate-spin text-blue-600" /> Recherche de vos établissements…
+                  </div>
+                ) : gError ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-2xl px-4 py-3 font-medium">{gError}</p>
+                    <button type="button" onClick={loadGoogleLocations}
+                      className="w-full sm:w-auto bg-blue-600 text-white px-5 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all">
+                      Réessayer
                     </button>
-                  ) : (
-                    <div className="space-y-2">
-                      {gLocations.map((loc) => (
-                        <button key={loc.id} type="button" onClick={() => chooseGoogleLocation(loc.id)}
-                          className="w-full text-left p-3 border-2 border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all">
-                          <p className="font-bold text-slate-800 text-sm">{loc.title}</p>
-                          <p className="text-xs text-slate-400">{loc.address}</p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {gError && <p className="text-xs text-red-500 font-bold">{gError}</p>}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-slate-600 text-sm font-medium">
-                  <MapPin size={16} className="text-blue-500" /> Établissement lié ✓
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Ton des réponses IA</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'amical', label: '😊 Amical' },
-                    { id: 'professionnel', label: '👔 Professionnel' },
-                    { id: 'dynamique', label: '⚡ Dynamique' },
-                  ].map((t) => (
-                    <button key={t.id} type="button" onClick={() => setRestaurant({ ...restaurant, auto_reply_tone: t.id })}
-                      className={`p-3 rounded-xl border-2 text-center text-xs font-bold transition-all ${(restaurant.auto_reply_tone || 'amical') === t.id ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}>
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-slate-400 mt-2 italic">Utilisé pour générer vos réponses dans l'onglet « Avis Google ».</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {gLocations.map((loc) => (
+                      <button key={loc.id} type="button" onClick={() => chooseGoogleLocation(loc.id)}
+                        className="w-full text-left p-4 border-2 border-slate-200 rounded-2xl hover:border-blue-500 hover:bg-blue-50 active:scale-[0.99] transition-all flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0"><MapPin size={18} /></div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-800 text-sm truncate">{loc.title}</p>
+                          <p className="text-xs text-slate-400 truncate">{loc.address}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-
-              <a href={`/api/auth/google?state=${restaurant.slug}`} className="text-xs text-slate-400 underline hover:text-slate-600">Reconnecter le compte Google</a>
-            </div>
-          )}
+            ) : (
+              /* ÉTAPE 3 : tout est prêt */
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-2xl px-4 py-3.5">
+                  <div className="w-9 h-9 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0"><Check size={18} /></div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-black text-green-800">Fiche Google connectée</p>
+                    <p className="text-xs text-green-600">
+                      {restaurant.google_reviews_total
+                        ? `${Number(restaurant.google_reviews_avg || 0).toFixed(1)} ★ · ${restaurant.google_reviews_total} avis`
+                        : 'Vos avis se synchronisent automatiquement chaque jour.'}
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href={`/admin/${restaurant.slug}/reviews`}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-3.5 rounded-2xl font-bold hover:bg-blue-700 transition-all active:scale-[0.98]"
+                >
+                  <Star size={17} className="fill-white" /> Voir et répondre à mes avis
+                </a>
+                <p className="text-xs text-slate-400">Le ton des réponses IA et la réponse automatique se règlent dans l'onglet « Avis Google ».</p>
+                <a href={`/api/auth/google?state=${restaurant.slug}`} className="inline-block text-xs text-slate-400 underline hover:text-slate-600">Reconnecter le compte Google</a>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Bouton Sauvegarder */}
-        <div className="flex justify-end pb-10">
+        </div>
+        )}
+
+        {/* Bouton Sauvegarder — uniquement sur les onglets à formulaire (l'onglet Avis se gère seul) */}
+        {tab !== 'avis' && (
+        <div className="flex justify-end pb-10 sticky bottom-3 z-10">
           <button
             type="submit"
             disabled={saving}
-            className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-100 active:scale-95 disabled:opacity-50"
+            className="w-full sm:w-auto justify-center bg-blue-600 text-white px-8 py-4 rounded-2xl font-black hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95 disabled:opacity-50"
           >
             {saving ? <Loader2 className="animate-spin"/> : <Save size={20} />}
             Mettre à jour les paramètres
           </button>
         </div>
+        )}
 
       </form>
     </div>

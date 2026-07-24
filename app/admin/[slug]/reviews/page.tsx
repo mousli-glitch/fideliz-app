@@ -6,6 +6,7 @@ import { useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { generateAIResponse } from "@/app/actions/ai"
 import { getStoredReviews, syncGoogleReviews, saveReviewDraft, replyToGoogleReviewAction, saveAutoReplySettingsAction } from "@/app/actions/google-business"
+import { GoogleLogo } from "@/components/GoogleLogo"
 
 export default function AdminReviewsPage() {
   const [restaurant, setRestaurant] = useState<any>(null)
@@ -200,77 +201,106 @@ export default function AdminReviewsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-8 space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" className="w-8 h-8"/> Avis Google
-          </h1>
-          <div className="flex items-center gap-3 mt-1">
-            <p className="text-slate-500 font-medium">Répondez à vos clients en un clic grâce à l'IA Fidéliz.</p>
-            <button
-              onClick={() => restaurant?.id && runSync(restaurant.id, true)}
-              disabled={syncing}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50"
-            >
-              <RefreshCcw size={13} className={syncing ? 'animate-spin' : ''} />
-              {syncing ? 'Synchro…' : 'Rafraîchir'}
-            </button>
-            {lastSync && !syncing && (
-              <span className="text-[11px] text-slate-400">à jour {syncedAgo(lastSync)}</span>
-            )}
+    <div className="max-w-5xl mx-auto p-4 sm:p-8 space-y-4 sm:space-y-6">
+      {/* EN-TÊTE */}
+      <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-5 sm:p-7 space-y-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-center shrink-0">
+              <GoogleLogo size={26} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 leading-tight truncate">Avis Google</h1>
+              {syncing ? (
+                <p className="text-[11px] sm:text-xs text-blue-600 font-bold flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Synchronisation…</p>
+              ) : (
+                <p className="text-[11px] sm:text-xs text-slate-400 font-medium">{lastSync ? `À jour ${syncedAgo(lastSync)}` : 'Vos avis clients, répondus en un clic'}</p>
+              )}
+            </div>
           </div>
+          <button
+            onClick={() => restaurant?.id && runSync(restaurant.id, true)}
+            disabled={syncing}
+            className="shrink-0 inline-flex items-center gap-2 border border-slate-200 bg-white text-slate-600 px-3.5 py-2.5 rounded-xl text-xs font-bold hover:border-blue-400 hover:text-blue-600 transition-all disabled:opacity-50 active:scale-95"
+          >
+            <RefreshCcw size={14} className={syncing ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">{syncing ? 'Synchro…' : 'Rafraîchir'}</span>
+          </button>
         </div>
-        <div className="flex gap-3">
-          <div className="bg-white border border-slate-200 rounded-2xl px-4 py-2 text-center shadow-sm">
-            <p className="text-lg font-black text-slate-800 flex items-center gap-1 justify-center">{avgRating.toFixed(1)} <Star size={16} className="text-yellow-500 fill-yellow-500" /></p>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Note moyenne</p>
+
+        {/* STATS */}
+        <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+          <div className="bg-slate-50 rounded-2xl px-3 py-3.5 text-center">
+            <p className="text-xl sm:text-2xl font-black text-slate-900 flex items-center justify-center gap-1">
+              {avgRating.toFixed(1)} <Star size={16} className="text-yellow-500 fill-yellow-500" />
+            </p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Note moyenne</p>
           </div>
-          <div className="bg-white border border-slate-200 rounded-2xl px-4 py-2 text-center shadow-sm">
-            <p className="text-lg font-black text-slate-800">{totalReviews}</p>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Avis Google</p>
+          <div className="bg-slate-50 rounded-2xl px-3 py-3.5 text-center">
+            <p className="text-xl sm:text-2xl font-black text-slate-900">{totalReviews}</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Avis Google</p>
           </div>
-          <div className={`rounded-2xl px-4 py-2 text-center shadow-sm border ${pendingCount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
-            <p className={`text-lg font-black ${pendingCount > 0 ? 'text-amber-600' : 'text-slate-800'}`}>{pendingCount}</p>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">À traiter</p>
+          <div className={`rounded-2xl px-3 py-3.5 text-center ${pendingCount > 0 ? 'bg-amber-50' : 'bg-slate-50'}`}>
+            <p className={`text-xl sm:text-2xl font-black ${pendingCount > 0 ? 'text-amber-600' : 'text-slate-900'}`}>{pendingCount}</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">À traiter</p>
           </div>
         </div>
       </div>
 
-      {/* RÉPONSE AUTOMATIQUE */}
-      <div className={`rounded-2xl border p-6 transition-all ${restaurant?.auto_reply_enabled ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200'}`}>
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-xl ${restaurant?.auto_reply_enabled ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-              <Sparkles size={20} />
-            </div>
-            <div>
-              <p className={`font-black ${restaurant?.auto_reply_enabled ? 'text-blue-900' : 'text-slate-800'}`}>Réponse automatique {savingAuto && <Loader2 size={12} className="inline animate-spin ml-1" />}</p>
-              <p className="text-xs text-slate-500 mt-0.5">L'IA répond toute seule aux nouveaux avis, une fois par jour.</p>
-            </div>
+      {/* RÉGLAGES DES RÉPONSES IA */}
+      <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-5 sm:p-6 space-y-5">
+        {/* TON — toujours visible : il sert AUSSI aux réponses générées à la main */}
+        <div>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <label className="text-sm font-black text-slate-800 flex items-center gap-2">
+              <Sparkles size={16} className="text-blue-600" /> Ton des réponses IA
+            </label>
+            {savingAuto && <Loader2 size={13} className="animate-spin text-blue-500" />}
           </div>
-          <div
-            onClick={() => saveAutoSettings({ auto_reply_enabled: !restaurant?.auto_reply_enabled })}
-            className={`w-12 h-7 flex items-center rounded-full p-1 cursor-pointer transition-colors ${restaurant?.auto_reply_enabled ? 'bg-blue-600' : 'bg-slate-200'}`}
-          >
-            <div className={`bg-white w-5 h-5 rounded-full shadow transform transition-transform ${restaurant?.auto_reply_enabled ? 'translate-x-5' : ''}`} />
+          <p className="text-xs text-slate-400 mb-3">Utilisé pour toutes vos réponses IA — générées à la main comme en automatique.</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { id: 'amical', emoji: '😊', label: 'Amical' },
+              { id: 'professionnel', emoji: '🤵', label: 'Professionnel' },
+              { id: 'dynamique', emoji: '⚡', label: 'Dynamique' },
+            ].map((t) => {
+              const active = (restaurant?.auto_reply_tone || 'amical') === t.id
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => saveAutoSettings({ auto_reply_tone: t.id })}
+                  className={`flex flex-col items-center gap-1 py-3 px-2 rounded-2xl border-2 font-bold text-xs sm:text-sm transition-all active:scale-95 ${active ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}
+                >
+                  <span className="text-xl">{t.emoji}</span>
+                  {t.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        {restaurant?.auto_reply_enabled && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5 pt-5 border-t border-blue-100">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Ton des réponses</label>
-              <select
-                value={restaurant?.auto_reply_tone || 'amical'}
-                onChange={(e) => saveAutoSettings({ auto_reply_tone: e.target.value })}
-                className="w-full p-3 border border-slate-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm"
-              >
-                <option value="amical">😊 Amical</option>
-                <option value="professionnel">🤵 Professionnel</option>
-                <option value="dynamique">⚡ Dynamique</option>
-              </select>
+        {/* RÉPONSE AUTOMATIQUE */}
+        <div className="pt-5 border-t border-slate-100 space-y-4">
+          <div
+            onClick={() => saveAutoSettings({ auto_reply_enabled: !restaurant?.auto_reply_enabled })}
+            className={`cursor-pointer rounded-2xl border p-4 flex items-center justify-between gap-4 transition-all ${restaurant?.auto_reply_enabled ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`p-2.5 rounded-xl shrink-0 ${restaurant?.auto_reply_enabled ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                <Sparkles size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className={`text-sm font-bold ${restaurant?.auto_reply_enabled ? 'text-blue-900' : 'text-slate-700'}`}>Réponse automatique</p>
+                <p className="text-xs text-slate-400 mt-0.5">L'IA répond seule aux nouveaux avis, une fois par jour.</p>
+              </div>
             </div>
+            <div className={`w-12 h-7 flex items-center rounded-full p-1 shrink-0 transition-colors ${restaurant?.auto_reply_enabled ? 'bg-blue-600' : 'bg-slate-200'}`}>
+              <div className={`bg-white w-5 h-5 rounded-full shadow transform transition-transform ${restaurant?.auto_reply_enabled ? 'translate-x-5' : ''}`} />
+            </div>
+          </div>
+
+          {restaurant?.auto_reply_enabled && (
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Répondre automatiquement aux avis</label>
               <select
@@ -285,8 +315,8 @@ export default function AdminReviewsPage() {
               </select>
               <p className="text-[11px] text-slate-400 mt-2 leading-snug">💡 Conseil : laissez les avis négatifs en manuel — une réponse personnelle du gérant est toujours mieux perçue.</p>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* BARRE DE FILTRES */}
@@ -327,7 +357,7 @@ export default function AdminReviewsPage() {
           <p className="text-center p-12 text-slate-400 font-bold bg-white rounded-2xl border border-slate-200">Aucun avis ne correspond à ce filtre.</p>
         ) : (
           visibleReviews.map((review) => (
-            <div key={review.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row">
+            <div key={review.id} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col md:flex-row transition-shadow hover:shadow-md">
               {/* L'AVIS CLIENT */}
               <div className="p-6 md:w-1/2 border-b md:border-b-0 md:border-r border-slate-100 bg-slate-50/50">
                 <div className="flex justify-between items-start mb-4">
@@ -363,7 +393,9 @@ export default function AdminReviewsPage() {
                             <CheckCircle size={14} /> Réponse publiée
                         </div>
                         <p className="text-slate-600 text-sm italic">"{review.reply.comment}"</p>
-                        <p className="text-xs text-slate-400 mt-2 text-right">Le {new Date(review.reply.updateTime).toLocaleDateString()}</p>
+                        {review.reply.updateTime && (
+                          <p className="text-xs text-slate-400 mt-2 text-right">Le {new Date(review.reply.updateTime).toLocaleDateString('fr-FR')}</p>
+                        )}
                     </div>
                 ) : (
                     // CAS 2 : Pas encore de réponse => Interface IA
