@@ -52,12 +52,25 @@ Rédige une réponse à ce client en respectant STRICTEMENT ces consignes :
 `
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    // Modèle réglable via la variable Vercel OPENAI_MODEL (défaut : gpt-5-mini).
+    // Les modèles GPT-5 n'acceptent PAS temperature ni max_tokens (paramètres différents),
+    // on adapte donc l'appel selon la famille du modèle.
+    const model = process.env.OPENAI_MODEL || "gpt-5-mini"
+    const isGpt5 = model.startsWith("gpt-5")
+
+    const params: any = {
+      model,
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 220,
-    })
+    }
+    if (isGpt5) {
+      params.max_completion_tokens = 500 // inclut d'éventuels tokens de raisonnement
+      params.reasoning_effort = "minimal" // tâche simple : réponse directe, plus rapide et moins chère
+    } else {
+      params.max_tokens = 220
+      params.temperature = 0.7
+    }
+
+    const response = await openai.chat.completions.create(params)
 
     const text = response.choices[0]?.message?.content?.trim()
     if (!text) return { ok: false, error: "L'IA a renvoyé une réponse vide." }
