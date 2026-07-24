@@ -341,7 +341,7 @@ export default function AdminReviewsPage() {
                     )}
                     <div>
                         <p className="font-black text-slate-900">{review.author}</p>
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{review.createTimeRaw ? new Date(review.createTimeRaw).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}</p>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{review.createTimeRaw ? new Date(review.createTimeRaw).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) + ' à ' + new Date(review.createTimeRaw).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
                     </div>
                   </div>
                   <div className="flex gap-0.5 text-yellow-500">
