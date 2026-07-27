@@ -39,6 +39,19 @@ export async function generateAIResponse(
     rating === 3 ? "L'avis est mitigé : remercie pour le retour, montre que l'établissement en tient compte pour s'améliorer." :
     "L'avis est négatif : réponds avec empathie et professionnalisme, présente des excuses mesurées SANS te justifier ni accuser le client, et invite-le à recontacter l'établissement directement pour en parler. Ne promets JAMAIS de remboursement, de geste commercial ou de compensation."
 
+  // Anti-répétition : à chaque appel on tire un angle de formulation différent,
+  // pour que deux avis similaires ne reçoivent pas deux réponses identiques.
+  const varietyAngles = [
+    "Commence autrement que par « Merci pour votre avis » — trouve une ouverture fraîche.",
+    "Ouvre par une touche chaleureuse et spontanée, comme à l'oral.",
+    "Mets en avant l'équipe ou l'ambiance du lieu dans ta tournure.",
+    "Termine par une invitation à revenir formulée de façon originale.",
+    "Adopte un angle personnel et sincère, sans aucune phrase toute faite.",
+    "Reformule le remerciement d'une manière que tu n'emploies pas d'habitude.",
+    "Rebondis brièvement sur un mot précis de l'avis, avec naturel.",
+  ]
+  const angle = varietyAngles[Math.floor(Math.random() * varietyAngles.length)]
+
   const prompt = `
 Tu es le gérant du restaurant "${restaurantName}".
 ${hasText
@@ -49,7 +62,8 @@ Rédige une réponse à ce client en respectant STRICTEMENT ces consignes :
 - ${toneInstructions}
 - ${ratingInstructions}
 - Langue : français.
-- 2 à 4 phrases maximum. ${hasText ? "" : "Sois bref (1 à 2 phrases)."}
+- COURT : ${hasText ? "1 à 2 phrases, ~30 mots maximum au total." : "une seule phrase courte suffit."}
+- VARIE la formulation : ne réutilise pas de formule toute faite, ni le même début à chaque fois. ${angle}
 - Ne promets jamais de remboursement, réduction, cadeau ou compensation.
 - N'invente aucun détail sur la visite du client (plats, dates, prix...).
 - Ne mets pas de guillemets autour de la réponse, pas de signature type "Le gérant".
@@ -67,11 +81,11 @@ Rédige une réponse à ce client en respectant STRICTEMENT ces consignes :
       messages: [{ role: "user", content: prompt }],
     }
     if (isGpt5) {
-      params.max_completion_tokens = 500 // inclut d'éventuels tokens de raisonnement
+      params.max_completion_tokens = 300 // réponse courte + petite marge de raisonnement
       params.reasoning_effort = "minimal" // tâche simple : réponse directe, plus rapide et moins chère
     } else {
-      params.max_tokens = 220
-      params.temperature = 0.7
+      params.max_tokens = 160
+      params.temperature = 0.9 // plus de variété d'une réponse à l'autre
     }
 
     const response = await openai.chat.completions.create(params)
