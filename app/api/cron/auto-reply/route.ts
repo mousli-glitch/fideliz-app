@@ -56,6 +56,9 @@ export async function GET(request: Request) {
         const createdAt = review.createTime ? new Date(review.createTime).getTime() : 0
         if (since && createdAt && createdAt < since) { skipped++; continue }
 
+        // Auto-reply UNIQUEMENT sur les avis avec du texte (on ignore les notes sans commentaire).
+        if (!review.comment || !review.comment.trim()) { skipped++; continue }
+
         const rating = STAR_MAP[review.starRating] || Number(review.starRating) || 0
         if (rating < minRating) { skipped++; continue }
 

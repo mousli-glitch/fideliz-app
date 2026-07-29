@@ -119,6 +119,22 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const identifyFirst = !!(game as any).identify_first
   const secureMode = identifyFirst // tirage serveur + enregistrement dès le 1er tour
   const needIdentify = replayEnabled || identifyFirst
+
+  // Lots encore disponibles (stock > 0, ou illimité, ou stock désactivé).
+  // Sert au TIRAGE : les probabilités se calculent uniquement sur ces lots uniques.
+  const availableUnique = prizes.filter(p =>
+    !game.is_stock_limit_active ||
+    p.quantity === null ||
+    p.quantity === undefined ||
+    Number(p.quantity) > 0
+  )
+
+  // Parts AFFICHÉES sur la roue : on garde TOUJOURS autant de parts que de lots configurés
+  // (design). Si un lot est épuisé, on comble en dupliquant un lot disponible.
+  // ⚠️ Purement visuel : le tirage reste fait sur `availableUnique` (mêmes probabilités).
+  const wheelSegments = availableUnique.length === 0
+    ? []
+    : Array.from({ length: prizes.length }, (_, i) => availableUnique[i % availableUnique.length])
   const [step, setStep] = useState<'IDENTIFY' | 'TOO_SOON' | 'LANDING' | 'INSTRUCTIONS' | 'VERIFYING' | 'WHEEL' | 'FORM' | 'TICKET'>(needIdentify ? 'IDENTIFY' : 'LANDING')
   const [spinning, setSpinning] = useState(false)
   const [winner, setWinner] = useState<any>(null)
@@ -333,14 +349,8 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     setSpinning(true)
     setLightMode('SPIN')
 
-    // 1. Filtrer les lots disponibles (Stock > 0 ou Infini)
-    // CORRECTION TS : On vérifie explicitement null ET undefined
-    const availablePrizes = prizes.filter(p => 
-        !game.is_stock_limit_active || 
-        p.quantity === null || 
-        p.quantity === undefined || 
-        Number(p.quantity) > 0
-    );
+    // 1. Tirage sur les lots UNIQUES disponibles (probabilités inchangées)
+    const availablePrizes = availableUnique;
 
     // Sécurité ultime : Si tout est épuisé pendant qu'il joue
     if (availablePrizes.length === 0) {
@@ -365,14 +375,19 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         random -= prize.weight
     }
     
-    // 4. Retrouver l'index de ce lot sur la roue (pour l'animation)
-    // Attention : On doit trouver l'index dans le tableau ORIGINAL `prizes`
-    const selectedPrizeIndex = prizes.findIndex(p => p.id === selectedPrize.id);
-    
-    const numSegments = prizes.length
+    // 4. Sur la roue, le lot gagnant peut occuper plusieurs parts (doublons de design).
+    //    On choisit au hasard l'une de ses parts pour y faire tomber l'aiguille.
+    const occurrences = wheelSegments
+      .map((p, i) => (p.id === selectedPrize.id ? i : -1))
+      .filter(i => i >= 0)
+    const selectedPrizeIndex = occurrences.length
+      ? occurrences[Math.floor(Math.random() * occurrences.length)]
+      : 0
+
+    const numSegments = wheelSegments.length
     const segmentAngle = 360 / numSegments
     const winningSegmentCenter = (selectedPrizeIndex * segmentAngle) + (segmentAngle / 2)
-    
+
     // On ajoute des tours aléatoires (entre 5 et 10 tours complets)
     const extraSpins = 360 * (5 + Math.floor(Math.random() * 5)); 
     const finalRotation = extraSpins + (360 - winningSegmentCenter);
@@ -433,9 +448,15 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       return
     }
 
-    // Succès : le serveur a choisi le lot, on anime la roue jusqu'à lui
-    const selectedPrizeIndex = Math.max(0, prizes.findIndex(p => p.id === res.prize_id))
-    const numSegments = prizes.length
+    // Succès : le serveur a choisi le lot. Il peut occuper plusieurs parts (doublons de design) :
+    // on tire au hasard l'une de ses parts pour l'animation.
+    const occurrences = wheelSegments
+      .map((p, i) => (p.id === res.prize_id ? i : -1))
+      .filter(i => i >= 0)
+    const selectedPrizeIndex = occurrences.length
+      ? occurrences[Math.floor(Math.random() * occurrences.length)]
+      : 0
+    const numSegments = wheelSegments.length
     const segmentAngle = 360 / numSegments
     const winningSegmentCenter = (selectedPrizeIndex * segmentAngle) + (segmentAngle / 2)
     const extraSpins = 360 * (5 + Math.floor(Math.random() * 5))
@@ -451,7 +472,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     setLightMode('WIN')
     setWinFlash(true)
     setTimeout(() => setWinFlash(false), 200)
-    setWinner(prizes[selectedPrizeIndex])
+    setWinner(availableUnique.find(p => p.id === res.prize_id) || wheelSegments[selectedPrizeIndex])
     setDbWinnerId(res.ticket.qr_code)
     confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#E11D48'] })
 
@@ -532,13 +553,13 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   }
 
   const renderWheelSegments = () => {
-    const numSegments = prizes.length
+    const numSegments = wheelSegments.length
     const segmentAngle = 360 / numSegments
-    
+
     // @ts-ignore
     const currentPalette = casinoConfig.palettes[game.wheel_palette || 'MONACO'];
 
-    return prizes.map((prize, index) => {
+    return wheelSegments.map((prize, index) => {
         const startPercent = index / numSegments
         const endPercent = (index + 1) / numSegments
         const r = 1.1; 
