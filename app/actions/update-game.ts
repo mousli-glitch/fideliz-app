@@ -38,6 +38,8 @@ export async function updateGameAction(gameId: string, data: any) {
       title_style: data.design.title_style,
       card_style: data.design.card_style,
       wheel_palette: data.design.wheel_palette,
+      wheel_color_1: data.design.wheel_color_1 || null,
+      wheel_color_2: data.design.wheel_color_2 || null,
       overlay_style: data.design.overlay_style || 'dark'
     }).eq("id", gameId)
 

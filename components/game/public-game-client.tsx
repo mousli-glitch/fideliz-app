@@ -54,7 +54,9 @@ type Props = {
     bg_choice?: number;
     bg_image_url?: string;
     card_style?: string;
-    wheel_palette?: 'MONACO' | 'GATSBY' | 'EMERALD';
+    wheel_palette?: 'MONACO' | 'GATSBY' | 'EMERALD' | 'CUSTOM';
+    wheel_color_1?: string | null;
+    wheel_color_2?: string | null;
     overlay_style?: 'dark' | 'light' | 'none';
     // Nouveaux champs
     is_date_limit_active?: boolean;
@@ -135,6 +137,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const wheelSegments = availableUnique.length === 0
     ? []
     : Array.from({ length: prizes.length }, (_, i) => availableUnique[i % availableUnique.length])
+
+  // Couleurs de la roue : soit un thème préréglé, soit les 2 couleurs personnalisées du jeu.
+  const wheelPalette = (game.wheel_palette === 'CUSTOM' && game.wheel_color_1 && game.wheel_color_2)
+    ? { c1: game.wheel_color_1, c2: game.wheel_color_2 }
+    // @ts-ignore : accès à la palette préréglée par son id
+    : (casinoConfig.palettes[game.wheel_palette || 'MONACO'] || casinoConfig.palettes.MONACO)
   const [step, setStep] = useState<'IDENTIFY' | 'TOO_SOON' | 'LANDING' | 'INSTRUCTIONS' | 'VERIFYING' | 'WHEEL' | 'FORM' | 'TICKET'>(needIdentify ? 'IDENTIFY' : 'LANDING')
   const [spinning, setSpinning] = useState(false)
   const [winner, setWinner] = useState<any>(null)
@@ -556,8 +564,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
     const numSegments = wheelSegments.length
     const segmentAngle = 360 / numSegments
 
-    // @ts-ignore
-    const currentPalette = casinoConfig.palettes[game.wheel_palette || 'MONACO'];
+    const currentPalette = wheelPalette;
 
     return wheelSegments.map((prize, index) => {
         const startPercent = index / numSegments
@@ -918,8 +925,7 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
                     <div className="absolute inset-[32px] rounded-full overflow-hidden z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
                         <svg viewBox="-1.1 -1.1 2.2 2.2" className="absolute inset-0 w-full h-full transform -rotate-90">
-                           {/* @ts-ignore */}
-                           <circle cx="0" cy="0" r="1.1" fill={casinoConfig.palettes[game.wheel_palette || 'MONACO'].c2} />
+                           <circle cx="0" cy="0" r="1.1" fill={wheelPalette.c2} />
                         </svg>
                         <motion.div className="w-full h-full origin-center" animate={wheelControls}>
                             <svg viewBox="-1.1 -1.1 2.2 2.2" className="w-full h-full transform -rotate-90">

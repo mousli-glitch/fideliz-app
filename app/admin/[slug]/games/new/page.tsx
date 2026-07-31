@@ -68,6 +68,8 @@ export default function NewGamePage() {
       bg_image_url: "",
       card_style: 'light',
       wheel_palette: 'MONACO',
+      wheel_color_1: '#2563EB',
+      wheel_color_2: '#0F172A',
       overlay_style: 'dark'
   })
 
@@ -451,7 +453,32 @@ export default function NewGamePage() {
                                                 <div className="flex h-6 w-16 rounded overflow-hidden border border-slate-200"><div className="flex-1" style={{backgroundColor: p.c1}}></div><div className="flex-1" style={{backgroundColor: p.c2}}></div></div>
                                             </div>
                                         ))}
+                                        {/* Option Personnalisé : 2 couleurs libres */}
+                                        <div onClick={() => setDesignData({...designData, wheel_palette: 'CUSTOM'})} className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${designData.wheel_palette === 'CUSTOM' ? 'bg-white border-blue-600 shadow-md ring-1 ring-blue-600' : 'bg-transparent border-slate-200'}`}>
+                                            <span className="font-bold text-xs text-slate-700 uppercase">Personnalisé</span>
+                                            <div className="flex h-6 w-16 rounded overflow-hidden border border-slate-200"><div className="flex-1" style={{backgroundColor: designData.wheel_color_1}}></div><div className="flex-1" style={{backgroundColor: designData.wheel_color_2}}></div></div>
+                                        </div>
                                     </div>
+
+                                    {designData.wheel_palette === 'CUSTOM' && (
+                                        <div className="grid grid-cols-2 gap-3 mt-3">
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-slate-500 mb-1">Couleur 1</label>
+                                                <div className="flex items-center gap-2 border-2 border-slate-200 rounded-xl p-1.5">
+                                                    <input type="color" value={designData.wheel_color_1} onChange={(e) => setDesignData({...designData, wheel_color_1: e.target.value})} className="w-9 h-9 rounded cursor-pointer border-0 bg-transparent p-0" />
+                                                    <span className="text-xs font-mono text-slate-500">{designData.wheel_color_1}</span>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-slate-500 mb-1">Couleur 2</label>
+                                                <div className="flex items-center gap-2 border-2 border-slate-200 rounded-xl p-1.5">
+                                                    <input type="color" value={designData.wheel_color_2} onChange={(e) => setDesignData({...designData, wheel_color_2: e.target.value})} className="w-9 h-9 rounded cursor-pointer border-0 bg-transparent p-0" />
+                                                    <span className="text-xs font-mono text-slate-500">{designData.wheel_color_2}</span>
+                                                </div>
+                                            </div>
+                                            <p className="col-span-2 text-[10px] text-slate-400 -mt-1">Les 2 couleurs alternent une part sur deux tout autour de la roue.</p>
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Apparence de la carte</label>

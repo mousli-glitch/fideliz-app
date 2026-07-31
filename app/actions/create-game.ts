@@ -61,6 +61,8 @@ export async function createGameAction(data: any) {
       title_style: data.design.title_style,
       card_style: data.design.card_style || 'light',
       wheel_palette: data.design.wheel_palette,
+      wheel_color_1: data.design.wheel_color_1 || null,
+      wheel_color_2: data.design.wheel_color_2 || null,
       overlay_style: data.design.overlay_style || 'dark',
       // Conditions (dates / stock / menu)
       is_stock_limit_active: !!data.form.is_stock_limit_active,
