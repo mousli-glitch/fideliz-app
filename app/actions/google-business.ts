@@ -250,7 +250,18 @@ export async function getGoogleReviews(restaurantId: string) {
 // 5. Réglages de la réponse automatique
 export async function saveAutoReplySettingsAction(
   restaurantId: string,
-  settings: { auto_reply_enabled: boolean; auto_reply_tone: string; auto_reply_min_rating: number }
+  settings: {
+    auto_reply_enabled: boolean
+    auto_reply_tone: string
+    auto_reply_min_rating: number
+    // Options avancées (optionnelles)
+    auto_reply_match_language?: boolean
+    auto_reply_custom_instructions?: string | null
+    auto_reply_length?: string
+    auto_reply_signature?: string | null
+    auto_reply_draft_mode?: boolean
+    auto_reply_blocklist?: string | null
+  }
 ) {
   // On ne pose auto_reply_since QUE lors du passage OFF -> ON, pour que le cron
   // ne réponde qu'aux avis reçus après activation (jamais au backlog d'anciens avis).
@@ -268,6 +279,14 @@ export async function saveAutoReplySettingsAction(
     auto_reply_tone: settings.auto_reply_tone || "amical",
     auto_reply_min_rating: Math.min(5, Math.max(1, Number(settings.auto_reply_min_rating) || 4)),
   }
+  // Options avancées : on ne met à jour que celles fournies (undefined = inchangé)
+  if (settings.auto_reply_match_language !== undefined) patch.auto_reply_match_language = !!settings.auto_reply_match_language
+  if (settings.auto_reply_custom_instructions !== undefined) patch.auto_reply_custom_instructions = settings.auto_reply_custom_instructions || null
+  if (settings.auto_reply_length !== undefined) patch.auto_reply_length = settings.auto_reply_length || "court"
+  if (settings.auto_reply_signature !== undefined) patch.auto_reply_signature = settings.auto_reply_signature || null
+  if (settings.auto_reply_draft_mode !== undefined) patch.auto_reply_draft_mode = !!settings.auto_reply_draft_mode
+  if (settings.auto_reply_blocklist !== undefined) patch.auto_reply_blocklist = settings.auto_reply_blocklist || null
+
   // Transition OFF -> ON : on (re)fixe le point de départ à maintenant.
   if (nowEnabled && !wasEnabled) {
     patch.auto_reply_since = new Date().toISOString()

@@ -28,14 +28,14 @@ export async function GET(request: Request) {
 
   const { data: restaurants } = await supabaseAdmin
     .from("restaurants")
-    .select("id, name, slug, auto_reply_tone, auto_reply_min_rating, auto_reply_since")
+    .select("id, name, slug, auto_reply_tone, auto_reply_min_rating, auto_reply_since, auto_reply_match_language, auto_reply_custom_instructions, auto_reply_length, auto_reply_signature, auto_reply_draft_mode, auto_reply_blocklist")
     .eq("auto_reply_enabled", true)
     .not("google_refresh_token", "is", null)
 
   const summary: any[] = []
 
   for (const resto of restaurants || []) {
-    let replied = 0, skipped = 0, failed = 0
+    let replied = 0, skipped = 0, failed = 0, drafted = 0
     try {
       const res = await getGoogleReviews(resto.id)
       if (!res.success || !res.reviews) {
@@ -47,9 +47,34 @@ export async function GET(request: Request) {
       const tone = (resto as any).auto_reply_tone || "amical"
       // Point de départ : on ne répond qu'aux avis reçus APRÈS l'activation de l'auto-reply.
       const since = (resto as any).auto_reply_since ? new Date((resto as any).auto_reply_since).getTime() : 0
+      // Mode validation : on prépare des brouillons au lieu de publier
+      const draftMode = !!(resto as any).auto_reply_draft_mode
+      // Mots-clés sensibles : jamais de réponse auto
+      const blocklist = String((resto as any).auto_reply_blocklist || "")
+        .split(/[,\n]/).map((w) => w.trim().toLowerCase()).filter(Boolean)
+      // Options de génération partagées
+      const aiOpts = {
+        tone,
+        restaurantName: resto.name,
+        matchLanguage: !!(resto as any).auto_reply_match_language,
+        customInstructions: (resto as any).auto_reply_custom_instructions || "",
+        length: (resto as any).auto_reply_length || "court",
+        signature: (resto as any).auto_reply_signature || "",
+      }
+
+      // Mode brouillon : on ne régénère pas un brouillon déjà existant (pas d'écrasement, pas de gaspillage)
+      let existingDrafts = new Set<string>()
+      if (draftMode) {
+        const { data: drafts } = await supabaseAdmin
+          .from("avis")
+          .select("review_id")
+          .eq("restaurant_id", resto.id)
+          .not("ai_draft", "is", null)
+        existingDrafts = new Set((drafts || []).map((d: any) => d.review_id))
+      }
 
       for (const review of res.reviews) {
-        if (replied >= MAX_REPLIES_PER_RESTAURANT) break
+        if ((replied + drafted) >= MAX_REPLIES_PER_RESTAURANT) break
         if (review.reply) continue // déjà répondu (manuellement, automatiquement ou sur Google)
 
         // Avis antérieur à l'activation : on ne touche pas au backlog d'anciens avis.
@@ -59,16 +84,29 @@ export async function GET(request: Request) {
         // Auto-reply UNIQUEMENT sur les avis avec du texte (on ignore les notes sans commentaire).
         if (!review.comment || !review.comment.trim()) { skipped++; continue }
 
+        // Mots-clés sensibles : on laisse ces avis au gérant (jamais d'auto)
+        const lc = review.comment.toLowerCase()
+        if (blocklist.length > 0 && blocklist.some((w) => lc.includes(w))) { skipped++; continue }
+
         const rating = STAR_MAP[review.starRating] || Number(review.starRating) || 0
         if (rating < minRating) { skipped++; continue }
 
-        const gen = await generateAIResponse(
-          review.comment || "",
-          tone,
-          resto.name,
-          rating
-        )
+        // Mode brouillon : brouillon déjà prêt -> on n'y touche pas
+        if (draftMode && existingDrafts.has(review.reviewId)) { skipped++; continue }
+
+        const gen = await generateAIResponse({ reviewText: review.comment || "", rating, ...aiOpts })
         if (!gen.ok) { failed++; continue }
+
+        if (draftMode) {
+          // On prépare un brouillon (aucune publication) : le gérant validera d'un clic.
+          const { error: dErr } = await supabaseAdmin
+            .from("avis")
+            .update({ ai_draft: gen.text })
+            .eq("restaurant_id", resto.id)
+            .eq("review_id", review.reviewId)
+          if (!dErr) { drafted++ } else { failed++ }
+          continue
+        }
 
         const pub = await replyToGoogleReviewAction(resto.id, review.reviewId, gen.text)
         if (pub.success) {
@@ -86,7 +124,7 @@ export async function GET(request: Request) {
         }
       }
 
-      summary.push({ restaurant: resto.name, replied, skipped_low_rating: skipped, failed })
+      summary.push({ restaurant: resto.name, replied, drafted, skipped_low_rating: skipped, failed })
     } catch (e: any) {
       console.error(`🚨 Auto-reply ${resto.name}:`, e)
       summary.push({ restaurant: resto.name, error: e.message })
