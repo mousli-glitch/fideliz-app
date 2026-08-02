@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/stock-refill",
+      "schedule": "15 0 * * *"
+    },
+    {
       "path": "/api/cron/sync-reviews",
       "schedule": "0 6 * * *"
     },

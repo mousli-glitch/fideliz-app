@@ -66,7 +66,9 @@ export default function EditGamePage() {
     is_date_limit_active: false,
     start_date: "",
     end_date: "",
-    is_stock_limit_active: false
+    is_stock_limit_active: false,
+    stock_refill_enabled: false,
+    stock_refill_period: 'monthly'
   })
 
   const [designData, setDesignData] = useState<any>({
@@ -134,7 +136,9 @@ export default function EditGamePage() {
                 is_date_limit_active: game.is_date_limit_active || false,
                 start_date: game.start_date ? game.start_date.split('T')[0] : "",
                 end_date: game.end_date ? game.end_date.split('T')[0] : "",
-                is_stock_limit_active: game.is_stock_limit_active || false
+                is_stock_limit_active: game.is_stock_limit_active || false,
+                stock_refill_enabled: game.stock_refill_enabled || false,
+                stock_refill_period: game.stock_refill_period || 'monthly'
             })
 
             const isDark = restaurant?.text_color === '#FFFFFF'
@@ -446,13 +450,55 @@ export default function EditGamePage() {
                     <div className="space-y-8 animate-in fade-in duration-300">
                         
                         {/* OPTIONS STOCKS (Switch PRO) */}
-                        <ToggleSwitch 
-                            checked={formData.is_stock_limit_active} 
+                        <ToggleSwitch
+                            checked={formData.is_stock_limit_active}
                             onChange={(val: boolean) => setFormData({...formData, is_stock_limit_active: val})}
                             label="Limiter les quantités (Stocks)"
                             subLabel="Définir un nombre maximum de gagnants par lot."
                             icon={Package}
                         />
+
+                        {/* RECHARGE AUTOMATIQUE DU STOCK */}
+                        {formData.is_stock_limit_active && (
+                            <div className={`rounded-2xl border p-4 transition-all ${formData.stock_refill_enabled ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200'}`}>
+                                <div onClick={() => setFormData({...formData, stock_refill_enabled: !formData.stock_refill_enabled})} className="flex items-center justify-between gap-3 cursor-pointer">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2.5 rounded-xl ${formData.stock_refill_enabled ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}><Timer size={18} /></div>
+                                        <div>
+                                            <p className={`text-sm font-bold ${formData.stock_refill_enabled ? 'text-blue-900' : 'text-slate-700'}`}>Recharge automatique du stock</p>
+                                            <p className="text-xs text-slate-400 mt-0.5">Chaque lot revient à son stock de départ, tout seul.</p>
+                                        </div>
+                                    </div>
+                                    <div className={`w-12 h-7 flex items-center rounded-full p-1 shrink-0 transition-colors ${formData.stock_refill_enabled ? 'bg-blue-600' : 'bg-slate-200'}`}>
+                                        <div className={`bg-white w-5 h-5 rounded-full shadow transform transition-transform ${formData.stock_refill_enabled ? 'translate-x-5' : ''}`} />
+                                    </div>
+                                </div>
+
+                                {formData.stock_refill_enabled && (
+                                    <div className="mt-4 pt-4 border-t border-blue-100">
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">Fréquence de recharge</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {[
+                                                { id: 'daily', label: 'Chaque jour' },
+                                                { id: 'weekly', label: 'Chaque semaine' },
+                                                { id: 'monthly', label: 'Chaque mois' },
+                                            ].map((o) => (
+                                                <button key={o.id} type="button" onClick={() => setFormData({...formData, stock_refill_period: o.id})}
+                                                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border-2 transition-all ${formData.stock_refill_period === o.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}>
+                                                    {o.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <p className="text-[11px] text-slate-400 mt-2 leading-snug">
+                                            {formData.stock_refill_period === 'daily' && 'Remise à zéro chaque jour à minuit.'}
+                                            {formData.stock_refill_period === 'weekly' && 'Remise à zéro chaque lundi.'}
+                                            {(formData.stock_refill_period === 'monthly' || !formData.stock_refill_period) && 'Remise à zéro le 1er de chaque mois.'}
+                                            {' '}Le stock non gagné ne se cumule pas.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* BARRE DE PROGRESSION 100% */}
                         <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">

@@ -66,6 +66,9 @@ export async function createGameAction(data: any) {
       overlay_style: data.design.overlay_style || 'dark',
       // Conditions (dates / stock / menu)
       is_stock_limit_active: !!data.form.is_stock_limit_active,
+      // Recharge automatique du stock
+      stock_refill_enabled: !!(data.form.is_stock_limit_active && data.form.stock_refill_enabled),
+      stock_refill_period: data.form.stock_refill_period || 'monthly',
       requires_menu: !!data.form.requires_menu,
       is_date_limit_active: !!data.form.is_date_limit_active,
       start_date: data.form.start_date ? new Date(data.form.start_date).toISOString() : null,
@@ -82,14 +85,20 @@ export async function createGameAction(data: any) {
 
     // Création des lots
     if (data.prizes && data.prizes.length > 0) {
-        const prizesToInsert = data.prizes.map((p: any) => ({
-          game_id: game.id,
-          label: p.label,
-          color: p.color || "#000000",
-          weight: Number(p.weight),
+        const prizesToInsert = data.prizes.map((p: any) => {
           // Stock : null = illimité (∞), un nombre = plafond
-          quantity: p.quantity ?? null
-        }))
+          const qty = data.form?.is_stock_limit_active
+            ? (p.quantity === null || p.quantity === undefined || p.quantity === "" ? null : Number(p.quantity))
+            : (p.quantity ?? null)
+          return {
+            game_id: game.id,
+            label: p.label,
+            color: p.color || "#000000",
+            weight: Number(p.weight),
+            quantity: qty,
+            initial_quantity: qty, // repère "stock de départ" pour la recharge automatique
+          }
+        })
         await supabaseAdmin.from("prizes").insert(prizesToInsert)
     }
 

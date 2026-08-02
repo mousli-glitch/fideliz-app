@@ -40,7 +40,10 @@ export async function updateGameAction(gameId: string, data: any) {
       wheel_palette: data.design.wheel_palette,
       wheel_color_1: data.design.wheel_color_1 || null,
       wheel_color_2: data.design.wheel_color_2 || null,
-      overlay_style: data.design.overlay_style || 'dark'
+      overlay_style: data.design.overlay_style || 'dark',
+      // Recharge automatique du stock
+      stock_refill_enabled: !!(data.form.is_stock_limit_active && data.form.stock_refill_enabled),
+      stock_refill_period: data.form.stock_refill_period || 'monthly',
     }).eq("id", gameId)
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)
@@ -49,16 +52,20 @@ export async function updateGameAction(gameId: string, data: any) {
     // On supprime d'abord pour éviter les doublons ou orphelins
     await supabaseAdmin.from('prizes').delete().eq('game_id', gameId)
     
-    const prizesToInsert = data.prizes.map((p: any) => ({
-        game_id: gameId,
-        label: p.label,
-        color: "#000000", 
-        weight: Number(p.weight),
+    const prizesToInsert = data.prizes.map((p: any) => {
         // Stock : si limite active, on garde le nombre saisi ; vide/null = illimité (null), PAS 0.
-        quantity: data.form.is_stock_limit_active
+        const qty = data.form.is_stock_limit_active
           ? (p.quantity === null || p.quantity === undefined || p.quantity === "" ? null : Number(p.quantity))
           : null
-    }))
+        return {
+          game_id: gameId,
+          label: p.label,
+          color: "#000000",
+          weight: Number(p.weight),
+          quantity: qty,
+          initial_quantity: qty, // repère "stock de départ" pour la recharge automatique
+        }
+    })
     
     if (prizesToInsert.length > 0) {
         const { error: prizeError } = await supabaseAdmin.from('prizes').insert(prizesToInsert)
