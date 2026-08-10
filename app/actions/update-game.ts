@@ -7,6 +7,15 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Normalise un montant saisi par le gérant : accepte "5,90" ou "5.90", garde les centimes.
+// Renvoie une chaîne propre ("5.9") car la colonne min_spend est de type texte.
+function normalizeAmount(value: any): string {
+  if (value === null || value === undefined || value === "") return "0"
+  const n = parseFloat(String(value).replace(",", ".").trim())
+  if (!isFinite(n) || n < 0) return "0"
+  return String(Math.round(n * 100) / 100) // 2 décimales max
+}
+
 export async function updateGameAction(gameId: string, data: any) {
   try {
     // 1. Sauvegarde Resto
@@ -23,7 +32,8 @@ export async function updateGameAction(gameId: string, data: any) {
       active_action: data.form.active_action,
       action_url: data.form.action_url,
       validity_days: data.form.validity_days,
-      min_spend: data.form.min_spend, // Laisse Supabase gérer le type (numeric)
+      // Montant minimum : on accepte les décimales (5,90 comme 5.90) et on normalise en "5.9"
+      min_spend: normalizeAmount(data.form.min_spend),
       
       // NOUVEAUX CHAMPS DATES & STOCKS
       is_date_limit_active: data.form.is_date_limit_active,

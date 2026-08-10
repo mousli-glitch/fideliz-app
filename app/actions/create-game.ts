@@ -7,8 +7,16 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Normalise un montant saisi par le gérant : accepte "5,90" ou "5.90", garde les centimes.
+function normalizeAmount(value: any): string {
+  if (value === null || value === undefined || value === "") return "0"
+  const n = parseFloat(String(value).replace(",", ".").trim())
+  if (!isFinite(n) || n < 0) return "0"
+  return String(Math.round(n * 100) / 100) // 2 décimales max
+}
+
 export async function createGameAction(data: any) {
-  console.log("🚀 ACTION SERVEUR DÉCLENCHÉE !") 
+  console.log("🚀 ACTION SERVEUR DÉCLENCHÉE !")
 
   try {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -55,7 +63,7 @@ export async function createGameAction(data: any) {
       active_action: data.form.active_action,
       action_url: data.form.action_url,
       validity_days: data.form.validity_days,
-      min_spend: String(data.form.min_spend),
+      min_spend: normalizeAmount(data.form.min_spend),
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,

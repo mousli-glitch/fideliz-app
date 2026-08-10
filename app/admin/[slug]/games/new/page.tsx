@@ -315,11 +315,17 @@ export default function NewGamePage() {
                                     {formData.has_min_spend && (
                                         <div className="animate-in slide-in-from-top-1 fade-in">
                                             <div className="relative">
-                                                <input 
-                                                    type="number" 
-                                                    className="w-full p-3 pl-4 pr-12 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 text-lg font-bold shadow-sm" 
-                                                    value={formData.min_spend} 
-                                                    onChange={e => setFormData({...formData, min_spend: parseInt(e.target.value) || 0})}
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    inputMode="decimal"
+                                                    placeholder="Ex : 5,90"
+                                                    className="w-full p-3 pl-4 pr-12 border rounded-xl bg-white outline-none focus:ring-2 focus:ring-blue-500 text-lg font-bold shadow-sm"
+                                                    value={formData.min_spend}
+                                                    // On garde la saisie telle quelle (permet de taper "5." puis "5.9") ;
+                                                    // la conversion en nombre se fait à l'enregistrement.
+                                                    onChange={e => setFormData({...formData, min_spend: e.target.value})}
                                                 />
                                                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">€</span>
                                             </div>

@@ -1060,7 +1060,12 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                           {game.requires_menu ? (
                             <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Condition :</span><span className="text-xs font-bold text-white">Menu consommé obligatoire</span></div>
                           ) : (
-                            <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{game.min_spend > 0 ? `${game.min_spend}€` : "Aucun"}</span></div>
+                            <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{(() => {
+                              // Affichage à la française : 5.9 -> "5,90 €" ; 10 -> "10 €"
+                              const n = parseFloat(String(game.min_spend ?? 0).replace(',', '.'))
+                              if (!isFinite(n) || n <= 0) return "Aucun"
+                              return Number.isInteger(n) ? `${n} €` : `${n.toFixed(2).replace('.', ',')} €`
+                            })()}</span></div>
                           )}
                       </div>
 
