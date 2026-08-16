@@ -78,6 +78,7 @@ export async function createGameAction(data: any) {
       stock_refill_enabled: !!(data.form.is_stock_limit_active && data.form.stock_refill_enabled),
       stock_refill_period: data.form.stock_refill_period || 'monthly',
       requires_menu: !!data.form.requires_menu,
+      requires_review_proof: !!data.form.requires_review_proof,
       is_date_limit_active: !!data.form.is_date_limit_active,
       start_date: data.form.start_date ? new Date(data.form.start_date).toISOString() : null,
       end_date: data.form.end_date ? new Date(data.form.end_date).toISOString() : null,

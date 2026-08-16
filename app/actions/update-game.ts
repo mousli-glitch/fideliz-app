@@ -42,6 +42,7 @@ export async function updateGameAction(gameId: string, data: any) {
       is_stock_limit_active: data.form.is_stock_limit_active,
       // Condition : consommation d'un menu obligatoire
       requires_menu: !!data.form.requires_menu,
+      requires_review_proof: !!data.form.requires_review_proof,
 
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,

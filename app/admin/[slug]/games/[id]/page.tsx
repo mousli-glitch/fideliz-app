@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, CheckCircle, AlertCircle, Calendar, Package, Wand2, Euro, Timer, Utensils } from "lucide-react"
+import { Loader2, Save, Layout, Gift, Palette, Clock, ArrowLeft, Trash2, Sun, Plus, CheckCircle, AlertCircle, Calendar, Package, Wand2, Euro, Timer, Utensils, Star } from "lucide-react"
 import Link from "next/link"
 import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
@@ -62,6 +62,7 @@ export default function EditGamePage() {
     min_spend: 0,
     has_min_spend: false,
     requires_menu: false,
+    requires_review_proof: false,
     // Nouveaux champs
     is_date_limit_active: false,
     start_date: "",
@@ -133,6 +134,7 @@ export default function EditGamePage() {
                 min_spend: game.min_spend ? (parseFloat(String(game.min_spend).replace(',', '.')) || 0) : 0,
                 has_min_spend: (parseFloat(String(game.min_spend || 0).replace(',', '.')) || 0) > 0,
                 requires_menu: game.requires_menu || false,
+                requires_review_proof: game.requires_review_proof || false,
                 // Chargement des nouveaux champs
                 is_date_limit_active: game.is_date_limit_active || false,
                 start_date: game.start_date ? game.start_date.split('T')[0] : "",
@@ -439,6 +441,14 @@ export default function EditGamePage() {
                                     )}
                                 </div>
                             </div>
+
+                            <ToggleSwitch
+                                checked={formData.requires_review_proof}
+                                onChange={(val: boolean) => setFormData({ ...formData, requires_review_proof: val })}
+                                label="Avis à montrer en caisse"
+                                subLabel="Le client doit présenter l'avis qu'il a laissé pour bénéficier de son lot."
+                                icon={Star}
+                            />
 
                             <ToggleSwitch
                                 checked={formData.requires_menu}

@@ -1051,22 +1051,43 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                           )}
                       </div>
 
-                      {/* 5. Texte caisse */}
-                      <p className="text-sm font-bold text-white text-center mb-5 px-2">Présentez ce QR code en caisse pour récupérer votre récompense.</p>
+                      {/* 5. Rappel court (le détail est dans la liste de conditions juste en dessous) */}
+                      <p className="text-sm font-bold text-white text-center mb-4 px-2">Présentez ce ticket en caisse.</p>
 
-                      {/* 6. Validité + minimum de commande */}
+                      {/* 6. Validité + TOUTES les conditions actives (avant : une seule s'affichait) */}
                       <div className="w-full text-left bg-gray-900 p-3 rounded-xl border border-gray-800 mb-5">
-                          <div className="flex justify-between mb-2"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
-                          {game.requires_menu ? (
-                            <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Condition :</span><span className="text-xs font-bold text-white">Menu consommé obligatoire</span></div>
-                          ) : (
-                            <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Min. Commande :</span><span className="text-xs font-bold text-white">{(() => {
-                              // Affichage à la française : 5.9 -> "5,90 €" ; 10 -> "10 €"
-                              const n = parseFloat(String(game.min_spend ?? 0).replace(',', '.'))
-                              if (!isFinite(n) || n <= 0) return "Aucun"
-                              return Number.isInteger(n) ? `${n} €` : `${n.toFixed(2).replace('.', ',')} €`
-                            })()}</span></div>
-                          )}
+                          <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
+
+                          {(() => {
+                            // Montant minimum formaté à la française : 4.9 -> "4,90 €" ; 10 -> "10 €"
+                            const n = parseFloat(String(game.min_spend ?? 0).replace(',', '.'))
+                            const montant = isFinite(n) && n > 0
+                              ? (Number.isInteger(n) ? `${n} €` : `${n.toFixed(2).replace('.', ',')} €`)
+                              : null
+
+                            const conditions: string[] = [
+                              "Présenter ce QR code en caisse pour recevoir votre gain.",
+                            ]
+                            if ((game as any).requires_review_proof) conditions.push("Montrer l'avis que vous avez laissé.")
+                            if (montant) conditions.push(`Présenter le ticket de consommation d'un montant minimum de ${montant}.`)
+                            if (game.requires_menu) conditions.push("Avoir consommé un menu.")
+
+                            return (
+                              <div className="mt-3 pt-3 border-t border-gray-800">
+                                <p className="text-xs text-gray-400 font-bold mb-2">
+                                  {conditions.length > 1 ? "Conditions à respecter :" : "Condition :"}
+                                </p>
+                                <ul className="space-y-1.5">
+                                  {conditions.map((c, i) => (
+                                    <li key={i} className="flex gap-2 items-start">
+                                      <span className="text-[11px] leading-4 text-gray-500 shrink-0">{i + 1}.</span>
+                                      <span className="text-[11px] leading-4 font-bold text-white">{c}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )
+                          })()}
                       </div>
 
                       {/* 7 & 8. Boutons : principal puis secondaire — écran uniquement */}
