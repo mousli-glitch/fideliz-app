@@ -200,6 +200,23 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
   const expiryDateObj = new Date();
   expiryDateObj.setDate(expiryDateObj.getDate() + validityDays);
   const expiryDate = expiryDateObj.toLocaleDateString('fr-FR');
+
+  // Durée de validité en langage humain : 1 -> "1 jour", 7 -> "1 semaine",
+  // 30 -> "1 mois", 4 -> "4 jours". Plus parlant qu'une plage de dates.
+  const validityLabel = (() => {
+    const d = validityDays
+    if (d === 1) return "1 jour"
+    if (d === 7) return "1 semaine"
+    if (d === 14) return "2 semaines"
+    if (d === 21) return "3 semaines"
+    if (d === 30 || d === 31) return "1 mois"
+    if (d === 60) return "2 mois"
+    if (d === 90) return "3 mois"
+    if (d === 365) return "1 an"
+    if (d % 30 === 0) return `${d / 30} mois`
+    if (d % 7 === 0) return `${d / 7} semaines`
+    return `${d} jours`
+  })();
   
   const currentBg = game.bg_image_url && game.bg_image_url.length > 5 
     ? game.bg_image_url 
@@ -1056,7 +1073,14 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
 
                       {/* 6. Validité + TOUTES les conditions actives (avant : une seule s'affichait) */}
                       <div className="w-full text-left bg-gray-900 p-3 rounded-xl border border-gray-800 mb-5">
-                          <div className="flex justify-between"><span className="text-xs text-gray-400 font-bold">Validité :</span><span className="text-xs font-bold text-white">{todayDate} - {expiryDate}</span></div>
+                          {/* Validité en langage clair + date d'expiration en second */}
+                          <div className="flex justify-between items-baseline gap-2">
+                            <span className="text-xs text-gray-400 font-bold shrink-0">Validité :</span>
+                            <span className="text-right">
+                              <span className="text-xs font-black text-white">{validityLabel}</span>
+                              <span className="block text-[10px] text-gray-500 font-medium">jusqu'au {expiryDate}</span>
+                            </span>
+                          </div>
 
                           {(() => {
                             // Montant minimum formaté à la française : 4.9 -> "4,90 €" ; 10 -> "10 €"
@@ -1065,23 +1089,26 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                               ? (Number.isInteger(n) ? `${n} €` : `${n.toFixed(2).replace('.', ',')} €`)
                               : null
 
-                            const conditions: string[] = [
-                              "Présenter ce QR code en caisse pour recevoir votre gain.",
-                            ]
+                            // Formulations courtes : évitent les retours à la ligne bancals sur mobile
+                            const conditions: string[] = ["Présenter ce QR code en caisse."]
                             if ((game as any).requires_review_proof) conditions.push("Montrer l'avis que vous avez laissé.")
-                            if (montant) conditions.push(`Présenter le ticket de consommation d'un montant minimum de ${montant}.`)
+                            if (montant) conditions.push(`Présenter un ticket de consommation de ${montant} minimum.`)
                             if (game.requires_menu) conditions.push("Avoir consommé un menu.")
 
                             return (
                               <div className="mt-3 pt-3 border-t border-gray-800">
-                                <p className="text-xs text-gray-400 font-bold mb-2">
-                                  {conditions.length > 1 ? "Conditions à respecter :" : "Condition :"}
+                                <p className="text-[10px] text-gray-400 font-black uppercase tracking-wider mb-2.5">
+                                  {conditions.length > 1 ? "Conditions à respecter" : "Condition"}
                                 </p>
-                                <ul className="space-y-1.5">
+                                <ul className="space-y-2">
                                   {conditions.map((c, i) => (
-                                    <li key={i} className="flex gap-2 items-start">
-                                      <span className="text-[11px] leading-4 text-gray-500 shrink-0">{i + 1}.</span>
-                                      <span className="text-[11px] leading-4 font-bold text-white">{c}</span>
+                                    <li key={i} className="flex gap-2.5 items-start">
+                                      <span className="w-[18px] h-[18px] rounded-full bg-yellow-400/15 text-yellow-400 text-[10px] font-black flex items-center justify-center shrink-0 mt-[1px]">
+                                        {i + 1}
+                                      </span>
+                                      <span className="text-[12.5px] leading-[1.35] font-bold text-yellow-400 [text-wrap:balance]">
+                                        {c}
+                                      </span>
                                     </li>
                                   ))}
                                 </ul>
