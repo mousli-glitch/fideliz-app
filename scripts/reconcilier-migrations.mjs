@@ -137,12 +137,27 @@ for (const m of registre.migrations) {
   }
 }
 
-const migrations = fichiers.filter((f) => !EST_BASELINE(f)).length;
+/*
+ * Le compte doit tomber juste, et se lire sans réfléchir. « 8 appliquées,
+ * 9 fichiers » laissait planer un fichier surnuméraire ; l'égalité écrite
+ * en toutes lettres montre où va chaque fichier.
+ */
+const baselines = fichiers.filter(EST_BASELINE).length;
+const migrations = fichiers.length - baselines;
+const appliquees = migrations - enAttente.length;
+
 console.log(`\n${"═".repeat(74)}`);
-console.log(
-  `  ${registre.migrations.length} appliquée(s) · ${migrations} dans Git · ${fichiers.length - migrations} baseline(s)` +
-    (enAttente.length ? ` · ${enAttente.length} en attente` : "")
-);
+console.log(`  ${fichiers.length} fichier(s) .sql = ${baselines} baseline(s) + ${appliquees} appliquée(s) + ${enAttente.length} en attente`);
+console.log(`  ${G}registre de la base : ${registre.migrations.length} migration(s) appliquée(s)${Z}`);
+
+if (appliquees !== registre.migrations.length) {
+  console.log(`  ${R}✗ le compte ne tombe pas juste : ${appliquees} fichier(s) appliqué(s) contre ${registre.migrations.length} au registre${Z}`);
+  divergences.push("comptage");
+}
+if (baselines > 0) {
+  console.log(`  ${G}la ou les baselines décrivent l'état historique et ne sont jamais rejouées :`);
+  console.log(`  elles n'ont pas à figurer au registre, et leur absence n'est pas un écart${Z}`);
+}
 
 if (divergences.length) {
   console.log(`\n${R}${B}DIVERGENCE — ${divergences.length} écart(s)${Z}\n`);

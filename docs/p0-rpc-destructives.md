@@ -112,3 +112,71 @@ DEFINER` (`fn_audit_restaurant_changes`, `handle_deleted_commercial`). Un
 `search_path` absent sur une fonction `DEFINER` est une voie d'élévation
 connue. Exploitation difficile ici — ce sont des fonctions de trigger, dont
 l'une n'est attachée à rien — mais c'est une correction à faire.
+
+---
+
+# Analyse bornée des `search_path` absents
+
+Demandée avant de classer ces fonctions non bloquantes. **Conclusion : non
+exploitables.** Durcissement reporté sur la branche.
+
+## Le vecteur, et pourquoi il est fermé
+
+Une fonction `SECURITY DEFINER` sans `search_path` figé s'exécute avec le
+`search_path` de l'appelant. Qui contrôle ce chemin peut interposer un objet
+de même nom — via `pg_temp`, toujours cherché en premier — et le faire
+exécuter avec les droits du propriétaire.
+
+Deux conditions doivent être réunies : **pouvoir créer l'objet leurre**, et
+**pouvoir déclencher la fonction**. Aucune des deux n'est remplie.
+
+| Vérification | Résultat |
+|---|---|
+| `anon` peut créer dans `public` | **non** |
+| `authenticated` peut créer dans `public` | **non** |
+| `anon` peut créer dans `extensions` | **non** |
+
+`pg_temp` reste ouvert à tous — c'est le propre des tables temporaires. Mais
+encore faut-il atteindre la fonction.
+
+## Les deux fonctions `SECURITY DEFINER` concernées
+
+**`fn_audit_restaurant_changes`** — attachée à **zéro trigger**. Aucun
+chemin ne l'atteint. Elle insère d'ailleurs dans `public.activity_logs`, une
+table qui n'existe pas.
+
+**`handle_deleted_commercial`** — attachée à `tr_on_commercial_deleted`,
+`BEFORE DELETE ON profiles WHEN old.role = 'sales'`. Il faut donc pouvoir
+supprimer une ligne de `profiles`.
+
+`anon` et `authenticated` ont bien le **grant** `DELETE`. Mais les **sept
+policies de `profiles` sont toutes `SELECT`** — aucune pour `DELETE` ni
+`ALL`. Sans policy permissive, la RLS refuse. La suppression n'est possible
+que pour `service_role` et `postgres`, dont le `search_path` n'est pas
+contrôlé par un tiers.
+
+Les deux autres fonctions sans `search_path` — `is_restaurant_user` et
+`set_marketing_optin_at` — sont `SECURITY INVOKER` : elles s'exécutent avec
+les droits de l'appelant, donc n'élèvent rien par construction.
+
+## Une dépendance SQL que le grep n'aurait pas vue
+
+En relevant les corps, j'ai trouvé ce que ma recherche textuelle avait
+manqué : **`trg_log_profile_active` et `trg_log_restaurant_block` appellent
+`public._log_event`** — la fonction dont je venais de retirer les droits.
+
+J'avais écrit « zéro occurrence » sur la foi d'un grep du code TypeScript.
+Il y avait deux appelants, en SQL.
+
+La chaîne tient quand même, et il a fallu le vérifier plutôt que l'espérer :
+les deux sont `SECURITY DEFINER` appartenant à `postgres`. Une fonction
+`DEFINER` s'exécute avec les droits de son propriétaire, et `postgres`
+conserve `EXECUTE` sur `_log_event` — vérifié, `true` pour les deux.
+
+Le journal des blocages de compte et de restaurant continue donc de
+fonctionner.
+
+**La leçon vaut au-delà de ce cas** : un `REVOKE` sur une fonction de base
+de données ne se valide pas en cherchant son nom dans le code applicatif.
+Les appelants peuvent être des triggers, des policies, des vues, d'autres
+fonctions. La preuve de bout en bout se fera sur la branche.
