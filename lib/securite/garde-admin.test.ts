@@ -217,19 +217,6 @@ describe("P0-B — consommation d'un ticket", () => {
       expect(v).toMatchObject({ statut: 409, motif: "STATUT_INCOMPATIBLE" });
     });
 
-    it("un ticket périmé — l'écart entre l'écran et l'API", () => {
-      const v = valider({ ticket: { ...ticketNeuf, created_at: "2026-08-01T12:00:00Z" } });
-      expect(v).toMatchObject({ statut: 410, motif: "TICKET_EXPIRE" });
-    });
-
-    it("un ticket périmé d'un jour — la validité d'un jour de Soukara", () => {
-      const v = valider({
-        ticket: { ...ticketNeuf, created_at: LE_15.toISOString() },
-        jeu: { ...jeuA, validity_days: 1 },
-      });
-      expect(v).toMatchObject({ statut: 410, motif: "TICKET_EXPIRE" });
-    });
-
     it("un UUID falsifié — chaîne qui n'en est pas un", () => {
       expect(valider({ identifiantDemande: "'; drop table winners; --" })).toMatchObject({
         statut: 400,
@@ -248,11 +235,14 @@ describe("P0-B — consommation d'un ticket", () => {
 
   describe("accepte", () => {
     it("le parcours réel en caisse : le restaurateur valide un ticket de SON restaurant", () => {
-      expect(valider({})).toEqual({ ok: true });
+      expect(valider({})).toEqual({ ok: true, perime: false });
     });
 
     it("le root, qui passe toutes les enseignes", () => {
-      expect(valider({ profil: ROOT, jeu: { ...jeuA, restaurant_id: RESTO_B } })).toEqual({ ok: true });
+      expect(valider({ profil: ROOT, jeu: { ...jeuA, restaurant_id: RESTO_B } })).toEqual({
+        ok: true,
+        perime: false,
+      });
     });
 
     it("un ticket sans limite de validité (validity_days = 0)", () => {
@@ -260,7 +250,7 @@ describe("P0-B — consommation d'un ticket", () => {
         ticket: { ...ticketNeuf, created_at: "2024-01-01T00:00:00Z" },
         jeu: { ...jeuA, validity_days: 0 },
       });
-      expect(v).toEqual({ ok: true });
+      expect(v).toEqual({ ok: true, perime: false });
     });
 
     it("un ticket émis à l'instant, le dernier jour de sa validité", () => {
@@ -268,7 +258,32 @@ describe("P0-B — consommation d'un ticket", () => {
         ticket: { ...ticketNeuf, created_at: "2026-08-11T13:00:00Z" },
         jeu: { ...jeuA, validity_days: 7 },
       });
-      expect(v).toEqual({ ok: true });
+      expect(v).toEqual({ ok: true, perime: false });
+    });
+
+    /*
+     * Le « Valider quand même » du scanner.
+     *
+     * Un ticket périmé N'EST PAS refusé : le comptoir offre explicitement ce
+     * geste (app/admin/[slug]/scanner/page.tsx:186), et un restaurateur qui
+     * honore le ticket d'un client revenu un jour trop tard rend service, il
+     * ne commet pas une faute. Le verdict signale la péremption pour qu'elle
+     * soit journalisée, et s'arrête là.
+     *
+     * Une première version de ce garde-fou renvoyait 410 ici. Elle aurait
+     * supprimé un geste commercial voulu, en croyant fermer une faille.
+     */
+    it("un ticket périmé — accepté, mais signalé", () => {
+      const v = valider({ ticket: { ...ticketNeuf, created_at: "2026-08-01T12:00:00Z" } });
+      expect(v).toEqual({ ok: true, perime: true });
+    });
+
+    it("un ticket périmé d'un jour — la validité d'un jour de Soukara", () => {
+      const v = valider({
+        ticket: { ...ticketNeuf, created_at: LE_15.toISOString() },
+        jeu: { ...jeuA, validity_days: 1 },
+      });
+      expect(v).toEqual({ ok: true, perime: true });
     });
   });
 
@@ -283,7 +298,7 @@ describe("P0-B — consommation d'un ticket", () => {
    * décision suffit à garantir l'unicité.
    */
   it("deux appels simultanés reçoivent tous deux un feu vert — l'unicité est l'affaire de Postgres", () => {
-    expect(valider({})).toEqual({ ok: true });
-    expect(valider({})).toEqual({ ok: true });
+    expect(valider({})).toEqual({ ok: true, perime: false });
+    expect(valider({})).toEqual({ ok: true, perime: false });
   });
 });

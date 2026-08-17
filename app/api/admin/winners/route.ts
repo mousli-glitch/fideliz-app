@@ -22,17 +22,17 @@ import { journaliser } from '@/lib/securite/journal'
  * session → profil → compte actif → rôle → étanchéité en remontant du
  * ticket vers son jeu.
  *
- * Deux ajouts par rapport à cette voie normale :
+ * L'expiration est SIGNALÉE, jamais opposée. Une première version renvoyait
+ * 410 sur un ticket périmé — c'était une erreur : le scanner de caisse offre
+ * explicitement « Valider quand même » sur ce cas précis
+ * (app/admin/[slug]/scanner/page.tsx:186). C'est un geste commercial voulu,
+ * pas un trou. Un restaurateur authentifié qui honore le ticket d'un client
+ * revenu un jour trop tard rend service ; le refuser aurait retiré une
+ * fonctionnalité en croyant fermer une faille. La péremption part donc au
+ * journal, et c'est tout.
  *
- * · L'EXPIRATION. /verify masque le bouton de validation sur un ticket
- *   périmé, mais l'API l'acceptait quand même : l'écran et le serveur ne
- *   disaient pas la même chose. On aligne le serveur sur ce que la caisse
- *   montre déjà — aucun parcours légitime n'est retiré, puisque le bouton
- *   n'existait pas. Chez Soukara, un ticket ne vit qu'un jour : l'écart
- *   n'était pas théorique.
- *
- * · LE JOURNAL. Un refus d'étanchéité est exactement ce qu'on veut pouvoir
- *   retrouver après coup.
+ * Le journal, justement : un refus d'étanchéité est exactement ce qu'on veut
+ * pouvoir retrouver après coup.
  *
  * Ce qui n'est PAS ici : le contrôle de module. Fideliz n'a pas encore de
  * table d'entitlements — elle arrive avec la fusion. Le jour où elle
@@ -153,11 +153,11 @@ export async function PATCH(request: Request) {
     await journaliser(admin, {
       action: 'admin.winner.validation',
       accepte: true,
-      message: 'Ticket validé en caisse',
+      message: verdict.perime ? 'Ticket périmé validé quand même' : 'Ticket validé en caisse',
       userId: user!.id,
       userEmail: user!.email,
       restaurantId: jeu?.restaurant_id ?? null,
-      details: { ticket: id },
+      details: { ticket: id, perime: !!verdict.perime },
     })
 
     return NextResponse.json({ success: true, data: data[0] })

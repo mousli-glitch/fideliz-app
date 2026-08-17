@@ -21,8 +21,8 @@
  */
 
 export type Verdict =
-  | { ok: true }
-  | { ok: false; statut: 401 | 400 | 403 | 404 | 409 | 410; motif: string; message: string };
+  | { ok: true; perime?: boolean }
+  | { ok: false; statut: 401 | 400 | 403 | 404 | 409; motif: string; message: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /* Volontairement simple : ce n'est pas un validateur d'e-mail, c'est un
@@ -45,7 +45,7 @@ export type Profil = {
   is_active?: boolean | null;
 } | null;
 
-const refus = (statut: 401 | 400 | 403 | 404 | 409 | 410, motif: string, message: string): Verdict =>
+const refus = (statut: 401 | 400 | 403 | 404 | 409, motif: string, message: string): Verdict =>
   ({ ok: false, statut, motif, message });
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -114,10 +114,17 @@ export function deciderCreationCompte(entree: {
  * restaurateur parfaitement authentifié consommerait les tickets d'un
  * confrère — la session ne dit rien du périmètre.
  *
- * L'expiration ferme un écart entre l'écran et l'API : /verify masque le
- * bouton de validation sur un ticket périmé, mais l'API l'acceptait quand
- * même. On aligne l'API sur ce que la caisse montre déjà. Chez Soukara, un
- * ticket ne vit qu'un jour : l'écart n'était pas théorique.
+ * L'EXPIRATION NE REFUSE PAS. C'était la première version de ce garde-fou,
+ * et elle était fausse : le scanner de caisse offre explicitement un bouton
+ * « Valider quand même » sur un ticket périmé
+ * (app/admin/[slug]/scanner/page.tsx:186). C'est un geste commercial voulu —
+ * un restaurateur qui décide d'honorer le ticket d'un client revenu un jour
+ * trop tard. Un restaurateur authentifié qui valide un ticket périmé de SON
+ * restaurant ne commet aucune faute de sécurité ; il rend service.
+ *
+ * L'expiration est donc rapportée, pas opposée : le verdict la signale pour
+ * que l'appelant la journalise, et rien de plus. Chez Soukara, où un ticket
+ * ne vit qu'un jour, ce geste doit rester possible.
  * ───────────────────────────────────────────────────────────────────── */
 export function deciderValidationTicket(entree: {
   authentifie: boolean;
@@ -151,11 +158,11 @@ export function deciderValidationTicket(entree: {
   /* validity_days = 0 signifie « sans limite » : c'est la convention déjà
      appliquée à l'écran (app/verify/[id]/page.tsx), on ne l'invente pas ici. */
   const jours = entree.jeu.validity_days ?? 0;
+  let perime = false;
   if (jours > 0 && entree.ticket.created_at) {
     const echeance = new Date(new Date(entree.ticket.created_at).getTime() + jours * 86400000);
-    if (entree.maintenant > echeance)
-      return refus(410, "TICKET_EXPIRE", `Ticket expiré le ${echeance.toLocaleDateString("fr-FR")}.`);
+    perime = entree.maintenant > echeance;
   }
 
-  return { ok: true };
+  return { ok: true, perime };
 }
