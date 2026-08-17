@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
+import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
 
 const createAdminClient = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,9 +11,26 @@ const createAdminClient = () => createClient(
 // TON ID ROOT (Pour l'héritage des restaurants)
 const ROOT_ID = '04eb7091-6876-41e0-84c6-5891658a5768'
 
+/*
+ * GARDES INTERNES (18/08/2026) — root uniquement, sur les trois actions.
+ *
+ * Ces trois-là créent des comptes Auth et en suppriment. `POST
+ * /api/admin/create-user` a été durci le 15/08 et n'est appelée par
+ * personne ; celles-ci sont le vrai chemin de création, depuis
+ * /super-admin/root. Fermer l'endpoint mort sans fermer celles-ci aurait
+ * été un correctif de façade.
+ *
+ * `creatorId` arrivait du navigateur et servait à renseigner `created_by` :
+ * l'appelant choisissait donc au nom de qui il créait. Il est désormais
+ * ignoré au profit de l'identité de session.
+ */
 export async function masterCreateRestaurant(data: any) {
+  const garde = await exigerRole(["root"], "restaurant.creation")
+  if (!garde.ok) return { success: false, error: garde.error }
+
   const supabase = createAdminClient()
-  const { name, city, slug, email, password, creatorId } = data
+  const { name, city, slug, email, password } = data
+  const creatorId = garde.appelant.userId
 
   const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
     email,
@@ -48,10 +66,18 @@ export async function masterCreateRestaurant(data: any) {
 
   if (profileError) return { success: false, error: "Profil: " + profileError.message }
 
+  await tracerAction(garde.appelant, 'restaurant.creation', 'Restaurant et compte créés', {
+    restaurantId: resto.id,
+    slug,
+  })
+
   return { success: true }
 }
 
 export async function masterCreateSalesAction(data: any) {
+  const garde = await exigerRole(["root"], "commercial.creation")
+  if (!garde.ok) return { success: false, error: garde.error }
+
   const supabase = createAdminClient()
   const { email, password } = data
 
@@ -71,13 +97,20 @@ export async function masterCreateSalesAction(data: any) {
 
   if (profileError) return { success: false, error: profileError.message }
 
+  await tracerAction(garde.appelant, 'commercial.creation', 'Compte commercial créé', {
+    cible: authUser.user.id,
+  })
+
   return { success: true }
 }
 
 // VERSION AMÉLIORÉE POUR LE TEST B (FANTÔME)
 export async function masterDeleteUser(userId: string) {
+  const garde = await exigerRole(["root"], "compte.suppression")
+  if (!garde.ok) return { success: false, error: garde.error }
+
   const supabase = createAdminClient()
-  
+
   try {
     // 🔒 Sécurité : ne jamais supprimer le super-admin
     if (userId === ROOT_ID) {
@@ -112,7 +145,9 @@ export async function masterDeleteUser(userId: string) {
     // 3. SUPPRESSION DÉFINITIVE DE L'AUTH (Le fantôme)
     const { error: authError } = await supabase.auth.admin.deleteUser(userId)
     if (authError) throw authError
-    
+
+    await tracerAction(garde.appelant, 'compte.suppression', 'Compte supprimé', { cible: userId })
+
     return { success: true }
   } catch (err: any) {
     console.error("Erreur MasterDelete:", err)

@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
+import { exigerRestaurantParSlug, tracerAction } from "@/lib/securite/garde-action"
 
 // Action dédiée : écrit directement dans la table `restaurants`
 // (la vue public_restaurants n'expose que 7 colonnes, donc impossible
@@ -28,7 +29,19 @@ type RestaurantSettingsUpdate = {
 // Champs de config qui doivent être répercutés sur les jeux du restaurant
 const GAME_CONFIG_KEYS = ['identify_first', 'replay_enabled', 'replay_delay_hours', 'action_sequence', 'ip_rate_limit_per_hour'] as const
 
+/*
+ * GARDE INTERNE (18/08/2026) — restaurateur, sur SON restaurant.
+ *
+ * L'identifiant arrivait du navigateur et servait directement de cible à un
+ * `update` mené avec la clé de service. Et ces réglages se propagent à TOUS
+ * les jeux du restaurant : `replay_enabled`, `ip_rate_limit_per_hour`,
+ * `identify_first` — de quoi rendre un jeu rejouable à volonté chez un
+ * confrère, ou en supprimer la limite par appareil.
+ */
 export async function updateRestaurantSettings(id: string, updates: RestaurantSettingsUpdate) {
+  const garde = await exigerRestaurantParSlug(id, ["restaurant", "root"], "restaurant.reglages")
+  if (!garde.ok) return { success: false, error: garde.error }
+
   const { error } = await supabaseAdmin
     .from("restaurants")
     .update(updates)

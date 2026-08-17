@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
+import { exigerRestaurantParSlug, tracerAction } from "@/lib/securite/garde-action"
 
 function isUUID(str: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
@@ -53,7 +54,27 @@ function toE164FR(phoneRaw: string | null) {
   return p
 }
 
+/*
+ * GARDE INTERNE (18/08/2026) — restaurateur, sur SES clients.
+ *
+ * C'est l'action la plus lourde de conséquences après les suppressions :
+ * elle sort en clair le prénom, l'e-mail et le téléphone de tous les
+ * clients d'un restaurant. Elle acceptait un slug ou un identifiant venu du
+ * navigateur et servait le fichier sans demander qui appelait — le
+ * portefeuille de contacts de n'importe quelle enseigne tenait dans une
+ * chaîne de caractères.
+ *
+ * Le commercial n'y a pas accès : son métier est d'apporter des clients,
+ * pas de lire leurs fichiers.
+ */
 export async function exportCustomersCsvAction(restaurantSlugOrId: string) {
+  const garde = await exigerRestaurantParSlug(
+    restaurantSlugOrId,
+    ["restaurant", "root"],
+    "clients.export"
+  )
+  if (!garde.ok) return { success: false as const, message: garde.error }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -115,6 +136,14 @@ export async function exportCustomersCsvAction(restaurantSlugOrId: string) {
   })
 
   const csv = [header, ...lines].join("\n")
+
+  /* Un export de fichier client se retrouve toujours, un jour, quelque part
+     où il n'aurait pas dû aller. Savoir qui l'a sorti et quand n'empêche
+     rien, mais permet de répondre. */
+  await tracerAction(garde.appelant, 'clients.export', `${all.length} client(s) exporté(s)`, {
+    restaurantId: garde.restaurant!.id,
+    total: all.length,
+  })
 
   return {
     success: true as const,

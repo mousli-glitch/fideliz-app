@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
+import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,7 +20,16 @@ const planLabel = (months: number) =>
 // Définit / prolonge / retire l'abonnement d'un restaurant.
 // Prolongation intelligente : si l'abonnement court encore, on ajoute à la date de fin
 // existante ; sinon on repart de maintenant.
+//
+// GARDE INTERNE (18/08/2026) : root uniquement.
+// L'abonnement décide si le jeu d'un restaurant répond ou affiche « Service
+// momentanément indisponible » — /scan et /play s'appuient dessus. Se
+// prolonger soi-même, ou couper un confrère, se ferait ici. C'est une
+// décision commerciale : elle appartient au root, et elle laisse une trace.
 export async function setSubscriptionAction(restaurantId: string, action: Action) {
+  const garde = await exigerRole(["root"], "abonnement.modification")
+  if (!garde.ok) return { success: false, error: garde.error }
+
   try {
     if (!restaurantId) return { success: false, error: "Restaurant manquant." }
 
@@ -58,6 +68,13 @@ export async function setSubscriptionAction(restaurantId: string, action: Action
       .eq("id", restaurantId)
 
     if (error) throw new Error(error.message)
+
+    await tracerAction(garde.appelant, 'abonnement.modification', `Abonnement ${action.type}`, {
+      restaurantId,
+      type: action.type,
+      subscription_end,
+      subscription_plan,
+    })
 
     revalidatePath("/super-admin/root/restaurants-management")
     return { success: true, subscription_end, subscription_plan }

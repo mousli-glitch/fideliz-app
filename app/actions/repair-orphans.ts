@@ -2,8 +2,17 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
+import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
 
+// GARDE INTERNE (18/08/2026) : root uniquement.
+// L'action réattribue en masse tous les restaurants sans propriétaire au
+// compte root. Elle écrit sur `restaurants` sans qu'aucun identifiant ne
+// soit fourni — donc sans qu'aucun contrôle d'objet soit possible. Le seul
+// garde-fou envisageable est le rôle de l'appelant.
 export async function repairOrphansAction() {
+  const garde = await exigerRole(["root"], "donnees.reparation")
+  if (!garde.ok) return { success: false, error: garde.error }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -22,6 +31,8 @@ export async function repairOrphansAction() {
     .is('owner_id', null)
 
   if (error) return { success: false, error: error.message }
+
+  await tracerAction(garde.appelant, 'donnees.reparation', 'Restaurants orphelins réattribués au root')
 
   revalidatePath('/super-admin/root')
   return { success: true }

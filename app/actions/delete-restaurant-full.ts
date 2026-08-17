@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
+import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,8 +13,18 @@ const supabaseAdmin = createClient(
 //  - c'est bien un compte "restaurant" (jamais un root/super-admin ni un sales/commercial)
 //  - et qu'il ne gère plus aucun autre restaurant après cette suppression.
 // Cette double sécurité évite l'accident où supprimer un restaurant effaçait le profil/compte de l'admin.
+//
+// GARDE INTERNE (18/08/2026) : root uniquement.
+// L'action ne tenait que par le matcher du middleware, qui protège la PAGE
+// /super-admin/root/restaurants-management — pas l'action. C'est la plus
+// destructrice du produit : elle efface un restaurant et peut supprimer un
+// compte Auth. Elle vérifie donc elle-même qui l'appelle, et laisse une
+// trace nominative de ce qu'elle a effacé.
 export async function deleteRestaurantFullAction(restaurantId: string, ownerId: string) {
-  console.log(`🗑️ Suppression restaurant ${restaurantId} (owner ${ownerId || 'aucun'})`)
+  const garde = await exigerRole(["root"], "restaurant.suppression")
+  if (!garde.ok) return { success: false, error: garde.error }
+
+  if (!restaurantId) return { success: false, error: "Restaurant manquant." }
 
   try {
     // ÉTAPE 0 : Récupérer le rôle du propriétaire AVANT toute suppression
@@ -75,6 +86,13 @@ export async function deleteRestaurantFullAction(restaurantId: string, ownerId: 
     } else if (ownerRole && ownerRole !== 'restaurant') {
       console.log(`🛡️ Compte '${ownerRole}' protégé : seul le restaurant a été supprimé.`)
     }
+
+    await tracerAction(garde.appelant, 'restaurant.suppression', 'Restaurant supprimé', {
+      restaurantId,
+      ownerId: ownerId || null,
+      ownerRole,
+      compteSupprime: accountDeleted,
+    })
 
     revalidatePath('/super-admin/root/restaurants-management')
     return { success: true, accountDeleted, ownerRole }

@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
+import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,7 +12,16 @@ const supabaseAdmin = createClient(
 // Super Admin : modifie l'e-mail d'un compte (restaurateur/commercial).
 // Contrôle format + unicité, met à jour Auth ET profil, conserve l'accès (mot de passe inchangé),
 // et journalise l'action.
+//
+// GARDE INTERNE (18/08/2026) : root uniquement.
+// Le commentaire disait « Super Admin » ; le code ne le vérifiait pas.
+// Changer l'e-mail d'un compte, c'est en déplacer la récupération de mot de
+// passe : quiconque pouvait appeler cette action pouvait s'attribuer
+// n'importe quel compte de la plateforme en deux étapes.
 export async function updateRestaurantEmailAction(userId: string, newEmail: string) {
+  const garde = await exigerRole(["root"], "compte.email")
+  if (!garde.ok) return { success: false, error: garde.error }
+
   const email = (newEmail || "").trim().toLowerCase()
 
   // 1. Format

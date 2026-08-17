@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
+import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
 
 // Ton compte super-admin (root) : il hérite des restaurants des commerciaux supprimés.
 const ROOT_ID = '04eb7091-6876-41e0-84c6-5891658a5768'
@@ -16,7 +17,16 @@ const supabaseAdmin = createClient(
 //  - les liens de portefeuille (sales_restaurants) sont nettoyés (sinon ils resteraient orphelins, pas de FK)
 //  - puis on supprime le profil et le compte Auth (libère l'e-mail)
 // Garde-fou : impossible de supprimer un compte root.
+//
+// GARDE INTERNE (18/08/2026) : root uniquement.
+// Le garde-fou d'origine protégeait la CIBLE — on ne supprime pas un root.
+// Il ne disait rien de l'APPELANT : un commercial identifié pouvait
+// supprimer un autre commercial. Les deux contrôles sont nécessaires, et
+// ils ne se remplacent pas.
 export async function deleteSalesUserAction(userId: string) {
+  const garde = await exigerRole(["root"], "commercial.suppression")
+  if (!garde.ok) return { success: false, error: garde.error }
+
   try {
     if (!userId) return { success: false, error: "ID utilisateur manquant." }
 
@@ -53,6 +63,10 @@ export async function deleteSalesUserAction(userId: string) {
     // 5. Supprimer le compte Auth (libère l'e-mail)
     const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId)
     if (authError) return { success: false, error: authError.message }
+
+    await tracerAction(garde.appelant, 'commercial.suppression', 'Compte commercial supprimé', {
+      cible: userId,
+    })
 
     return { success: true }
   } catch (err: any) {
