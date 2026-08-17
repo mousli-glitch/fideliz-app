@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createSessionClient } from '@/utils/supabase/server'
+import { deciderValidationTicket } from '@/lib/securite/garde-admin'
+import { journaliser } from '@/lib/securite/journal'
 
 /*
  * ═══════════════════════════════════════════════════════════════
@@ -10,111 +12,157 @@ import { createClient as createSessionClient } from '@/utils/supabase/server'
  * Cette route consommait un ticket sur simple `{id}` dans le corps de la
  * requête, avec la clé de service et AUCUN contrôle : n'importe qui
  * connaissant l'UUID d'un gagnant — celui-là même qui est encodé dans le
- * QR du ticket client — pouvait le brûler à distance. Le seul garde-fou
- * (`.eq('status','available')`) empêche la double validation, pas le
- * tiers.
+ * QR du ticket client, donc lisible par quiconque voit le papier —
+ * pouvait le brûler à distance.
  *
- * Corrigé le 15/08/2026. La chaîne de contrôles reproduit exactement
- * celle de `validateWinAction` (app/actions/validate-win.ts:70-128), qui
- * est la voie normale de validation : session → profil → compte actif →
- * rôle → et surtout l'étanchéité, en remontant du ticket vers son jeu
- * pour comparer le restaurant.
+ * Corrigé le 15/08/2026, durci le 17/08/2026.
  *
- * Sans cette dernière vérification, un restaurateur authentifié pourrait
- * consommer les tickets d'un confrère : c'est le contrôle qui compte, pas
- * la simple présence d'une session.
+ * La chaîne de contrôles reproduit celle de `validateWinAction`
+ * (app/actions/validate-win.ts), qui est la voie normale de validation :
+ * session → profil → compte actif → rôle → étanchéité en remontant du
+ * ticket vers son jeu.
+ *
+ * Deux ajouts par rapport à cette voie normale :
+ *
+ * · L'EXPIRATION. /verify masque le bouton de validation sur un ticket
+ *   périmé, mais l'API l'acceptait quand même : l'écran et le serveur ne
+ *   disaient pas la même chose. On aligne le serveur sur ce que la caisse
+ *   montre déjà — aucun parcours légitime n'est retiré, puisque le bouton
+ *   n'existait pas. Chez Soukara, un ticket ne vit qu'un jour : l'écart
+ *   n'était pas théorique.
+ *
+ * · LE JOURNAL. Un refus d'étanchéité est exactement ce qu'on veut pouvoir
+ *   retrouver après coup.
+ *
+ * Ce qui n'est PAS ici : le contrôle de module. Fideliz n'a pas encore de
+ * table d'entitlements — elle arrive avec la fusion. Le jour où elle
+ * existera, sa vérification se pose entre l'étanchéité et le statut.
  */
 
 export async function PATCH(request: Request) {
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
   try {
-    // ─── 1. Session ───
+    // ─── 1. Qui appelle ? ───
     const session = await createSessionClient()
     const {
       data: { user },
     } = await session.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-    }
 
-    const { data: profile } = await session
-      .from('profiles')
-      .select('role, restaurant_id, is_active')
-      .eq('id', user.id)
-      .single()
+    const { data: profile } = user
+      ? await session.from('profiles').select('role, restaurant_id, is_active').eq('id', user.id).single()
+      : { data: null }
 
     const p = profile as { role?: string; restaurant_id?: string; is_active?: boolean } | null
-    if (!p) {
-      return NextResponse.json({ error: 'Profil introuvable' }, { status: 403 })
+
+    let corps: Record<string, unknown> = {}
+    try {
+      corps = (await request.json()) ?? {}
+    } catch {
+      corps = {}
     }
-    if (p.is_active === false) {
-      return NextResponse.json({ error: 'Compte désactivé' }, { status: 403 })
-    }
-    if (!['restaurant', 'root'].includes(p.role ?? '')) {
-      return NextResponse.json({ error: 'Accès refusé' }, { status: 403 })
-    }
+    const id = corps.id
 
-    const { id } = await request.json()
-    if (!id) {
-      return NextResponse.json({ error: 'Identifiant manquant' }, { status: 400 })
-    }
+    /* Le ticket et son jeu ne sont lus que si l'appelant a déjà une identité
+       recevable : sinon un anonyme se servirait de cette route comme d'un
+       oracle sur l'existence d'un UUID. */
+    type Ticket = { id: string; status: string | null; game_id: string | null; created_at: string | null }
+    type Jeu = { id: string; restaurant_id: string | null; validity_days: number | null }
 
-    // ─── 2. Clé de service, une fois l'appelant connu ───
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
+    let ticket: Ticket | null = null
+    let jeu: Jeu | null = null
+    const identiteRecevable =
+      !!user && !!p && p.is_active !== false && ['restaurant', 'root'].includes(p.role ?? '')
 
-    // ─── 3. Étanchéité : ce ticket appartient-il à SON restaurant ? ───
-    const { data: win } = await supabaseAdmin
-      .from('winners')
-      .select('id, game_id')
-      .eq('id', id)
-      .single()
+    if (identiteRecevable && typeof id === 'string') {
+      const { data: t } = await admin
+        .from('winners')
+        .select('id, status, game_id, created_at')
+        .eq('id', id)
+        .maybeSingle()
+      ticket = (t as Ticket | null) ?? null
 
-    if (!win) {
-      return NextResponse.json({ error: 'Ticket introuvable' }, { status: 404 })
-    }
-
-    const { data: game } = await supabaseAdmin
-      .from('games')
-      .select('id, restaurant_id')
-      .eq('id', (win as { game_id: string }).game_id)
-      .single()
-
-    if (!game) {
-      return NextResponse.json({ error: 'Jeu introuvable pour ce ticket' }, { status: 404 })
-    }
-
-    if (p.role !== 'root') {
-      const g = game as { restaurant_id: string }
-      if (!p.restaurant_id || p.restaurant_id !== g.restaurant_id) {
-        return NextResponse.json(
-          { error: 'Ce ticket ne correspond pas à votre restaurant' },
-          { status: 403 }
-        )
+      if (ticket?.game_id) {
+        const { data: g } = await admin
+          .from('games')
+          .select('id, restaurant_id, validity_days')
+          .eq('id', ticket.game_id)
+          .maybeSingle()
+        jeu = (g as Jeu | null) ?? null
       }
     }
 
-    // ─── 4. Consommation, avec l'anti-double-validation d'origine ───
-    const { data, error } = await supabaseAdmin
+    const verdict = deciderValidationTicket({
+      authentifie: !!user,
+      profil: p,
+      identifiantDemande: id,
+      ticket,
+      jeu,
+      maintenant: new Date(),
+    })
+
+    if (!verdict.ok) {
+      if (user) {
+        await journaliser(admin, {
+          action: 'admin.winner.validation_refus',
+          accepte: false,
+          message: `Validation refusée : ${verdict.motif}`,
+          userId: user.id,
+          userEmail: user.email,
+          restaurantId: jeu?.restaurant_id ?? null,
+          details: { motif: verdict.motif, ticket: typeof id === 'string' ? id : null },
+        })
+      }
+      return NextResponse.json({ error: verdict.message, motif: verdict.motif }, { status: verdict.statut })
+    }
+
+    // ─── 2. Consommation, avec l'anti-double-validation d'origine ───
+    /* Le `.eq('status','available')` reste la vraie garantie d'unicité : deux
+       appels simultanés voient tous deux « available », mais un seul verra sa
+       condition satisfaite au moment de l'écriture. Le second reçoit zéro
+       ligne, et un 409. C'est Postgres qui arbitre, pas nous. */
+    const { data, error } = await admin
       .from('winners')
       .update({ status: 'redeemed', redeemed_at: new Date().toISOString() })
-      .eq('id', id)
+      .eq('id', id as string)
       .eq('status', 'available')
       .select('id,status,redeemed_at')
 
     if (error) throw error
 
     if (!data || data.length === 0) {
+      await journaliser(admin, {
+        action: 'admin.winner.validation_refus',
+        accepte: false,
+        message: 'Validation refusée : COURSE_PERDUE',
+        userId: user!.id,
+        userEmail: user!.email,
+        restaurantId: jeu?.restaurant_id ?? null,
+        details: { motif: 'COURSE_PERDUE', ticket: id },
+      })
       return NextResponse.json(
-        { success: false, message: "Aucune ligne mise à jour (status != 'available' ou id invalide)." },
+        { success: false, motif: 'DEJA_CONSOMME', message: 'Ce ticket vient d’être utilisé.' },
         { status: 409 }
       )
     }
 
+    await journaliser(admin, {
+      action: 'admin.winner.validation',
+      accepte: true,
+      message: 'Ticket validé en caisse',
+      userId: user!.id,
+      userEmail: user!.email,
+      restaurantId: jeu?.restaurant_id ?? null,
+      details: { ticket: id },
+    })
+
     return NextResponse.json({ success: true, data: data[0] })
-  } catch {
+  } catch (error: unknown) {
+    console.error('Erreur API winners:', error instanceof Error ? error.message : error)
     return NextResponse.json({ error: 'Erreur' }, { status: 500 })
   }
 }
