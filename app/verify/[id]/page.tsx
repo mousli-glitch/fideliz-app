@@ -85,6 +85,29 @@ export default async function VerifyPage({
   const prizeData = Array.isArray(winner.prizes) ? winner.prizes[0] : winner.prizes
   const prizeLabel = prizeData?.label || "Lot Surprise"
 
+  /*
+   * Le prénom, réduit pour qui n'est pas identifié.
+   *
+   * Cette page est ouverte à quiconque possède l'UUID du ticket — et cet
+   * UUID est imprimé dans le QR que le client montre, photographie, envoie.
+   * Il finit dans des captures d'écran et des historiques de navigation.
+   * Y attacher un prénom en clair est une donnée personnelle de plus qui
+   * voyage avec, sans que personne en ait besoin.
+   *
+   * Le personnel authentifié voit le prénom entier : c'est lui qui doit
+   * reconnaître le client au comptoir. L'anonyme n'en voit que l'initiale,
+   * ce qui suffit largement au porteur pour reconnaître SON ticket.
+   *
+   * Rien d'autre ne bouge : même URL, même UUID, même statut affiché. Les
+   * tickets déjà imprimés continuent d'ouvrir exactement la même page.
+   */
+  const prenom = (winner.first_name ?? "").toString().trim()
+  const prenomAffiche = !prenom
+    ? "—"
+    : isStaff
+      ? prenom
+      : `${prenom[0].toUpperCase()}.`
+
   const minSpendRaw = winner.games?.min_spend
   const minSpend = minSpendRaw ? parseFloat(minSpendRaw.toString()) : 0
 
@@ -98,7 +121,7 @@ export default async function VerifyPage({
           </p>
           <h1 className="text-3xl font-black mt-2 text-slate-800">{prizeLabel}</h1>
           <p className="text-slate-600 font-medium mt-1">
-            Gagnant : {winner.first_name}
+            Gagnant : {prenomAffiche}
           </p>
         </div>
 
