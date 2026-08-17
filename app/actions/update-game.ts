@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from '@supabase/supabase-js'
+import { exigerRestaurantParSlug, tracerAction } from '@/lib/securite/garde-action'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +17,25 @@ function normalizeAmount(value: any): string {
   return String(Math.round(n * 100) / 100) // 2 décimales max
 }
 
+/*
+ * GARDE INTERNE (18/08/2026) — restaurateur, sur SON restaurant.
+ *
+ * L'action écrivait avec la clé de service sur `restaurants` ET sur `games`,
+ * à partir d'un `data.restaurant_id` venu du navigateur. Elle règle les
+ * poids, les stocks, la limite par IP, la rejouabilité et les conditions —
+ * de quoi vider les lots d'un confrère ou rendre son jeu infiniment
+ * rejouable.
+ *
+ * Rien de ce qu'elle fait ne change : seul l'accès est borné.
+ */
 export async function updateGameAction(gameId: string, data: any) {
+  const garde = await exigerRestaurantParSlug(
+    data?.restaurant_id,
+    ['restaurant', 'root'],
+    'jeu.modification'
+  )
+  if (!garde.ok) return { success: false, error: garde.error }
+
   try {
     // 1. Sauvegarde Resto
     const { error: restoError } = await supabaseAdmin.from("restaurants").update({

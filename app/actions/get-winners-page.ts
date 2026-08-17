@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
+import { exigerRestaurantParSlug } from "@/lib/securite/garde-action"
 
 export type Cursor = { created_at: string; id: string } | null
 
@@ -12,11 +13,26 @@ function isUUID(str: string) {
  * ✅ Action utilisée par l’UI Admin (slug restaurant)
  * Signature alignée avec ton front : (slug, cursor, limit)
  */
+/*
+ * GARDE INTERNE (18/08/2026) — restaurateur, sur SON restaurant.
+ *
+ * Pagination des gagnants : prénom, téléphone, e-mail, lot et date. Le slug
+ * suffisait à obtenir le fichier de n'importe quelle enseigne. Une lecture
+ * non autorisée est une faille au même titre qu'une écriture — elle est
+ * seulement plus discrète.
+ */
 export async function getWinnersPageAction(
   restaurantSlugOrId: string,
   cursor: Cursor = null,
   limit: number = 50
 ) {
+  const garde = await exigerRestaurantParSlug(
+    restaurantSlugOrId,
+    ['restaurant', 'root'],
+    'gagnants.lecture'
+  )
+  if (!garde.ok) return { success: false as const, message: garde.error }
+
   try {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

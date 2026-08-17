@@ -46,9 +46,15 @@ const actions = readdirSync(DOSSIER)
     const module = `@/app/actions/${n.replace(/\.ts$/, "")}`;
     const exports = [...src.matchAll(/export\s+async\s+function\s+([A-Za-z0-9_]+)/g)].map((m) => m[1]);
 
+    /* Correspondance EXACTE du spécificateur de module.
+       Une simple recherche de sous-chaîne faisait passer `admin-actions` pour
+       un appelant de `admin` — et présentait douze actions mortes, toutes
+       munies d'une clé de service, comme des actions en service. Le
+       délimiteur de fin (guillemet ou apostrophe) tranche. */
+    const motif = new RegExp(`from\\s*['"]${module.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}['"]`);
     const appelants = sources
       .filter((f) => f !== chemin)
-      .filter((f) => readFileSync(f, "utf8").includes(module))
+      .filter((f) => motif.test(readFileSync(f, "utf8")))
       .map((f) => relative(RACINE, f));
 
     const pagesPubliques = appelants.filter((a) => !COUVERT.some((r) => r.test(a)));
@@ -57,8 +63,13 @@ const actions = readdirSync(DOSSIER)
       module: n.replace(/\.ts$/, ""),
       exports,
       serviceRole: /SERVICE_ROLE_KEY/.test(src),
-      verifieIdentite: /auth\.getUser\(\)/.test(src),
-      journalise: /journaliser\(/.test(src),
+      /* L'identité se vérifie rarement à la main depuis le 18/08/2026 : elle
+         passe par les gardes partagées. Ne chercher que `auth.getUser()`
+         faisait passer vingt et un modules gardés pour des modules nus. */
+      verifieIdentite:
+        /auth\.getUser\(\)/.test(src) ||
+        /\b(exigerRole|exigerRestaurant|exigerRestaurantParSlug|autoriserGoogle|deciderValidationTicket|racine)\s*\(/.test(src),
+      journalise: /journaliser\(|tracerAction\(/.test(src),
       appelants,
       pagesPubliques,
       lignes: src.split("\n").length,

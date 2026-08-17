@@ -30,15 +30,19 @@ export default function AdminReviewsPage() {
   // Lit les avis DEPUIS LA BASE (instantané, aucun appel Google) et remplit l'affichage.
   const loadFromDb = async (restaurantId: string) => {
     const res = await getStoredReviews(restaurantId)
-    if (res.success) {
-      setReviews(res.reviews)
+    /* L'action peut désormais refuser (session, rôle, restaurant) : dans ce
+       cas elle ne renvoie pas d'avis du tout, et on laisse l'écran en l'état
+       plutôt que de le vider. */
+    if (res.success && res.reviews) {
+      const avis = res.reviews
+      setReviews(avis)
       if (typeof res.avg === 'number' && res.avg > 0) {
-        setGoogleStats({ avg: res.avg, total: res.total || res.reviews.length })
+        setGoogleStats({ avg: res.avg, total: res.total || avis.length })
       }
       setLastSync(res.syncedAt)
       // Pré-remplit les brouillons IA sauvegardés
       const drafts: Record<string, string> = {}
-      res.reviews.forEach((r: any) => { if (r.aiDraft) drafts[r.id] = r.aiDraft })
+      avis.forEach((r: any) => { if (r.aiDraft) drafts[r.id] = r.aiDraft })
       if (Object.keys(drafts).length) setResponses(prev => ({ ...drafts, ...prev }))
     }
   }

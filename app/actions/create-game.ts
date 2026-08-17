@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from '@supabase/supabase-js'
+import { exigerRestaurantParSlug } from '@/lib/securite/garde-action'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,8 +16,16 @@ function normalizeAmount(value: any): string {
   return String(Math.round(n * 100) / 100) // 2 décimales max
 }
 
+/*
+ * GARDE INTERNE (18/08/2026) — restaurateur, sur SON restaurant.
+ *
+ * Le `slug` reçu servait directement à retrouver le restaurant sur lequel
+ * créer le jeu. Créer un jeu bascule l'ancien en `ended` : un slug étranger
+ * suffisait donc à éteindre le jeu d'un confrère, et son QR imprimé avec.
+ */
 export async function createGameAction(data: any) {
-  console.log("🚀 ACTION SERVEUR DÉCLENCHÉE !")
+  const garde = await exigerRestaurantParSlug(data?.slug, ['restaurant', 'root'], 'jeu.creation')
+  if (!garde.ok) return { success: false, error: garde.error }
 
   try {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {

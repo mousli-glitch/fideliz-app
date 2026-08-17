@@ -2,20 +2,37 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { exigerRestaurantParSlug, tracerAction } from '@/lib/securite/garde-action'
 
+/*
+ * GARDE INTERNE (18/08/2026) — restaurateur, sur SON restaurant.
+ *
+ * L'action ne vérifiait que la session, puis supprimait par `id` en laissant
+ * la RLS trancher — le commentaire d'origine le disait lui-même : « si count
+ * est 0, c'est que la RLS a bloqué silencieusement ». Se reposer sur un
+ * effet de bord pour deviner qu'on n'avait pas le droit n'est pas un
+ * contrôle : c'est une lecture d'après-coup.
+ *
+ * Le `slug` est résolu et confronté à la session, puis le jeu visé est
+ * rattaché à ce restaurant. Supprimer un jeu efface ses lots et rend un QR
+ * imprimé muet ; ça mérite mieux qu'un compteur à zéro.
+ */
 export async function deleteGameAction(gameId: string, slug: string) {
-  // 1. Connexion Supabase
+  const garde = await exigerRestaurantParSlug(slug, ['restaurant', 'root'], 'jeu.suppression')
+  if (!garde.ok) throw new Error(garde.error)
+
   const supabase = await createClient()
 
-  // 🔍 DEBUG : Qui essaie de supprimer ?
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  
-  if (authError || !user) {
-    console.error("❌ ERREUR AUTH : Utilisateur non connecté ou session invalide.")
-    throw new Error("Vous n'êtes pas connecté.")
+  // Le jeu visé appartient-il bien à ce restaurant ?
+  const { data: jeu } = await supabase
+    .from('games')
+    .select('id, restaurant_id')
+    .eq('id', gameId)
+    .maybeSingle()
+
+  if (!jeu || (jeu as { restaurant_id?: string }).restaurant_id !== garde.restaurant!.id) {
+    throw new Error("Ce jeu n'appartient pas à ce restaurant.")
   }
-  console.log("👤 User ID connecté :", user.id)
-  console.log("🗑 Tentative suppression du jeu ID :", gameId)
 
   // 2. Suppression dans Supabase
   const { error, count } = await supabase

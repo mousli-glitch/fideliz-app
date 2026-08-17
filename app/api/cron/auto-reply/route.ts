@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { getGoogleReviews, replyToGoogleReviewAction } from "@/app/actions/google-business"
 import { generateAIResponse } from "@/app/actions/ai"
+import { cronAutorise } from "@/lib/securite/secret-cron"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60 // laisser le temps de traiter plusieurs restaurants
@@ -19,12 +20,12 @@ const MAX_REPLIES_PER_RESTAURANT = 10 // garde-fou par passage
 // récupère les avis, répond (IA) à ceux SANS réponse dont la note >= seuil choisi.
 export async function GET(request: Request) {
   // Sécurité : seul le cron (muni du secret) peut déclencher cette route
-  const auth = request.headers.get("authorization") || ""
-  const secretHeader = request.headers.get("x-cron-secret") || ""
-  const expected = process.env.CRON_SECRET
-  if (!expected || (auth !== `Bearer ${expected}` && secretHeader !== expected)) {
+  /* Comparaison à temps constant : un `!==` sur des chaînes s'arrête au
+     premier caractère différent, et cette durée se mesure. */
+  if (!cronAutorise(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+  const expected = process.env.CRON_SECRET!
 
   const { data: restaurants } = await supabaseAdmin
     .from("restaurants")
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
   for (const resto of restaurants || []) {
     let replied = 0, skipped = 0, failed = 0, drafted = 0
     try {
-      const res = await getGoogleReviews(resto.id)
+      const res = await getGoogleReviews(resto.id, { cron: expected })
       if (!res.success || !res.reviews) {
         summary.push({ restaurant: resto.name, error: res.error || "lecture avis impossible" })
         continue
@@ -108,7 +109,7 @@ export async function GET(request: Request) {
           continue
         }
 
-        const pub = await replyToGoogleReviewAction(resto.id, review.reviewId, gen.text)
+        const pub = await replyToGoogleReviewAction(resto.id, review.reviewId, gen.text, { cron: expected })
         if (pub.success) {
           replied++
           // Trace dans les logs système (visible côté root)

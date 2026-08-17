@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
+import { cronAutorise } from "@/lib/securite/secret-cron"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -28,12 +29,12 @@ function currentPeriodStart(period: string, now: Date): Date {
 // Une fois par jour. Pour chaque jeu avec recharge activée : si une nouvelle période
 // a commencé depuis la dernière recharge, on remet chaque lot à son stock de départ.
 export async function GET(request: Request) {
-  const auth = request.headers.get("authorization") || ""
-  const secretHeader = request.headers.get("x-cron-secret") || ""
-  const expected = process.env.CRON_SECRET
-  if (!expected || (auth !== `Bearer ${expected}` && secretHeader !== expected)) {
+  /* Comparaison à temps constant : un `!==` sur des chaînes s'arrête au
+     premier caractère différent, et cette durée se mesure. */
+  if (!cronAutorise(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+  const expected = process.env.CRON_SECRET!
 
   const now = new Date()
 

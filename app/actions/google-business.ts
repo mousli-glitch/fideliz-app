@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient as createAdminClient } from "@supabase/supabase-js"
+import { autoriserGoogle, type Appel } from "@/lib/securite/garde-google"
 
 const supabaseAdmin = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,7 +80,10 @@ async function resolveFullLocationPath(restaurantId: string, token: string, loca
 }
 
 // 4. Publier une réponse à un avis sur Google
-export async function replyToGoogleReviewAction(restaurantId: string, reviewId: string, comment: string) {
+export async function replyToGoogleReviewAction(restaurantId: string, reviewId: string, comment: string, appel: Appel = "session") {
+  const a = await autoriserGoogle(restaurantId, appel, "avis.reponse")
+  if (!a.ok) return { success: false, error: a.error }
+
   if (!comment || !comment.trim()) return { success: false, error: "La réponse est vide." }
 
   const { token, locationId: rawLocationId, error } = await getValidAccessToken(restaurantId)
@@ -109,7 +113,10 @@ export async function replyToGoogleReviewAction(restaurantId: string, reviewId: 
 }
 
 // 1. Récupérer la liste des établissements
-export async function getGoogleLocationsAction(restaurantId: string) {
+export async function getGoogleLocationsAction(restaurantId: string, appel: Appel = "session") {
+  const a = await autoriserGoogle(restaurantId, appel, "google.etablissements")
+  if (!a.ok) return { success: false, error: a.error }
+
   console.log("🕵️‍♂️ ACTION: getGoogleLocationsAction lancée pour", restaurantId)
 
   const { token: accessToken, error: tokenError } = await getValidAccessToken(restaurantId)
@@ -198,7 +205,10 @@ export async function getGoogleLocationsAction(restaurantId: string) {
 }
 
 // 2. Sauvegarder l'établissement choisi
-export async function saveGoogleLocationAction(restaurantId: string, googleLocationId: string) {
+export async function saveGoogleLocationAction(restaurantId: string, googleLocationId: string, appel: Appel = "session") {
+  const a = await autoriserGoogle(restaurantId, appel, "google.etablissement_choix")
+  if (!a.ok) return { success: false, error: a.error }
+
   const { error } = await supabaseAdmin
     .from("restaurants")
     .update({ google_location_id: googleLocationId })
@@ -209,7 +219,10 @@ export async function saveGoogleLocationAction(restaurantId: string, googleLocat
 }
 
 // 3. Récupérer les avis (avec pagination : on remonte jusqu'à 150 avis)
-export async function getGoogleReviews(restaurantId: string) {
+export async function getGoogleReviews(restaurantId: string, appel: Appel = "session") {
+  const a = await autoriserGoogle(restaurantId, appel, "avis.lecture")
+  if (!a.ok) return { success: false, error: a.error }
+
   const { token, locationId: rawLocationId, error: tokenError } = await getValidAccessToken(restaurantId)
   if (!token || !rawLocationId) {
     return { success: false, error: tokenError || "Non connecté." }
@@ -261,8 +274,12 @@ export async function saveAutoReplySettingsAction(
     auto_reply_signature?: string | null
     auto_reply_draft_mode?: boolean
     auto_reply_blocklist?: string | null
-  }
+  },
+  appel: Appel = "session"
 ) {
+  const a = await autoriserGoogle(restaurantId, appel, "avis.reglages")
+  if (!a.ok) return { success: false, error: a.error }
+
   // On ne pose auto_reply_since QUE lors du passage OFF -> ON, pour que le cron
   // ne réponde qu'aux avis reçus après activation (jamais au backlog d'anciens avis).
   const { data: current } = await supabaseAdmin
@@ -309,7 +326,10 @@ const STAR_TO_NUM: Record<string, number> = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4,
 // 6. Synchroniser les avis d'un resto : Google -> base (ajout, MAJ, suppression).
 //    - throttle : pas plus d'1 synchro / minute sauf force=true.
 //    - suppression des avis disparus UNIQUEMENT si le fetch Google est complet (sécurité).
-export async function syncGoogleReviews(restaurantId: string, opts: { force?: boolean } = {}) {
+export async function syncGoogleReviews(restaurantId: string, opts: { force?: boolean } = {}, appel: Appel = "session") {
+  const a = await autoriserGoogle(restaurantId, appel, "avis.synchronisation")
+  if (!a.ok) return { success: false, error: a.error }
+
   // Throttle : évite de spammer Google si la page est rechargée en boucle
   if (!opts.force) {
     const { data: r } = await supabaseAdmin
@@ -375,7 +395,10 @@ export async function syncGoogleReviews(restaurantId: string, opts: { force?: bo
 }
 
 // 7. Lire les avis DEPUIS LA BASE (rapide, aucun appel Google).
-export async function getStoredReviews(restaurantId: string) {
+export async function getStoredReviews(restaurantId: string, appel: Appel = "session") {
+  const a = await autoriserGoogle(restaurantId, appel, "avis.stockes")
+  if (!a.ok) return { success: false, error: a.error }
+
   const [{ data: avis }, { data: resto }] = await Promise.all([
     supabaseAdmin
       .from("avis")
@@ -410,7 +433,10 @@ export async function getStoredReviews(restaurantId: string) {
 }
 
 // 8. Sauver / effacer un brouillon de réponse IA (NOTRE donnée, survit aux synchros).
-export async function saveReviewDraft(restaurantId: string, reviewId: string, draft: string | null) {
+export async function saveReviewDraft(restaurantId: string, reviewId: string, draft: string | null, appel: Appel = "session") {
+  const a = await autoriserGoogle(restaurantId, appel, "avis.brouillon")
+  if (!a.ok) return { success: false, error: a.error }
+
   const { error } = await supabaseAdmin
     .from("avis")
     .update({ ai_draft: draft && draft.trim() ? draft : null })

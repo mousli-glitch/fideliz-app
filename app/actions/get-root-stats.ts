@@ -1,8 +1,22 @@
 "use server"
 
 import { createClient } from "@/utils/supabase/server"
+import { exigerRole } from "@/lib/securite/garde-action"
 
+/*
+ * GARDE INTERNE (18/08/2026) : root uniquement.
+ *
+ * Renvoie les compteurs de toute la plateforme, la liste des restaurants
+ * orphelins et les cent dernières lignes de `system_logs` — avec leur
+ * `user_email`. C'est le tableau de bord de la racine ; il n'a rien à faire
+ * chez un restaurateur ou un commercial.
+ */
 export async function getRootStats() {
+  const garde = await exigerRole(["root"], "racine.statistiques")
+  if (!garde.ok) {
+    return { stats: { restaurants: 0, blocked: 0, contacts: 0, winners: 0, redeemed: 0 }, blocked_count: 0, orphans: [], logs: [] }
+  }
+
   const supabase = await createClient()
 
   // 1. Récupération des compteurs (Stats)

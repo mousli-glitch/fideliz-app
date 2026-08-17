@@ -1,8 +1,19 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
+import { exigerRole } from "@/lib/securite/garde-action"
 
+/*
+ * GARDE INTERNE (18/08/2026) : root uniquement.
+ *
+ * Renvoie la ligne `profiles` ENTIÈRE de chaque commercial — `select('*')` —
+ * et le volume d'affaires de chacun. C'est la carte du réseau commercial :
+ * un commercial y lirait les chiffres de ses confrères.
+ */
 export async function getSalesData() {
+  const garde = await exigerRole(["root"], "commerciaux.lecture")
+  if (!garde.ok) return { success: false, error: garde.error }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
