@@ -115,6 +115,27 @@ export async function POST(request: Request) {
 
     if (authError) throw authError
 
+    /*
+     * Le rôle est posé ICI, explicitement, après la création.
+     *
+     * Il venait du trigger `handle_new_user_profile`, qui le lisait dans
+     * `raw_user_meta_data` — donc dans une valeur que le client écrit. Ce
+     * trigger force désormais `restaurant` sans rattachement (migration du
+     * 18/08/2026), et cette route serait devenue incapable de créer un
+     * commercial si elle avait continué de s'y fier.
+     *
+     * C'est la même façon de faire que les trois autres parcours de création
+     * (`masterCreateSalesAction`, `masterCreateRestaurant`,
+     * `createRestaurantAction`) : la clé de service pose le rôle une fois
+     * l'appelant reconnu pour un root.
+     */
+    const { error: profilError } = await supabaseAdmin
+      .from('profiles')
+      .update({ role, restaurant_id: role === 'restaurant' ? restaurant_id : null, is_active: true })
+      .eq('id', authUser.user.id)
+
+    if (profilError) throw profilError
+
     await journaliser(supabaseAdmin, {
       action: 'admin.create_user',
       accepte: true,

@@ -14,7 +14,7 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL("./", import.meta.url)) },
   },
   test: {
-    include: ["lib/**/*.test.ts", "app/**/*.test.ts", "utils/**/*.test.ts"],
+    include: ["lib/**/*.test.ts", "app/**/*.test.ts", "utils/**/*.test.ts", "supabase/**/*.test.ts"],
     exclude: ["node_modules/**", "tests/**", ".next/**"],
   },
 });
