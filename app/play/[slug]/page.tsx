@@ -83,8 +83,30 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
     card_style: game.card_style || 'dark'
   }
 
+  /*
+   * ═══════════════════════════════════════════════════════════════
+   *  LISTE BLANCHE — CETTE PAGE EST PUBLIQUE
+   * ═══════════════════════════════════════════════════════════════
+   *
+   * `...restaurant` étalait ici le résultat d'un `select('*')`. Or les props
+   * d'un composant client sont sérialisées dans le HTML envoyé au
+   * navigateur : la ligne entière partait donc dans une page ouverte à
+   * tous — y compris `google_access_token`, `google_refresh_token` et
+   * `internal_notes`.
+   *
+   * Constaté en production le 15/08/2026 sur /scan/test78 : les jetons
+   * Google de deux restaurants, dont un client en service, étaient lisibles
+   * dans le source de la page. Jetons révoqués auprès de Google et effacés
+   * de la base le jour même.
+   *
+   * Trois champs, nommés un par un — exactement ce que `PublicGameClient`
+   * déclare attendre (components/game/public-game-client.tsx:73). Ajouter
+   * une colonne à `restaurants` ne peut plus la faire fuir ici par accident.
+   */
   const restaurantWithDesign = {
-    ...restaurant,
+    name: restaurant.name,
+    logo_url: restaurant.logo_url,
+    primary_color: restaurant.primary_color,
     design: {
       card_style: game.card_style || 'dark'
     }
