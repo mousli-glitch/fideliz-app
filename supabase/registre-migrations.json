@@ -6,12 +6,53 @@
   "releve_le": "2026-08-18",
   "empreinte": "sha256 des instructions jointes par un saut de ligne, sans normalisation",
   "migrations": [
-    { "version": "20260724002837", "nom": "create_avis_mirror_table", "instructions": 1, "sha256": "25bddcafda6506740833a88c888500960646de5cf0495c2241dfb86fbc986009" },
-    { "version": "20260724132406", "nom": "add_auto_reply_since", "instructions": 1, "sha256": "cb36a8471757038ef6f0475a5e01b1c433db1f684557ccf6b18452c1b33df5c5" },
-    { "version": "20260731002821", "nom": "add_wheel_custom_colors", "instructions": 1, "sha256": "3883623a8183f82381bb36728f8e35c3a79f351adf02a34916b9eb999ffc3460" },
-    { "version": "20260802115534", "nom": "add_stock_auto_refill", "instructions": 1, "sha256": "b80d22fdb62ea92bcd51df3158ea7f176e60d81f2e4c845174c85c88cd74c50b" },
-    { "version": "20260802121539", "nom": "add_auto_reply_options", "instructions": 1, "sha256": "b3cb092101e480f95abf7b8e0696547ebaad8ee9b4da330348fd8b3256f4b638" },
-    { "version": "20260816120110", "nom": "add_requires_review_proof", "instructions": 1, "sha256": "2c1446cb5880b01b39a8fbb4b838212e53d89b5265190db8d2725819831bac68" },
-    { "version": "20260817230642", "nom": "role_jamais_depuis_les_metadonnees", "instructions": 1, "sha256": "504fbf2fe0404d76eec5cdb6c2379bceb576ff0a4fa3d016c58739aa5d96b660" }
+    {
+      "version": "20260724002837",
+      "nom": "create_avis_mirror_table",
+      "instructions": 1,
+      "sha256": "25bddcafda6506740833a88c888500960646de5cf0495c2241dfb86fbc986009"
+    },
+    {
+      "version": "20260724132406",
+      "nom": "add_auto_reply_since",
+      "instructions": 1,
+      "sha256": "cb36a8471757038ef6f0475a5e01b1c433db1f684557ccf6b18452c1b33df5c5"
+    },
+    {
+      "version": "20260731002821",
+      "nom": "add_wheel_custom_colors",
+      "instructions": 1,
+      "sha256": "3883623a8183f82381bb36728f8e35c3a79f351adf02a34916b9eb999ffc3460"
+    },
+    {
+      "version": "20260802115534",
+      "nom": "add_stock_auto_refill",
+      "instructions": 1,
+      "sha256": "b80d22fdb62ea92bcd51df3158ea7f176e60d81f2e4c845174c85c88cd74c50b"
+    },
+    {
+      "version": "20260802121539",
+      "nom": "add_auto_reply_options",
+      "instructions": 1,
+      "sha256": "b3cb092101e480f95abf7b8e0696547ebaad8ee9b4da330348fd8b3256f4b638"
+    },
+    {
+      "version": "20260816120110",
+      "nom": "add_requires_review_proof",
+      "instructions": 1,
+      "sha256": "2c1446cb5880b01b39a8fbb4b838212e53d89b5265190db8d2725819831bac68"
+    },
+    {
+      "version": "20260817230642",
+      "nom": "role_jamais_depuis_les_metadonnees",
+      "instructions": 1,
+      "sha256": "504fbf2fe0404d76eec5cdb6c2379bceb576ff0a4fa3d016c58739aa5d96b660"
+    },
+    {
+      "version": "20260817235046",
+      "nom": "rpc_destructives_hors_de_portee",
+      "instructions": 1,
+      "sha256": "7e36cc773962d3bb380c511cefb4742b4762f6c33bf9a7657f0ffd6b5fcfa326"
+    }
   ]
 }
