@@ -42,7 +42,7 @@
  *     node scripts/sauvegarde-logique.mjs [--fichiers] [--sortie <dossier>]
  */
 
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
@@ -112,7 +112,15 @@ async function lireTable(table) {
   return lignes;
 }
 
-mkdirSync(SORTIE, { recursive: true });
+mkdirSync(SORTIE, { recursive: true, mode: 0o700 });
+/* Ce dossier contient les données réelles de vrais clients. Ignoré par git ne
+   suffit pas : sur un poste partagé, `rw-r--r--` les rend lisibles par tout
+   processus local. Le disque est chiffré (FileVault), le dossier ne l'est
+   pas — c'est la protection dont on dispose, et elle vaut mieux posée par le
+   script que par un chmod qu'on oubliera la fois suivante. */
+try { chmodSync("sauvegardes", 0o700); } catch {}
+chmodSync(SORTIE, 0o700);
+
 console.log(`\n${"═".repeat(74)}`);
 console.log(`  SAUVEGARDE LOGIQUE   ${G}→ ${SORTIE}${Z}`);
 console.log(`${"═".repeat(74)}\n`);
@@ -126,7 +134,7 @@ const manifeste = {
 
 const ecrire = (nom, donnees) => {
   const texte = JSON.stringify(donnees, null, 1);
-  writeFileSync(join(SORTIE, nom), texte);
+  writeFileSync(join(SORTIE, nom), texte, { mode: 0o600 });
   return { fichier: nom, octets: texte.length, sha256: createHash("sha256").update(texte).digest("hex") };
 };
 
@@ -178,9 +186,8 @@ try {
 // ─── 3. Le Storage ───
 console.log(`\n  ${B}Storage${Z}`);
 try {
-  const r = await rest(`/rest/v1/rpc/inventaire_storage`, {}).catch(() => null);
-  void r; // la RPC n'existe pas : on passe par l'API Storage, sans rien créer en base.
-
+  /* L'API Storage, et non une RPC : on ne crée rien en base pour lire un
+     inventaire. */
   const buckets = await (await rest(`/storage/v1/bucket`)).json();
   const inventaire = [];
   for (const b of buckets) {
@@ -267,7 +274,7 @@ console.log(
 );
 
 manifeste.total_lignes = totalLignes;
-writeFileSync(join(SORTIE, "manifeste.json"), JSON.stringify(manifeste, null, 2));
+writeFileSync(join(SORTIE, "manifeste.json"), JSON.stringify(manifeste, null, 2), { mode: 0o600 });
 
 console.log(`\n${"═".repeat(74)}`);
 console.log(`  ${totalLignes} ligne(s) sauvegardée(s) · ${Object.keys(manifeste.contenu).length} ensemble(s)`);

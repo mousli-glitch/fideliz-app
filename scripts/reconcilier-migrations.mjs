@@ -42,7 +42,7 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DOSSIER = join(RACINE, "supabase", "migrations");
 const TEMOIN = join(RACINE, "supabase", "registre-migrations.json");
 
-const V = "\x1b[32m", R = "\x1b[31m", G = "\x1b[2m", B = "\x1b[1m", Z = "\x1b[0m";
+const V = "\x1b[32m", R = "\x1b[31m", J = "\x1b[33m", G = "\x1b[2m", B = "\x1b[1m", Z = "\x1b[0m";
 
 /* Les fichiers dont la version n'est que des zéros décrivent l'état
    historique. Ils n'ont jamais été appliqués comme migrations, donc ils ne
@@ -78,8 +78,12 @@ console.log(`  RÉCONCILIATION DES MIGRATIONS   ${G}(témoin relevé le ${regist
 console.log(`${"═".repeat(74)}\n`);
 
 const divergences = [];
+const enAttente = [];
 const parVersion = new Map(registre.migrations.map((m) => [m.version, m]));
 const vus = new Set();
+/* La plus récente version réellement appliquée : au-delà, un fichier est du
+   travail en cours ; en deçà, une absence est suspecte. */
+const derniereAppliquee = registre.migrations.map((m) => m.version).sort().at(-1) ?? "";
 
 for (const fichier of fichiers) {
   const version = fichier.split("_")[0];
@@ -92,9 +96,23 @@ for (const fichier of fichiers) {
 
   const m = parVersion.get(version);
   if (!m) {
-    console.log(`  ${R}✗${Z} ${fichier}`);
-    console.log(`      ${G}aucune version ${version} au registre — ce fichier n'a jamais été appliqué${Z}`);
-    divergences.push(fichier);
+    /*
+     * Une migration écrite mais pas encore appliquée n'est pas une
+     * divergence : c'est du travail en cours. On les distingue par leur
+     * version — plus récente que tout ce qui a tourné. Une version PLUS
+     * ANCIENNE absente du registre, en revanche, est un fichier qui prétend
+     * une histoire qui n'a pas eu lieu.
+     */
+    if (version > derniereAppliquee) {
+      console.log(`  ${J}⏳${Z} ${fichier}`);
+      console.log(`      ${G}écrite, pas encore appliquée — normale tant qu'elle attend sa bascule${Z}`);
+      enAttente.push(fichier);
+    } else {
+      console.log(`  ${R}✗${Z} ${fichier}`);
+      console.log(`      ${G}version ${version} antérieure à la dernière appliquée, et absente du registre :`);
+      console.log(`      ce fichier raconte une histoire qui n'a pas eu lieu${Z}`);
+      divergences.push(fichier);
+    }
     continue;
   }
   vus.add(version);
@@ -122,7 +140,8 @@ for (const m of registre.migrations) {
 const migrations = fichiers.filter((f) => !EST_BASELINE(f)).length;
 console.log(`\n${"═".repeat(74)}`);
 console.log(
-  `  ${registre.migrations.length} appliquée(s) · ${migrations} dans Git · ${fichiers.length - migrations} baseline(s)`
+  `  ${registre.migrations.length} appliquée(s) · ${migrations} dans Git · ${fichiers.length - migrations} baseline(s)` +
+    (enAttente.length ? ` · ${enAttente.length} en attente` : "")
 );
 
 if (divergences.length) {
