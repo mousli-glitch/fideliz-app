@@ -40,15 +40,15 @@ create table if not exists public.maintenance (
   message      text    not null default 'Service momentanément suspendu. Merci de réessayer dans quelques minutes.',
   depuis       timestamptz,
   par          uuid,
-  -- Le laissez-passer du migrateur. Voir `refuser_pendant_maintenance()`.
-  -- Nul en temps normal : sans jeton posé, aucune écriture ne passe le gel.
-  jeton_migrateur text,
+  -- L'EMPREINTE du laissez-passer, jamais le laissez-passer lui-même.
+  -- Nulle en temps normal : sans empreinte posée, rien ne passe le gel.
+  empreinte_jeton text,
   -- Une seule ligne possible : un drapeau qui existerait en double serait un
   -- drapeau dont personne ne saurait lequel fait foi.
   constraint maintenance_ligne_unique check (id = true)
 );
 
-alter table public.maintenance add column if not exists jeton_migrateur text;
+alter table public.maintenance add column if not exists empreinte_jeton text;
 
 insert into public.maintenance (id, actif) values (true, false)
 on conflict (id) do nothing;
@@ -99,22 +99,36 @@ begin
      * D'où un jeton présenté PAR TRANSACTION :
      *
      *     begin;
-     *     set local bascule.jeton = '<le jeton posé dans maintenance>';
+     *     set local bascule.jeton = '<le jeton brut, jamais ecrit nulle part>';
      *     -- … les écritures du migrateur …
      *     commit;
      *
-     * Trois propriétés en découlent. `set local` meurt avec la transaction :
-     * rien à nettoyer, rien qui traîne. Le jeton vit en base et se change
-     * entre deux bascules. Et l'application ne le pose jamais — elle ne le
-     * connaît pas, il n'est dans aucune variable d'environnement.
+     * `set local` meurt avec la transaction : rien à nettoyer, rien qui
+     * traîne. Le jeton est tiré au hasard à chaque bascule et n'existe que
+     * dans la mémoire du migrateur.
      *
-     * Le jeton est effacé à la levée du gel : hors bascule, `jeton_migrateur`
-     * est nul, et un laissez-passer nul ne laisse passer personne.
+     * L'empreinte est effacée à la levée du gel : hors bascule,
+     * `empreinte_jeton` est nulle, et un laissez-passer nul ne laisse passer
+     * personne — pas même celui qui aurait retenu l'ancien jeton.
      */
-    select jeton_migrateur into v_jeton from public.maintenance where id;
+    select empreinte_jeton into v_jeton from public.maintenance where id;
     v_presente := nullif(current_setting('bascule.jeton', true), '');
 
-    if v_jeton is not null and v_presente is not null and v_presente = v_jeton then
+    /*
+     * On compare des EMPREINTES, pas des jetons.
+     *
+     * Stocker le jeton en clair aurait suffi à annuler tout le raisonnement :
+     * `service_role` contourne la RLS, donc l'application aurait pu le lire
+     * dans la table et se le présenter à elle-même. « L'application ne
+     * connaît pas le jeton » ne se décrète pas — il faut qu'elle ne PUISSE
+     * pas le connaitre.
+     *
+     * Le jeton brut n'existe donc que dans la mémoire du migrateur, le temps
+     * de la bascule. La base n'en garde que le sha256, qui ne permet pas de
+     * le retrouver.
+     */
+    if v_jeton is not null and v_presente is not null
+       and encode(extensions.digest(v_presente, 'sha256'), 'hex') = v_jeton then
       return case tg_op when 'DELETE' then old else new end;
     end if;
 
@@ -195,7 +209,13 @@ grant select on public.maintenance to anon, authenticated;
  *
  *  1. GELER LES DEUX BASES, Fideliz d'abord.
  *     update public.maintenance set actif = true, depuis = now(),
- *       message = '…', jeton_migrateur = <jeton tiré au hasard, jamais versionné>;
+ *       message = '…',
+ *       empreinte_jeton = encode(extensions.digest('<jeton brut>', 'sha256'), 'hex');
+ *
+ *     Le jeton brut est tiré au hasard au moment de la bascule (32 octets,
+ *     `openssl rand -hex 32`), gardé dans la memoire du migrateur, et ecrit
+ *     nulle part : ni dans Git, ni dans une migration, ni dans Vercel, ni
+ *     dans une variable d'environnement. La base n'en voit que l'empreinte.
  *
  *  2. LAISSER FINIR CE QUI EST EN VOL. Le gel arrête les nouvelles écritures,
  *     pas celles déjà commencées. Attendre que `pg_stat_activity` ne montre
@@ -214,7 +234,7 @@ grant select on public.maintenance to anon, authenticated;
  *
  *  6. LEVER — et seulement après le GO.
  *     update public.maintenance set actif = false, depuis = null,
- *       jeton_migrateur = null;
+ *       empreinte_jeton = null;
  *     Effacer le jeton fait partie de la levée : un laissez-passer qui
  *     survivrait à la bascule serait une porte laissée entrouverte.
  *
