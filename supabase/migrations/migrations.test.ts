@@ -83,13 +83,13 @@ describe("handle_new_user_profile — le rôle ne vient jamais du client", () =>
    * perdre la trace de ce qui s'est réellement passé.
    */
   it("la baseline conserve l'état historique, défaut compris", () => {
-    const baseline = migrations.find((n) => n.includes("baseline_handle_new_user_profile"));
+    const baseline = migrations.find((n) => n.includes("baseline_fideliz_handle_new_user_profile"));
     expect(baseline, "la baseline historique a disparu").toBeDefined();
     expect(readFileSync(join(ICI, baseline!), "utf8")).toMatch(/raw_user_meta_data/);
   });
 
   it("la correction vient après la baseline dans l'ordre d'application", () => {
-    const iBaseline = migrations.findIndex((n) => n.includes("baseline_handle_new_user_profile"));
+    const iBaseline = migrations.findIndex((n) => n.includes("baseline_fideliz_handle_new_user_profile"));
     const iCorrectif = migrations.findIndex((n) => n.includes("role_jamais_depuis_les_metadonnees"));
     expect(iBaseline).toBeGreaterThanOrEqual(0);
     expect(iCorrectif).toBeGreaterThan(iBaseline);
