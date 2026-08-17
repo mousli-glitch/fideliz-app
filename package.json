@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "securite:surface": "node scripts/surface-actions.mjs",
+    "securite:inventaire": "node scripts/inventaire-actions.mjs",
+    "securite:sonde": "node scripts/sonde-securite.mjs",
+    "securite": "vitest run && node scripts/surface-actions.mjs"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.8",

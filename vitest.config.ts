@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
 
 /*
  * `tests/` appartient à Playwright, qui a son propre lanceur. Sans cette
@@ -7,6 +8,11 @@ import { defineConfig } from "vitest/config";
  * avec le code testé, et qui ferait douter du reste.
  */
 export default defineConfig({
+  /* Le même alias que tsconfig.json — sans lui, les modules testés ne
+     résolvent pas leurs propres imports. */
+  resolve: {
+    alias: { "@": fileURLToPath(new URL("./", import.meta.url)) },
+  },
   test: {
     include: ["lib/**/*.test.ts", "app/**/*.test.ts", "utils/**/*.test.ts"],
     exclude: ["node_modules/**", "tests/**", ".next/**"],

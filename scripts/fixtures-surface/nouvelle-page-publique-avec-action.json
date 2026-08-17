@@ -1,0 +1,22 @@
+{
+  "_lisez_moi": "Manifeste FABRIQUÉ. Deuxième accident redouté : une page publique entièrement nouvelle — ici un tunnel de commande — se met à porter des Server Actions. Elle n'est ni dans le matcher du middleware, ni dans la liste des pages publiques autorisées. Le garde-fou doit la nommer et refuser.",
+  "node": {
+    "40c1cc1ce882000000000000000000000000000000": {
+      "workers": { "app/verify/[id]/page": 1 }
+    },
+    "4086b076125a000000000000000000000000000000": {
+      "workers": { "app/play/[slug]/page": 1 }
+    },
+    "406b033792df000000000000000000000000000000": {
+      "workers": { "app/play/[slug]/page": 1 }
+    },
+    "4094f2684242000000000000000000000000000000": {
+      "workers": { "app/play/[slug]/page": 1 }
+    },
+    "7011aa22bb33000000000000000000000000000000": {
+      "workers": { "app/commande/[slug]/page": 1 }
+    }
+  },
+  "edge": {},
+  "encryptionKey": "fixture"
+}

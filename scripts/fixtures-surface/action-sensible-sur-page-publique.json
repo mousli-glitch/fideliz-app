@@ -1,0 +1,30 @@
+{
+  "_lisez_moi": "Manifeste FABRIQUÉ, jamais produit par un build. Il décrit l'accident qu'on redoute : une action d'administration dont l'identifiant a atterri dans le bundle d'une page publique, parce qu'un composant partagé l'a importée. Le garde-fou doit le refuser en code 1. Aucune vraie page du produit n'est modifiée pour obtenir ce cas.",
+  "node": {
+    "40c1cc1ce882000000000000000000000000000000": {
+      "workers": { "app/verify/[id]/page": 1 },
+      "layer": { "app/verify/[id]/page": "action-browser" }
+    },
+    "60ac553a6e6600000000000000000000000000000a": {
+      "workers": {
+        "app/super-admin/root/restaurants-management/page": 1,
+        "app/verify/[id]/page": 1
+      },
+      "layer": { "app/verify/[id]/page": "action-browser" }
+    },
+    "4086b076125a000000000000000000000000000000": {
+      "workers": { "app/play/[slug]/page": 1 },
+      "layer": { "app/play/[slug]/page": "action-browser" }
+    },
+    "406b033792df000000000000000000000000000000": {
+      "workers": { "app/play/[slug]/page": 1 },
+      "layer": { "app/play/[slug]/page": "action-browser" }
+    },
+    "4094f2684242000000000000000000000000000000": {
+      "workers": { "app/play/[slug]/page": 1 },
+      "layer": { "app/play/[slug]/page": "action-browser" }
+    }
+  },
+  "edge": {},
+  "encryptionKey": "fixture"
+}
