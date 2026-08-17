@@ -40,10 +40,15 @@ create table if not exists public.maintenance (
   message      text    not null default 'Service momentanément suspendu. Merci de réessayer dans quelques minutes.',
   depuis       timestamptz,
   par          uuid,
+  -- Le laissez-passer du migrateur. Voir `refuser_pendant_maintenance()`.
+  -- Nul en temps normal : sans jeton posé, aucune écriture ne passe le gel.
+  jeton_migrateur text,
   -- Une seule ligne possible : un drapeau qui existerait en double serait un
   -- drapeau dont personne ne saurait lequel fait foi.
   constraint maintenance_ligne_unique check (id = true)
 );
+
+alter table public.maintenance add column if not exists jeton_migrateur text;
 
 insert into public.maintenance (id, actif) values (true, false)
 on conflict (id) do nothing;
@@ -75,8 +80,44 @@ language plpgsql
 security definer
 set search_path to 'public'
 as $$
+declare
+  v_jeton text;
+  v_presente text;
 begin
   if public.maintenance_actif() then
+    /*
+     * ─── LE LAISSEZ-PASSER DU MIGRATEUR ───
+     *
+     * Le gel bloque tout le monde, y compris `service_role` — c'est tout son
+     * intérêt. Mais le migrateur, lui, DOIT écrire pendant la fenêtre : il
+     * n'aurait aucun autre moment pour le faire.
+     *
+     * Une exception pour `service_role` serait la pire réponse : c'est
+     * l'identité que l'application entière utilise déjà, donc la protection
+     * s'annulerait d'elle-même.
+     *
+     * D'où un jeton présenté PAR TRANSACTION :
+     *
+     *     begin;
+     *     set local bascule.jeton = '<le jeton posé dans maintenance>';
+     *     -- … les écritures du migrateur …
+     *     commit;
+     *
+     * Trois propriétés en découlent. `set local` meurt avec la transaction :
+     * rien à nettoyer, rien qui traîne. Le jeton vit en base et se change
+     * entre deux bascules. Et l'application ne le pose jamais — elle ne le
+     * connaît pas, il n'est dans aucune variable d'environnement.
+     *
+     * Le jeton est effacé à la levée du gel : hors bascule, `jeton_migrateur`
+     * est nul, et un laissez-passer nul ne laisse passer personne.
+     */
+    select jeton_migrateur into v_jeton from public.maintenance where id;
+    v_presente := nullif(current_setting('bascule.jeton', true), '');
+
+    if v_jeton is not null and v_presente is not null and v_presente = v_jeton then
+      return case tg_op when 'DELETE' then old else new end;
+    end if;
+
     /*
      * 57014 (query_canceled) est déjà pris. On choisit une classe applicative
      * dédiée pour que l'application distingue « on est en maintenance » de
@@ -127,3 +168,58 @@ end $$;
 
 comment on table public.maintenance is
   'Drapeau unique du gel de bascule. actif = true fait echouer toute ecriture sur les tables metier, y compris via service_role et RPC — les triggers ne se contournent pas. Les lectures restent ouvertes : menus, QR et /verify continuent de repondre.';
+
+-- ─────────────────────────────────────────────── qui peut toucher au drapeau
+
+/*
+ * La table est lisible par tous (l'application doit pouvoir afficher un
+ * message honnête) et écrite par personne via PostgREST. Le basculement se
+ * fait à la clé de service, depuis le runbook, et par rien d'autre.
+ *
+ * Sans ce revoke, `authenticated` hériterait des droits par défaut de
+ * Supabase sur les nouvelles tables — et n'importe quel compte connecté
+ * pourrait lever le gel ou se donner le laissez-passer.
+ */
+revoke all on public.maintenance from anon, authenticated;
+grant select on public.maintenance to anon, authenticated;
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ *  L'ORDRE DES OPÉRATIONS — 6 h à 8 h, heure de Paris
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ *  Les sept tables gelées vivent dans la base FIDELIZ. Le migrateur, lui,
+ *  LIT Fideliz et ÉCRIT dans Cartiz : le gel de Fideliz ne le gêne donc pas.
+ *  C'est le gel de CARTIZ — la même migration, appliquée là-bas — qu'il doit
+ *  traverser, et c'est à cela que sert le jeton.
+ *
+ *  1. GELER LES DEUX BASES, Fideliz d'abord.
+ *     update public.maintenance set actif = true, depuis = now(),
+ *       message = '…', jeton_migrateur = <jeton tiré au hasard, jamais versionné>;
+ *
+ *  2. LAISSER FINIR CE QUI EST EN VOL. Le gel arrête les nouvelles écritures,
+ *     pas celles déjà commencées. Attendre que `pg_stat_activity` ne montre
+ *     plus de transaction applicative active — quelques secondes en pratique,
+ *     ces transactions sont courtes.
+ *
+ *  3. POINT DE RÉFÉRENCE. `npm run sauvegarde -- --fichiers` : c'est L'ÉTAT
+ *     auquel un rollback ramènerait. Le prendre avant le gel n'aurait aucun
+ *     sens ; le prendre après les écritures non plus.
+ *
+ *  4. MIGRER. Chaque transaction du migrateur présente le jeton :
+ *       begin; set local bascule.jeton = '…'; … ; commit;
+ *
+ *  5. CONTRÔLER. Témoins QR des cinq parcours, réconciliation des comptages,
+ *     sondes de sécurité. Un seul rouge : on ne lève pas.
+ *
+ *  6. LEVER — et seulement après le GO.
+ *     update public.maintenance set actif = false, depuis = null,
+ *       jeton_migrateur = null;
+ *     Effacer le jeton fait partie de la levée : un laissez-passer qui
+ *     survivrait à la bascule serait une porte laissée entrouverte.
+ *
+ *  EN CAS DE ROLLBACK : revenir à l'ancienne application AVANT de lever le
+ *  gel. Lever d'abord rouvrirait les écritures sur une application qu'on
+ *  s'apprête à remplacer — et ces écritures-là, personne ne saurait les
+ *  rattraper.
+ */
