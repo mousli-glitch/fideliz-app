@@ -15,7 +15,8 @@
     "securite": "vitest run && node scripts/surface-actions.mjs && node scripts/preflight-auth.mjs",
     "avant-push": "node scripts/avant-push.mjs",
     "preflight:auth": "node scripts/preflight-auth.mjs",
-    "migrations:reconcilier": "node scripts/reconcilier-migrations.mjs"
+    "migrations:reconcilier": "node scripts/reconcilier-migrations.mjs",
+    "sauvegarde": "node scripts/sauvegarde-logique.mjs"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.8",
