@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from '@supabase/supabase-js'
+import { exigerRestaurantParSlug } from '@/lib/securite/garde-action'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +17,13 @@ function normalizeAmount(value: any): string {
 }
 
 export async function createGameAction(data: any) {
-  console.log("🚀 ACTION SERVEUR DÉCLENCHÉE !")
+  /*
+   * Le slug vient du client, mais la garde le RÉSOUT elle-même et compare le
+   * restaurant obtenu au rattachement de l'appelant. On repart ensuite de
+   * l'identifiant qu'elle rend, pas d'une seconde résolution.
+   */
+  const garde = await exigerRestaurantParSlug(data?.slug, ['restaurant', 'root'], 'jeu.creation')
+  if (!garde.ok) return { success: false, error: garde.error }
 
   try {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {

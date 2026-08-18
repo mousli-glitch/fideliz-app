@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from '@supabase/supabase-js'
+import { autoriserParJeu } from '@/lib/securite/garde-objet'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,12 +18,24 @@ function normalizeAmount(value: any): string {
 }
 
 export async function updateGameAction(gameId: string, data: any) {
+  /*
+   * Le client transmet DEUX identifiants : le jeu, et le restaurant censé le
+   * porter. On ne lit jamais le second. Le jeu est résolu côté serveur et
+   * c'est SON propriétaire réel qui décide de l'autorisation.
+   *
+   * Toutes les écritures ci-dessous n'utilisent ensuite que `restaurantId` et
+   * `objetId` — les identifiants résolus, jamais ceux reçus.
+   */
+  const garde = await autoriserParJeu(gameId, ['restaurant', 'root'], 'jeu.modification')
+  if (!garde.ok) return { success: false, error: garde.error }
+  const { restaurantId, objetId } = garde
+
   try {
     // 1. Sauvegarde Resto
     const { error: restoError } = await supabaseAdmin.from("restaurants").update({
       primary_color: data.design.primary_color, 
       logo_url: data.design.logo_url,
-    }).eq("id", data.restaurant_id)
+    }).eq("id", restaurantId)
 
     if (restoError) throw new Error("Erreur sauvegarde resto: " + restoError.message)
 
@@ -55,13 +68,13 @@ export async function updateGameAction(gameId: string, data: any) {
       // Recharge automatique du stock
       stock_refill_enabled: !!(data.form.is_stock_limit_active && data.form.stock_refill_enabled),
       stock_refill_period: data.form.stock_refill_period || 'monthly',
-    }).eq("id", gameId)
+    }).eq("id", objetId)
 
     if (gameError) throw new Error("Erreur update jeu: " + gameError.message)
 
     // 3. Gestion des lots (Suppression + Insertion propre)
     // On supprime d'abord pour éviter les doublons ou orphelins
-    await supabaseAdmin.from('prizes').delete().eq('game_id', gameId)
+    await supabaseAdmin.from('prizes').delete().eq('game_id', objetId)
     
     const prizesToInsert = data.prizes.map((p: any) => {
         // Stock : si limite active, on garde le nombre saisi ; vide/null = illimité (null), PAS 0.
@@ -69,7 +82,7 @@ export async function updateGameAction(gameId: string, data: any) {
           ? (p.quantity === null || p.quantity === undefined || p.quantity === "" ? null : Number(p.quantity))
           : null
         return {
-          game_id: gameId,
+          game_id: objetId,
           label: p.label,
           color: "#000000",
           weight: Number(p.weight),

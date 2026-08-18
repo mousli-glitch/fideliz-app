@@ -1,11 +1,33 @@
 "use server"
 
 import { createClient as createAdminClient } from "@supabase/supabase-js"
+import { exigerRestaurantParSlug } from "@/lib/securite/garde-action"
 
 const supabaseAdmin = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  GARDE DE CE FICHIER
+ *
+ *  Les huit actions ci-dessous reçoivent toutes un `restaurantId` du client et
+ *  travaillent en `service_role`. Sans contrôle, un restaurateur connecté peut
+ *  passer l'identifiant d'un confrère et, selon l'action : lire ses avis,
+ *  changer sa fiche Google, ou PUBLIER une réponse en son nom sur sa fiche
+ *  publique. Cette dernière est irréversible depuis notre côté.
+ *
+ *  `garderResto` résout l'identifiant reçu et vérifie le rattachement de
+ *  l'appelant avant que la moindre requête ne parte. Le message de refus est
+ *  toujours le même : il ne dit pas si l'identifiant existe.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+async function garderResto(restaurantId: string, action: string) {
+  const g = await exigerRestaurantParSlug(restaurantId, ["restaurant", "root"], action)
+  if (!g.ok || !g.restaurant) return { ok: false as const }
+  return { ok: true as const, id: g.restaurant.id }
+}
 
 // Renvoie un access token Google VALIDE (rafraîchit automatiquement s'il a expiré).
 // Sans ça, tout casse 1 h après la connexion (durée de vie d'un access token).
@@ -80,6 +102,9 @@ async function resolveFullLocationPath(restaurantId: string, token: string, loca
 
 // 4. Publier une réponse à un avis sur Google
 export async function replyToGoogleReviewAction(restaurantId: string, reviewId: string, comment: string) {
+  const g = await garderResto(restaurantId, "avis.reponse")
+  if (!g.ok) return { success: false, error: "Restaurant introuvable." }
+  restaurantId = g.id
   if (!comment || !comment.trim()) return { success: false, error: "La réponse est vide." }
 
   const { token, locationId: rawLocationId, error } = await getValidAccessToken(restaurantId)
@@ -110,6 +135,9 @@ export async function replyToGoogleReviewAction(restaurantId: string, reviewId: 
 
 // 1. Récupérer la liste des établissements
 export async function getGoogleLocationsAction(restaurantId: string) {
+  const g = await garderResto(restaurantId, "google.etablissements")
+  if (!g.ok) return { success: false, error: "Restaurant introuvable." }
+  restaurantId = g.id
   console.log("🕵️‍♂️ ACTION: getGoogleLocationsAction lancée pour", restaurantId)
 
   const { token: accessToken, error: tokenError } = await getValidAccessToken(restaurantId)
@@ -199,6 +227,9 @@ export async function getGoogleLocationsAction(restaurantId: string) {
 
 // 2. Sauvegarder l'établissement choisi
 export async function saveGoogleLocationAction(restaurantId: string, googleLocationId: string) {
+  const g = await garderResto(restaurantId, "google.rattachement")
+  if (!g.ok) return { success: false, error: "Restaurant introuvable." }
+  restaurantId = g.id
   const { error } = await supabaseAdmin
     .from("restaurants")
     .update({ google_location_id: googleLocationId })
@@ -210,6 +241,9 @@ export async function saveGoogleLocationAction(restaurantId: string, googleLocat
 
 // 3. Récupérer les avis (avec pagination : on remonte jusqu'à 150 avis)
 export async function getGoogleReviews(restaurantId: string) {
+  const g = await garderResto(restaurantId, "avis.lecture")
+  if (!g.ok) return { success: false, error: "Restaurant introuvable." }
+  restaurantId = g.id
   const { token, locationId: rawLocationId, error: tokenError } = await getValidAccessToken(restaurantId)
   if (!token || !rawLocationId) {
     return { success: false, error: tokenError || "Non connecté." }
@@ -263,6 +297,9 @@ export async function saveAutoReplySettingsAction(
     auto_reply_blocklist?: string | null
   }
 ) {
+  const g = await garderResto(restaurantId, "avis.reglages")
+  if (!g.ok) return { success: false, error: "Restaurant introuvable." }
+  restaurantId = g.id
   // On ne pose auto_reply_since QUE lors du passage OFF -> ON, pour que le cron
   // ne réponde qu'aux avis reçus après activation (jamais au backlog d'anciens avis).
   const { data: current } = await supabaseAdmin
@@ -310,6 +347,9 @@ const STAR_TO_NUM: Record<string, number> = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4,
 //    - throttle : pas plus d'1 synchro / minute sauf force=true.
 //    - suppression des avis disparus UNIQUEMENT si le fetch Google est complet (sécurité).
 export async function syncGoogleReviews(restaurantId: string, opts: { force?: boolean } = {}) {
+  const g = await garderResto(restaurantId, "avis.synchro")
+  if (!g.ok) return { success: false, error: "Restaurant introuvable." }
+  restaurantId = g.id
   // Throttle : évite de spammer Google si la page est rechargée en boucle
   if (!opts.force) {
     const { data: r } = await supabaseAdmin
@@ -376,6 +416,9 @@ export async function syncGoogleReviews(restaurantId: string, opts: { force?: bo
 
 // 7. Lire les avis DEPUIS LA BASE (rapide, aucun appel Google).
 export async function getStoredReviews(restaurantId: string) {
+  const g = await garderResto(restaurantId, "avis.lecture_locale")
+  if (!g.ok) return { success: false, error: "Restaurant introuvable.", reviews: [], avg: null, total: 0, syncedAt: null }
+  restaurantId = g.id
   const [{ data: avis }, { data: resto }] = await Promise.all([
     supabaseAdmin
       .from("avis")
@@ -411,6 +454,9 @@ export async function getStoredReviews(restaurantId: string) {
 
 // 8. Sauver / effacer un brouillon de réponse IA (NOTRE donnée, survit aux synchros).
 export async function saveReviewDraft(restaurantId: string, reviewId: string, draft: string | null) {
+  const g = await garderResto(restaurantId, "avis.brouillon")
+  if (!g.ok) return { success: false, error: "Restaurant introuvable." }
+  restaurantId = g.id
   const { error } = await supabaseAdmin
     .from("avis")
     .update({ ai_draft: draft && draft.trim() ? draft : null })
