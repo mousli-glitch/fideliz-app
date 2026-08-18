@@ -1,11 +1,9 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
+import { resoudreRootHeritier, cibleEstProtegee } from "@/lib/securite/root"
 import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
 
-// Le root hérite des restaurants des commerciaux supprimés — mais on le
-// CHERCHE, on ne l'écrit plus. Voir `lib/securite/compte-root.ts`.
-import { idDuCompteRoot, estCompteProtege } from "@/lib/securite/compte-root"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,29 +29,35 @@ export async function deleteSalesUserAction(userId: string) {
   try {
     if (!userId) return { success: false, error: "ID utilisateur manquant." }
 
-    const { data: prof } = await supabaseAdmin
-      .from('profiles').select('role').eq('id', userId).single()
+    /* 🔒 Ne jamais supprimer un super-admin. Le contrôle par RÔLE ci-dessous
+     * suffit et suffisait déjà : le test par UUID qui le précédait était
+     * redondant, et il aurait laissé passer un second root. */
+    if (await cibleEstProtegee(userId)) {
+      return { success: false, error: "Ce compte super-admin est protégé." }
+    }
 
-    // 🔒 Protection du super-admin, par le RÔLE et non par un UUID en dur.
-    if (estCompteProtege(prof?.role)) {
-      return { success: false, error: "Ce compte super-admin est protégé." }
+    /* L'héritier n'est plus figé : on le résout. Si aucun root actif n'existe,
+     * on refuse plutôt que d'inventer un propriétaire — un restaurant sans
+     * propriétaire valide vaut mieux qu'un restaurant attribué au hasard. */
+    const heritier = await resoudreRootHeritier()
+    if (!heritier.ok) {
+      return { success: false, error: heritier.cause === "aucun_root"
+        ? "Aucun compte root : réattribution impossible."
+        : "Lecture des profils impossible : réattribution annulée." }
     }
-    const rootId = await idDuCompteRoot(supabaseAdmin)
-    if ((prof as any)?.role === 'root') {
-      return { success: false, error: "Ce compte super-admin est protégé." }
-    }
+    const rootHeritier = heritier.rootId
 
     // 1. Restaurants APPORTÉS par le commercial -> attribués au root (on garde le propriétaire réel)
     const { error: e1 } = await supabaseAdmin
       .from('restaurants')
-      .update({ created_by: rootId })
+      .update({ created_by: rootHeritier })
       .eq('created_by', userId)
     if (e1) throw new Error("Réattribution (créateur) échouée : " + e1.message)
 
     // 2. Restaurants éventuellement POSSÉDÉS par le commercial -> propriété au root
     const { error: e2 } = await supabaseAdmin
       .from('restaurants')
-      .update({ owner_id: rootId })
+      .update({ owner_id: rootHeritier })
       .eq('owner_id', userId)
     if (e2) throw new Error("Réattribution (propriétaire) échouée : " + e2.message)
 

@@ -20,7 +20,7 @@
  *                               été appliqué.
  *
  * Variables optionnelles :
- *   HARNAIS_REPETITIONS      — répétitions du scénario de course (défaut 5)
+ *   HARNAIS_REPETITIONS      — répétitions du scénario de course (défaut 50)
  *   HARNAIS_TIMEOUT_MS       — timeout par requête HTTP (défaut 5000)
  *
  * ─── FAIL-CLOSED, SIGNALÉ LE 19/08/2026 (3e TOUR) ───
@@ -83,7 +83,7 @@
 const REST_URL = process.env.SUPABASE_REST_URL;
 const ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const NONCE_ATTENDU = process.env.HARNAIS_NONCE_ATTENDU;
-const REPETITIONS = Number(process.env.HARNAIS_REPETITIONS ?? 5);
+const REPETITIONS = Number(process.env.HARNAIS_REPETITIONS ?? 50);
 const TIMEOUT_MS = Number(process.env.HARNAIS_TIMEOUT_MS ?? 5000);
 
 function exigerEnv() {
@@ -325,29 +325,109 @@ async function scenarioTransitionsStrictesActivationLevee() {
   };
 }
 
+/*
+ * Convertit un timestamptz PostgreSQL en microsecondes depuis l'epoch.
+ *
+ * `Date.parse` tronque à la milliseconde — deux événements séparés de
+ * quelques dizaines de microsecondes deviendraient indiscernables, et une
+ * violation réelle passerait inaperçue. Les horodatages viennent tous de
+ * `clock_timestamp()` sur LE MÊME serveur, donc comparables entre eux à la
+ * microseconde près.
+ */
+function instantMicrosecondes(iso) {
+  const m = /^(.*T\d{2}:\d{2}:\d{2})\.(\d+)([+-]\d{2}:\d{2}|Z)?$/.exec(iso ?? "");
+  if (!m) {
+    const t = Date.parse(iso ?? "");
+    return Number.isFinite(t) ? t * 1000 : NaN;
+  }
+  const base = Date.parse(m[1] + (m[3] ?? "Z"));
+  if (!Number.isFinite(base)) return NaN;
+  return base * 1000 + Number((m[2] + "000000").slice(0, 6));
+}
+
+/*
+ * Les DEUX seules linéarisations autorisées en READ COMMITTED, vérifiées
+ * sur les horodatages serveur — pas sur une simple cohérence de champs.
+ *
+ * Signalé le 19/08 (6e tour) : la version précédente ne testait que
+ * `ecriture_ok === true && code_erreur != null`, une combinaison
+ * IMPOSSIBLE PAR CONSTRUCTION dans la fonction témoin — le test ne pouvait
+ * donc jamais échouer, et ne mesurait aucune propriété de concurrence.
+ *
+ *   a) écriture RÉUSSIE — son trigger a pris `for share` avant que
+ *      l'activation n'obtienne son verrou `NO KEY UPDATE` (incompatibles).
+ *      L'activation a donc dû attendre la fin de l'écriture :
+ *      fin(écriture) <= obtention_verrou(activation).
+ *   b) écriture REFUSÉE — l'activation avait déjà committé quand le
+ *      trigger a lu le drapeau : obtention_verrou(activation) <=
+ *      fin(tentative d'écriture). Et le seul code acceptable est P0100.
+ *
+ * Tout le reste échoue fermé : champ absent, horodatage non comparable,
+ * niveau d'isolation inattendu, SQLSTATE différent, ordre impossible.
+ */
+function verifierLinearisation(resultatEcriture, resultatActivation) {
+  if (resultatEcriture.status !== "fulfilled") {
+    return { ok: false, raison: "appel d'écriture en échec : " + String(resultatEcriture.reason?.message ?? "").slice(0, 90) };
+  }
+  if (resultatActivation.status !== "fulfilled") {
+    return { ok: false, raison: "appel d'activation en échec : " + String(resultatActivation.reason?.message ?? "").slice(0, 90) };
+  }
+  const ecriture = resultatEcriture.value;
+  const activation = resultatActivation.value;
+
+  if (typeof ecriture.ecriture_ok !== "boolean") return { ok: false, raison: "champ ecriture_ok absent ou non booléen" };
+  if (ecriture.niveau_isolation !== "read committed") {
+    return { ok: false, raison: "niveau d'isolation inattendu : " + String(ecriture.niveau_isolation) };
+  }
+
+  const finEcriture = instantMicrosecondes(ecriture.horodatage_apres);
+  const verrouActivation = instantMicrosecondes(activation.horodatage_update);
+  if (!Number.isFinite(finEcriture)) return { ok: false, raison: "horodatage de fin d'écriture absent ou non comparable" };
+  if (!Number.isFinite(verrouActivation)) return { ok: false, raison: "horodatage d'activation absent ou non comparable" };
+
+  if (ecriture.ecriture_ok === true) {
+    if (ecriture.code_erreur != null) return { ok: false, raison: "écriture réussie ET code d'erreur présent" };
+    if (finEcriture > verrouActivation) {
+      return { ok: false, raison: "écriture réussie mais terminée APRÈS l'obtention du verrou d'activation — linéarisation impossible" };
+    }
+    return { ok: true, cas: "ecriture_reussie" };
+  }
+
+  if (ecriture.code_erreur !== "P0100") {
+    return { ok: false, raison: "écriture refusée avec un SQLSTATE inattendu : " + String(ecriture.code_erreur) };
+  }
+  if (verrouActivation > finEcriture) {
+    return { ok: false, raison: "écriture refusée mais activation POSTÉRIEURE à la fin de la tentative — linéarisation impossible" };
+  }
+  return { ok: true, cas: "ecriture_refusee" };
+}
+
 async function scenarioCourseRepetee(repetitions) {
-  const resultats = [];
+  const violations = [];
+  let reussites = 0;
+  let refus = 0;
   for (let i = 0; i < repetitions; i++) {
     await reinitialiser();
-    const [reponseEcriture, ] = await Promise.all([
+    const [resultatEcriture, resultatActivation] = await Promise.allSettled([
       appeler("zz_harnais_gel_ecriture"),
       appeler("zz_harnais_gel_activer"),
     ]);
-    // Violation possible seulement si l'écriture a réussi APRÈS que
-    // l'activation a committé — les horodatages viennent de deux appels
-    // séparés (pas de garantie d'horloge partagée au-delà de la précision
-    // du serveur), donc on vérifie surtout l'ABSENCE d'incohérence
-    // structurelle : jamais ecriture_ok=true avec un code d'erreur
-    // simultané, jamais de code d'erreur inattendu.
-    const incoherent = reponseEcriture.ecriture_ok === true && reponseEcriture.code_erreur != null;
-    resultats.push(incoherent);
+    const verdict = verifierLinearisation(resultatEcriture, resultatActivation);
+    if (!verdict.ok) violations.push({ iteration: i, raison: verdict.raison });
+    else if (verdict.cas === "ecriture_reussie") reussites++;
+    else refus++;
     await reinitialiser();
   }
-  const violations = resultats.filter(Boolean).length;
   return {
     scenario: "course_repetee",
-    ok: violations === 0,
-    detail: { repetitions, violations },
+    ok: violations.length === 0,
+    detail: {
+      repetitions,
+      ecrituresReussies: reussites,
+      ecrituresRefusees: refus,
+      violations: violations.length,
+      premieresViolations: violations.slice(0, 3),
+    },
   };
 }
 

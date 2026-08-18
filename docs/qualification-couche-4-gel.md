@@ -737,3 +737,75 @@ application brute → activation (script corrigé) → levée (script corrigé)
 → rollback → empreinte exacte (24 fonctions `fd1b8684…`, identique à
 avant) → réapplication (24 fonctions `fd1b8684…` ✅, `actif = false`).
 **213 tests verts.**
+
+## 10. Preuves vivantes des gardes, et `course_repetee` rendu probant
+
+### Les deux gardes, prouvées en attaque réelle sur `fusion-tests-2`
+
+Chaque expérience remplace temporairement un trigger conforme, exécute le
+contrôle du script d'activation, puis annule (sous-transaction plpgsql —
+l'exception défait le DDL). Manifeste des triggers comparé avant/après.
+
+| Attaque | Résultat |
+|---|---|
+| Trigger `FOR EACH STATEMENT` au lieu de `FOR EACH ROW` | ✅ refusé — « 1 table(s) non conforme(s) » |
+| Fonction homonyme `refuser_pendant_maintenance_bypass()`, OID différent | ✅ refusé |
+
+**Le second cas est le décisif** : la même expérience mesure que l'ANCIEN
+contrôle textuel (`action_statement ilike '%refuser_pendant_maintenance%'`)
+aurait, lui, **matché le piège** (`ancien controle ILIKE aurait matche = t`).
+Le contrôle par `tgfoid::regprocedure` le refuse. Ce n'est donc pas un
+durcissement théorique : il ferme un contournement qui fonctionnait.
+
+Aucun résidu : manifeste des triggers identique avant et après
+(`2ec1eca0…` = `2ec1eca0…`), `maintenance.actif` jamais muté (`false` de
+bout en bout), 0 fonction `%bypass%` restante.
+
+### `course_repetee` : d'un test vide à une vérification de linéarisation
+
+L'ancien test ne cherchait que `ecriture_ok === true && code_erreur != null`
+— **impossible par construction** dans la fonction témoin. Il ne pouvait
+jamais échouer et ne mesurait aucune propriété de concurrence.
+
+Remplacé par la vérification des deux seules linéarisations autorisées en
+READ COMMITTED, sur les horodatages serveur comparés à la **microseconde**
+(`Date.parse` tronque à la milliseconde et masquerait une violation) :
+
+- écriture **réussie** → sa fin doit précéder l'obtention du verrou
+  d'activation (le `for share` du trigger a fait attendre le `NO KEY UPDATE`) ;
+- écriture **refusée** → seul `P0100` est accepté, et l'activation doit
+  précéder la fin de la tentative.
+
+Échec fermé sur tout le reste : champ absent, horodatage non comparable,
+niveau d'isolation inattendu, SQLSTATE différent, ordre impossible.
+
+**Mesuré : 2 lancements × 50 courses = 100 courses, 0 violation.** Les deux
+branches sont réellement exercées — 5 réussites / 45 refus au premier
+lancement, 14 / 36 au second — donc le test discrimine, il ne passe pas
+par vacuité.
+
+### Clé `niveau_isolation` prétendument dupliquée : vérifiée, inexistante
+
+Signalée comme dupliquée dans `zz_harnais_gel_ecriture`. Vérification :
+elle apparaît une seule fois par fonction, dans **deux fonctions
+distinctes** (`zz_harnais_gel_ecriture` et `zz_harnais_gel_ecriture_rr`).
+Aucun correctif appliqué — il n'y avait rien à corriger.
+
+### Cycle complet rejoué, et un écart attrapé par l'empreinte
+
+application inactive → activation → matrice (10/10) → levée → nettoyage
+gardé → rollback → **empreinte pré-gel exacte** (234/`742de13e…`,
+22 fonctions/`e6266426…`) → réapplication inactive.
+
+La première réapplication a rendu `fonctions` = `d449a98e…` au lieu de
+`fd1b8684…` : j'avais élagué un commentaire interne du corps de
+`refuser_pendant_maintenance()`. Corps exact du fichier versionné remis,
+empreinte revenue à `fd1b8684…`. **C'est précisément le rôle de
+l'empreinte** — elle a attrapé un écart que la relecture n'avait pas vu.
+
+État final : 10/10 triggers conformes (`tgtype=31`, `tgenabled='O'`,
+`tgfoid` exact), `actif = false`, 0 fonction `zz_harnais_gel_%`, 0 fixture,
+rôles `anon`/`authenticated`/`authenticator`/`service_role` aux valeurs de
+plateforme.
+
+**Verdict : `GO concurrence`.**
