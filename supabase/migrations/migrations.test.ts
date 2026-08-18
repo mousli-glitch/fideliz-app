@@ -95,3 +95,90 @@ describe("handle_new_user_profile — le rôle ne vient jamais du client", () =>
     expect(iCorrectif).toBeGreaterThan(iBaseline);
   });
 });
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ *  LES ACL DE LA BASELINE NE DOIVENT JAMAIS S'OUVRIR EN GRAND
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * La première version de la baseline se terminait par un
+ * `grant all on all functions in schema public to anon, authenticated`.
+ * Elle aurait ouvert à tout visiteur six fonctions que la production
+ * restreint — dont `play_game` et `register_win`, qui créent des
+ * participations et décrémentent des stocks.
+ *
+ * Et le replay ne l'aurait pas rattrapé : la migration P0 du 17/08 ne ferme
+ * que deux fonctions. Les six autres seraient restées ouvertes dans une
+ * baseline censée reproduire fidèlement la production.
+ *
+ * Ces tests lisent le dépôt : ni base, ni secret.
+ */
+describe("baseline — les ACL des fonctions sensibles", () => {
+  const baseline = readFileSync(
+    join(ICI, migrations.find((n) => n.includes("baseline_fideliz"))!),
+    "utf8"
+  );
+  /* On raisonne sur le code seul : le commentaire explique justement le
+     piège en le citant, et on ne veut pas confondre les deux. */
+  const code = baseline
+    .split("\n")
+    .filter((l) => !l.trimStart().startsWith("--") && !l.trimStart().startsWith("*"))
+    .join("\n");
+
+  it("aucun grant global sur les fonctions", () => {
+    expect(code).not.toMatch(/grant\s+(all|execute)\s+on\s+all\s+functions/i);
+  });
+
+  const reservees = [
+    "play_game",
+    "register_win",
+    "get_replay_status",
+    "anonymize_expired_data",
+    "get_sales_stats",
+  ];
+
+  for (const fn of reservees) {
+    it(`${fn} est retirée à public, anon et authenticated`, () => {
+      const revoke = new RegExp(
+        `revoke\\s+execute\\s+on\\s+function\\s+public\\.${fn}\\s*\\([^)]*\\)\\s*from\\s+public,\\s*anon,\\s*authenticated`,
+        "i"
+      );
+      expect(code).toMatch(revoke);
+    });
+
+    it(`${fn} est accordée à service_role`, () => {
+      const grant = new RegExp(
+        `grant\\s+execute\\s+on\\s+function\\s+public\\.${fn}\\s*\\([^)]*\\)\\s*to\\s+service_role`,
+        "i"
+      );
+      expect(code).toMatch(grant);
+    });
+  }
+
+  it("activate_game reste ouverte aux comptes connectés, fermée aux anonymes", () => {
+    expect(code).toMatch(/revoke\s+execute\s+on\s+function\s+public\.activate_game\s*\([^)]*\)\s*from\s+public,\s*anon/i);
+    expect(code).toMatch(/grant\s+execute\s+on\s+function\s+public\.activate_game\s*\([^)]*\)\s*to\s+authenticated,\s*service_role/i);
+  });
+
+  /*
+   * L'inverse compte autant. Ces deux-là DOIVENT rester ouvertes dans la
+   * baseline : c'est l'état d'avant, et c'est la migration P0 qui les ferme.
+   * Les refermer ici ferait perdre la trace de la faille.
+   */
+  for (const fn of ["_log_event", "archive_redeemed_winners"]) {
+    it(`${fn} reste ouverte dans la baseline — c'est le P0 qui la ferme`, () => {
+      expect(code).not.toMatch(new RegExp(`revoke\\s+execute\\s+on\\s+function\\s+public\\.${fn}`, "i"));
+      const p0 = readFileSync(
+        join(ICI, migrations.find((n) => n.includes("rpc_destructives"))!),
+        "utf8"
+      );
+      expect(p0).toMatch(new RegExp(`revoke execute on function public\\.${fn}`, "i"));
+    });
+  }
+
+  it("anon n'écrit pas sur games, prizes ni restaurants", () => {
+    for (const t of ["games", "prizes", "restaurants"]) {
+      expect(code).toMatch(new RegExp(`revoke insert, update, delete on public\\.${t}\\s+from anon`, "i"));
+    }
+  });
+});

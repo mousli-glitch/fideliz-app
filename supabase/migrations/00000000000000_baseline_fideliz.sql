@@ -1093,6 +1093,61 @@ create policy "admin_access 1peuqw_3" on storage.objects as permissive for delet
 -- trop larges réellement exploitables.
 
 grant usage on schema public to anon, authenticated, service_role;
-grant all on all tables in schema public to anon, authenticated, service_role;
 grant all on all sequences in schema public to anon, authenticated, service_role;
-grant all on all functions in schema public to anon, authenticated, service_role;
+
+-- Tables : Supabase accorde tout par défaut, et c'est la RLS qui filtre.
+grant all on all tables in schema public to anon, authenticated, service_role;
+
+-- Sauf trois, où `anon` n'a que la lecture. Mesuré en production.
+revoke insert, update, delete on public.games       from anon;
+revoke insert, update, delete on public.prizes      from anon;
+revoke insert, update, delete on public.restaurants from anon;
+
+/*
+ * ─── FONCTIONS : SURTOUT PAS DE GRANT GLOBAL ───
+ *
+ * La première version de cette baseline se terminait par
+ * `grant all on all functions in schema public to anon, authenticated`.
+ * C'était une régression de sécurité introduite par la baseline elle-même :
+ * elle aurait ouvert à tout visiteur `play_game`, `register_win`,
+ * `get_replay_status`, `anonymize_expired_data`, `get_sales_stats` et
+ * `activate_game` — six fonctions que la production restreint.
+ *
+ * Et le replay ne l'aurait pas rattrapé : la migration P0 du 17/08 ne ferme
+ * que `archive_redeemed_winners` et `_log_event`. Les six autres seraient
+ * restées grandes ouvertes, dans une baseline censée reproduire fidèlement.
+ *
+ * PostgreSQL accorde EXECUTE à PUBLIC sur toute fonction créée : les 22 le
+ * sont donc déjà à ce stade. On retire ensuite, une par une, exactement ce
+ * que la production retire.
+ *
+ * ACL restituées = celles d'AUJOURD'HUI, sauf pour les deux que la migration
+ * 20260817235046 ferme : dans la baseline elles restent ouvertes, et c'est
+ * son replay qui les referme. C'est la seule inversion de delta légitime.
+ */
+
+-- Réservées à service_role — le serveur seul les appelle.
+revoke execute on function public.play_game(uuid, text, text, text, boolean) from public, anon, authenticated;
+grant  execute on function public.play_game(uuid, text, text, text, boolean) to service_role;
+
+revoke execute on function public.register_win(uuid, uuid, text, text, text, boolean) from public, anon, authenticated;
+grant  execute on function public.register_win(uuid, uuid, text, text, text, boolean) to service_role;
+
+revoke execute on function public.get_replay_status(uuid, text, text) from public, anon, authenticated;
+grant  execute on function public.get_replay_status(uuid, text, text) to service_role;
+
+revoke execute on function public.anonymize_expired_data() from public, anon, authenticated;
+grant  execute on function public.anonymize_expired_data() to service_role;
+
+revoke execute on function public.get_sales_stats() from public, anon, authenticated;
+grant  execute on function public.get_sales_stats() to service_role;
+
+-- Ouverte aux comptes connectés, jamais aux anonymes : elle vérifie
+-- elle-même que le restaurant appartient à l'appelant.
+revoke execute on function public.activate_game(uuid) from public, anon;
+grant  execute on function public.activate_game(uuid) to authenticated, service_role;
+
+-- `_log_event` et `archive_redeemed_winners` restent OUVERTES ici : c'est
+-- l'état d'avant le 24/07, et c'est la faille que la migration
+-- 20260817235046 vient fermer. Les refermer dès la baseline ferait perdre la
+-- trace de ce qui s'est réellement passé.
