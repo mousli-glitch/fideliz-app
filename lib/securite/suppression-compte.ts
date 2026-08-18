@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resoudreRootHeritier, cibleEstProtegee } from "./root";
+import { resoudreRootHeritier, lireRoleCible } from "./root";
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
@@ -53,10 +53,67 @@ import { resoudreRootHeritier, cibleEstProtegee } from "./root";
  * ont déjà eu lieu, son propre `update` ne trouve aucune ligne — et s'il
  * n'existait aucun root, il refuserait (`P0102`), ce qui ferait échouer la
  * suppression sans rien détruire. Fail-closed de bout en bout.
+ *
+ * ─── P0 : LE REJEU NE CONVERGEAIT TOUJOURS PAS DANS UN CAS ───
+ *
+ * Signalé le 19/08/2026, et c'était juste. J'avais écrit au tour précédent
+ * que « la relecture couvre les trois cas mesurables » : c'était FAUX pour
+ * celui-ci.
+ *
+ * La correction ci-dessus rend le rejeu possible quand `deleteUser` échoue
+ * VRAIMENT (profil intact). Elle ne le rend pas possible quand `deleteUser`
+ * réussit côté serveur, rend quand même une erreur, ET que la relecture
+ * échoue elle aussi. Le profil est alors parti par cascade, l'issue est
+ * `AUTH_OUTCOME_AMBIGUOUS` — et au SECOND appel, la première ligne du code
+ * (`cibleEstProtegee`, qui traite un profil absent comme protégé) refusait
+ * avant même de regarder Auth. L'opération ne convergeait jamais.
+ *
+ * D'où le PRÉFLIGHT ci-dessous : quand le profil est absent, on ne conclut
+ * plus « protégé » sans avoir demandé à Auth. Quatre issues, aucune repliée
+ * sur une autre :
+ *
+ *   profil présent, rôle root ......... refus (protection inchangée)
+ *   profil présent, autre rôle ........ on procède
+ *   profil absent + Auth absent ....... état visé DÉJÀ atteint : succès
+ *                                       idempotent, AUCUNE mutation
+ *   profil absent + Auth présent ...... refus : compte orphelin, on ne sait
+ *                                       plus prouver qu'il n'est pas root
+ *   profil absent + Auth indéterminé .. refus
+ *   profil ambigu ou illisible ........ refus
+ *
+ * Seule la troisième ligne est nouvelle, et c'est exactement celle que la
+ * séquence peut produire elle-même. Les autres restent fermées.
+ *
+ * Réserve honnête : dans ce cas de convergence, `restaurants.created_by`
+ * pointait vers `public.profiles` en ON DELETE SET NULL — la cascade a donc
+ * mis ces lignes à NULL avant qu'on puisse les réattribuer. Ce n'est pas une
+ * destruction (le restaurant et ses données sont intacts) mais un
+ * rattachement perdu, que `repairOrphansAction` sait recoller. On ne
+ * prétend pas ici que l'état est parfait : on prétend qu'il est atteint et
+ * qu'aucune donnée n'a été détruite.
  */
 
+/*
+ * Borne d'attente de la relecture d'existence.
+ *
+ * Ce que cette borne fait, exactement : elle empêche la primitive de rester
+ * suspendue indéfiniment sur une réponse qui ne vient pas, et fait tomber ce
+ * cas dans "indetermine" — donc dans le refus. Ce qu'elle NE fait PAS :
+ * annuler la requête HTTP. `GoTrueAdminApi.getUserById` n'accepte pas de
+ * signal d'annulation dans la version installée (auth-js 2.89.0, vérifié) ;
+ * la requête peut donc aboutir après coup, sans effet — c'est une lecture.
+ * Le commentaire précédent disait « bornée » sans que rien ne le borne.
+ */
+const DELAI_RELECTURE_MS = 8_000;
+
 export type ResultatSuppression =
-  | { success: true }
+  /*
+   * `idempotent` : l'état visé était DÉJÀ atteint, aucune mutation n'a été
+   * tentée. L'appelant qui veut distinguer « j'ai supprimé » de « c'était
+   * déjà fait » le peut ; celui qui n'en a pas besoin lit `success` comme
+   * avant.
+   */
+  | { success: true; idempotent?: boolean }
   | { success: false; error: string; ambigu?: false }
   /*
    * État distinct, et non un échec ordinaire : l'appel Auth a échoué ET la
@@ -91,9 +148,50 @@ export async function supprimerCompteEtReattribuer(
 ): Promise<ResultatSuppression> {
   if (!userId) return { success: false, error: "ID utilisateur manquant." };
 
-  // 🔒 Ne jamais supprimer un super-admin. Refuse aussi si le profil est
-  // absent ou ambigu : un compte qu'on ne sait pas lire ne se supprime pas.
-  if (await cibleEstProtegee(userId)) {
+  /*
+   * ── PRÉFLIGHT ──────────────────────────────────────────────────────────
+   *
+   * 🔒 Ne jamais supprimer un super-admin. Refuse aussi si le profil est
+   * ambigu ou illisible : un compte qu'on ne sait pas lire ne se supprime
+   * pas.
+   *
+   * Le cas « absent » est le seul qui ne se conclut plus tout seul : il
+   * demande à Auth avant de trancher, sinon un second appel légitime reste
+   * bloqué pour toujours (voir l'en-tête).
+   */
+  const profil = await lireRoleCible(userId);
+
+  if (profil.etat === "erreur") {
+    return { success: false, error: "Lecture du profil de la cible impossible : suppression annulée." };
+  }
+  if (profil.etat === "ambigu") {
+    return { success: false, error: "Profil de la cible ambigu : suppression annulée." };
+  }
+  if (profil.etat === "absent") {
+    const dejaFait = await relireExistenceAuth(admin, userId);
+    if (dejaFait === "absent") {
+      // Profil ET compte Auth absents : l'état visé est atteint. On ne
+      // tente RIEN — pas de réattribution, pas de suppression.
+      return { success: true, idempotent: true };
+    }
+    if (dejaFait === "present") {
+      return {
+        success: false,
+        error:
+          "Compte Auth sans profil : impossible de prouver qu'il n'est pas un super-admin. " +
+          "Suppression refusée — traiter cet orphelin explicitement.",
+      };
+    }
+    return {
+      success: false,
+      ambigu: true,
+      etat: "AUTH_OUTCOME_AMBIGUOUS",
+      error:
+        "Profil absent et existence du compte Auth indéterminée : suppression refusée. " +
+        "Aucune mutation n'a été tentée.",
+    };
+  }
+  if (profil.role === "root") {
     return { success: false, error: "Ce compte super-admin est protégé." };
   }
 
@@ -193,24 +291,54 @@ export async function supprimerCompteEtReattribuer(
  *   "indetermine" — la lecture elle-même a échoué : on ne sait pas.
  *
  * Le SDK signale l'absence par une erreur, pas par un `data` vide : on
- * distingue donc « erreur qui signifie absent » (statut 404, ou message
- * explicite) de « erreur de transport ». Une erreur non reconnue tombe
- * délibérément dans "indetermine" — jamais dans "absent", qui autoriserait
- * à conclure au succès sur une panne.
+ * distingue donc « erreur qui signifie absent » d'une erreur de transport.
+ * Une erreur non reconnue tombe délibérément dans "indetermine" — jamais
+ * dans "absent", qui autoriserait à conclure au succès sur une panne.
+ *
+ * ─── CLASSER PAR CONTRAT, PAS PAR TEXTE ───
+ *
+ * La version précédente reconnaissait l'absence sur `/not.?found/i` appliqué
+ * au MESSAGE. Le message d'une API n'est pas un contrat : il change de
+ * formulation, il se traduit, il se reformate — et le jour où il change,
+ * cette branche classe silencieusement un compte encore vivant en « absent »
+ * ou l'inverse. Pire, le motif matcherait aussi `session_not_found` ou
+ * `identity_not_found`, qui ne disent rien de l'existence du compte.
+ *
+ * `AuthApiError` porte un `code` typé (auth-js 2.89.0, vérifié dans
+ * `lib/error-codes.d.ts` : `user_not_found` y figure nommément) et un
+ * `status` HTTP. Ce sont les deux seuls signaux structurés, et ce sont les
+ * deux seuls qu'on accepte. Le motif textuel est retiré, pas conservé « au
+ * cas où » : une classification qui a deux sources dont une non fiable est
+ * une classification non fiable.
  */
 async function relireExistenceAuth(
   admin: ClientAdmin,
   userId: string,
 ): Promise<"absent" | "present" | "indetermine"> {
+  let minuteur: ReturnType<typeof setTimeout> | undefined;
   try {
-    const { data, error } = await admin.auth.admin.getUserById(userId);
+    const DEPASSEMENT = Symbol("delai");
+    const borne = new Promise<typeof DEPASSEMENT>((resoudre) => {
+      minuteur = setTimeout(() => resoudre(DEPASSEMENT), DELAI_RELECTURE_MS);
+      // Ne pas retenir la boucle d'événements si la lecture répond d'abord.
+      (minuteur as { unref?: () => void }).unref?.();
+    });
+
+    const issue = await Promise.race([admin.auth.admin.getUserById(userId), borne]);
+    if (issue === DEPASSEMENT) return "indetermine";
+
+    const { data, error } = issue as {
+      data: { user?: unknown } | null;
+      error: { status?: number; code?: string } | null;
+    };
     if (!error) return data?.user ? "present" : "absent";
 
-    const statut = (error as { status?: number }).status;
-    if (statut === 404) return "absent";
-    if (/not.?found/i.test(error.message ?? "")) return "absent";
+    if (error.code === "user_not_found") return "absent";
+    if (error.status === 404) return "absent";
     return "indetermine";
   } catch {
     return "indetermine";
+  } finally {
+    if (minuteur) clearTimeout(minuteur);
   }
 }

@@ -27,7 +27,7 @@ vi.mock("@supabase/supabase-js", () => ({
   }),
 }));
 
-const { resoudreRootHeritier, cibleEstProtegee } = await import("./root");
+const { resoudreRootHeritier, cibleEstProtegee, lireRoleCible } = await import("./root");
 
 beforeEach(() => { appels.length = 0; reponse = { data: [], error: null }; });
 
@@ -94,5 +94,51 @@ describe("cibleEstProtegee", () => {
     reponse = { data: [{ role: "sales" }], error: null };
     await cibleEstProtegee("u-1");
     expect(appels).toEqual(["profiles"]);
+  });
+});
+
+/*
+ * `lireRoleCible` — quatre issues, aucune repliée sur une autre.
+ *
+ * `cibleEstProtegee` reste construit dessus et garde exactement le même
+ * comportement : c'est ce que les tests ci-dessus vérifient. Mais le
+ * repliement sur un booléen bloquait la CONVERGENCE d'une suppression
+ * reprise, où « profil absent » peut vouloir dire « déjà fait » et non
+ * « protégé ». L'état brut existe pour ce seul appelant.
+ */
+describe("lireRoleCible — l'état brut, avant tout repliement", () => {
+  it("profil unique : rend le rôle tel quel", async () => {
+    reponse = { data: [{ role: "sales" }], error: null };
+    expect(await lireRoleCible("u-1")).toEqual({ etat: "present", role: "sales" });
+  });
+
+  it("profil root : « present », pas « protégé » — la décision est à l'appelant", async () => {
+    reponse = { data: [{ role: "root" }], error: null };
+    expect(await lireRoleCible("u-1")).toEqual({ etat: "present", role: "root" });
+  });
+
+  it("aucune ligne : « absent », distinct de « erreur »", async () => {
+    reponse = { data: [], error: null };
+    expect(await lireRoleCible("u-1")).toEqual({ etat: "absent" });
+  });
+
+  it("plusieurs lignes : « ambigu », distinct de « absent »", async () => {
+    reponse = { data: [{ role: "sales" }, { role: "restaurant" }], error: null };
+    expect(await lireRoleCible("u-1")).toEqual({ etat: "ambigu" });
+  });
+
+  it("lecture en panne : « erreur », jamais « absent »", async () => {
+    reponse = { data: null, error: { message: "panne" } };
+    expect(await lireRoleCible("u-1")).toEqual({ etat: "erreur" });
+  });
+
+  it("identifiant vide : « erreur », et aucune requête n'est faite", async () => {
+    expect(await lireRoleCible("")).toEqual({ etat: "erreur" });
+    expect(appels).toEqual([]);
+  });
+
+  it("`data` à null sans erreur : « absent », pas une exception", async () => {
+    reponse = { data: null, error: null };
+    expect(await lireRoleCible("u-1")).toEqual({ etat: "absent" });
   });
 });

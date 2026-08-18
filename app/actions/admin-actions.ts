@@ -116,9 +116,17 @@ export async function masterDeleteUser(userId: string) {
     const r = await supprimerCompteEtReattribuer(supabase, userId)
     if (!r.success) return r
 
-    await tracerAction(garde.appelant, 'compte.suppression', 'Compte supprimé', { cible: userId })
+    /* `idempotent` : l'état visé était déjà atteint, rien n'a été détruit.
+     * Le journal doit dire lequel des deux s'est produit — sinon une reprise
+     * ressemble à une suppression, et une suppression à une reprise. */
+    await tracerAction(
+      garde.appelant,
+      'compte.suppression',
+      r.idempotent ? 'Compte déjà supprimé — reprise sans effet' : 'Compte supprimé',
+      { cible: userId, idempotent: !!r.idempotent },
+    )
 
-    return { success: true }
+    return { success: true, idempotent: r.idempotent }
   } catch (err: any) {
     console.error("Erreur MasterDelete:", err)
     return { success: false, error: err.message }

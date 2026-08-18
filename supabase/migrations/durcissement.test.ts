@@ -573,9 +573,29 @@ describe("harnais de cascade — fail-closed, pas un tableau à lire", () => {
   });
 
   it("garde anti-dérive sur les DEUX invariants dont le code dépend", () => {
-    expect(sansCom).toMatch(/restaurants_user_id_fkey/);
-    expect(sansCom).toMatch(/profiles_id_fkey/);
-    expect(sansCom.match(/DÉRIVE/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    /*
+     * Ce test EXIGEAIT `restaurants_user_id_fkey` et `profiles_id_fkey` —
+     * c'est-à-dire qu'il exigeait le défaut. Signalé le 19/08/2026 : un nom
+     * de contrainte est décoratif, et la garde qui s'y fiait ne voyait ni
+     * une FK recréée sous un autre nom avec une autre action, ni une FK
+     * supplémentaire sur la même colonne.
+     *
+     * On exige désormais l'inverse : que les noms n'apparaissent PAS, et que
+     * la garde nomme la sémantique complète des deux invariants.
+     */
+    expect(sansCom, "un nom de contrainte ne prouve rien").not.toMatch(/restaurants_user_id_fkey/);
+    expect(sansCom, "un nom de contrainte ne prouve rien").not.toMatch(/profiles_id_fkey/);
+
+    // Invariant 1 : public.restaurants(user_id) -> auth.users(id) CASCADE.
+    expect(sansCom).toMatch(/source\s*=\s*'public\.restaurants'\s+and\s+colonnes_source\s*=\s*'user_id'/);
+    // Invariant 2 : public.profiles(id) -> auth.users(id) CASCADE.
+    expect(sansCom).toMatch(/source\s*=\s*'public\.profiles'\s+and\s+colonnes_source\s*=\s*'id'/);
+    expect(sansCom.match(/cible\s*=\s*'auth\.users'\s+and\s+colonnes_cible\s*=\s*'id'\s+and\s+on_delete\s*=\s*'c'/g)?.length ?? 0)
+      .toBe(2);
+
+    // Et la cardinalité exacte : une seule FK part de chacune des colonnes.
+    expect(sansCom.match(/v_total\s*<>\s*1/g)?.length ?? 0).toBe(2);
+    expect(sansCom.match(/DÉRIVE/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
   });
 
   it("les deux rollbacks délibérés utilisent des SQLSTATE privés distincts", () => {
@@ -604,8 +624,20 @@ describe("harnais de cascade — fail-closed, pas un tableau à lire", () => {
   it("empreinte de DONNÉES et manifeste de SCHÉMA sont distincts et tous deux vérifiés", () => {
     expect(sansCom).toMatch(/empreinte_donnees_avant/);
     expect(sansCom).toMatch(/empreinte_donnees_apres/);
-    expect(sansCom, "un hash de comptages n'est pas un manifeste de schéma").toMatch(/manifeste_schema_fk/);
+    /*
+     * Le manifeste n'était calculé qu'APRÈS : il n'y avait aucun « avant »
+     * à lui opposer, malgré le commentaire qui promettait la comparaison.
+     * On exige les deux points, et leur confrontation par une assertion.
+     */
+    expect(sansCom, "sans « avant », un manifeste ne compare rien").toMatch(/manifeste_schema_avant/);
+    expect(sansCom).toMatch(/manifeste_schema_apres/);
+    expect(sansCom).toMatch(/v_schema_avant is distinct from v_schema_apres then\s+raise exception/i);
+    // Un manifeste absent est un échec, pas un silence.
+    expect(sansCom).toMatch(/v_schema_avant is null or v_schema_apres is null/);
+    // Et il porte la sémantique complète, pas seulement l'action.
     expect(sansCom).toMatch(/confdeltype::text/);
+    expect(sansCom).toMatch(/confupdtype::text/);
+    expect(sansCom, "les colonnes cibles doivent entrer dans l'empreinte").toMatch(/con\.confkey/);
   });
 
   it("verdict final : empreinte identique, 0 Auth résiduel, 0 témoin — chacun assertés", () => {

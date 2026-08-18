@@ -38,11 +38,14 @@ export async function deleteSalesUserAction(userId: string) {
     const r = await supprimerCompteEtReattribuer(supabaseAdmin, userId)
     if (!r.success) return r
 
-    await tracerAction(garde.appelant, 'commercial.suppression', 'Compte commercial supprimé', {
-      cible: userId,
-    })
+    await tracerAction(
+      garde.appelant,
+      'commercial.suppression',
+      r.idempotent ? 'Compte commercial déjà supprimé — reprise sans effet' : 'Compte commercial supprimé',
+      { cible: userId, idempotent: !!r.idempotent },
+    )
 
-    return { success: true }
+    return { success: true, idempotent: r.idempotent }
   } catch (err: any) {
     console.error("🚨 deleteSalesUserAction:", err)
     return { success: false, error: err.message }

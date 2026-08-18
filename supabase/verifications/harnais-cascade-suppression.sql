@@ -40,6 +40,43 @@
  *  code inutilement prudent ou dangereusement optimiste — dans les deux
  *  cas, il faut le savoir.
  *
+ *  ─── DEUX DÉFAUTS DE CE HARNAIS, SIGNALÉS LE 19/08/2026 ET CORRIGÉS ───
+ *
+ *  1. LA GARDE RECONNAISSAIT UN NOM, PAS UNE SÉMANTIQUE. Elle cherchait
+ *     `conname = 'restaurants_user_id_fkey'`. Or un nom de contrainte est
+ *     décoratif : `alter table ... rename constraint` suffisait à faire
+ *     rendre NULL au `select`, donc à passer par la branche « is distinct
+ *     from true »… qui lève, d'accord — mais pour la mauvaise raison, et une
+ *     contrainte RECRÉÉE sous un autre nom avec la MÊME sémantique aurait
+ *     fait échouer un harnais pourtant valide. Symétriquement, une seconde
+ *     FK ajoutée sur la même colonne avec une action différente n'était pas
+ *     vue du tout.
+ *
+ *     La garde interroge désormais la sémantique : table source, colonnes
+ *     source (dans l'ordre), table cible, colonnes cible, action ON DELETE
+ *     — et la CARDINALITÉ EXACTE, c'est-à-dire qu'il existe une seule et
+ *     unique FK partant de cette colonne. Le nom n'entre plus dans la
+ *     décision.
+ *
+ *  2. LE MANIFESTE NE COMPARAIT RIEN. Il était calculé APRÈS l'expérience
+ *     seulement — il n'y avait aucun « avant » à confronter, malgré le
+ *     commentaire qui promettait la comparaison. Et son empreinte ne portait
+ *     que `conname:confdeltype` : ni les tables, ni les colonnes. Une FK
+ *     repointée vers une autre table, ou déplacée d'une colonne à une autre,
+ *     donnait la MÊME empreinte.
+ *
+ *     Le manifeste est désormais canonique (source, colonnes, cible,
+ *     colonnes, ON DELETE, ON UPDATE, plus le compte), capturé AVANT et
+ *     APRÈS, et comparé par une assertion qui lève. Le nom en est
+ *     volontairement absent : renommer ne doit rien changer, repointer doit
+ *     tout changer.
+ *
+ *  ─── CE QUI PROUVE QUE CE HARNAIS N'EST PAS VIDE ───
+ *
+ *  `harnais-cascade-negatif.sql`, à côté. Il rejoue la séquence FAUTIVE et
+ *  exige que les assertions d'ici se déclenchent. Un harnais qu'on a affaibli
+ *  y devient rouge.
+ *
  *  USAGE : script manuel. Ne jamais appliquer via `supabase db push`.
  */
 
@@ -64,54 +101,99 @@ begin
   raise notice 'GARDE CIBLE SYNTHÉTIQUE : OK.';
 end $$;
 
--- ────────────────────────── garde anti-dérive : les invariants du code
+-- ───────────────────── manifeste canonique des FK : la SÉMANTIQUE, pas le nom
+--
+-- Le nom de contrainte est délibérément ABSENT de cette vue. Renommer une
+-- contrainte ne change rien au comportement : ça ne doit donc rien changer au
+-- manifeste. Repointer une FK vers une autre table, la déplacer d'une colonne
+-- à une autre, ou changer son action : ça change tout, et ça doit se voir.
+--
+-- La vue est recalculée à chaque lecture — c'est ce qui permet de la
+-- confronter à elle-même avant et après l'expérience.
 
-do $$
-declare
-  v_user_id_cascade boolean;
-  v_profil_cascade  boolean;
-begin
-  select con.confdeltype = 'c' into v_user_id_cascade
-  from pg_constraint con
-  where con.conrelid = 'public.restaurants'::regclass and con.contype = 'f'
-    and con.conname = 'restaurants_user_id_fkey';
-
-  select con.confdeltype = 'c' into v_profil_cascade
-  from pg_constraint con
-  where con.conrelid = 'public.profiles'::regclass and con.contype = 'f'
-    and con.conname = 'profiles_id_fkey';
-
-  if v_user_id_cascade is distinct from true then
-    raise exception 'DÉRIVE : restaurants.user_id -> auth.users n''est plus ON DELETE CASCADE. `suppression-compte.ts` réattribue cette colonne À CAUSE de cette cascade — si elle a disparu, relire le raisonnement avant de simplifier le code.';
-  end if;
-  if v_profil_cascade is distinct from true then
-    raise exception 'DÉRIVE : profiles.id -> auth.users n''est plus ON DELETE CASCADE. La séquence de suppression compte sur cette cascade pour emporter le profil, ce qui rend l''action rejouable après un échec Auth. Sans elle, le profil resterait orphelin.';
-  end if;
-  raise notice 'GARDE ANTI-DÉRIVE : les deux invariants du code sont tenus.';
-end $$;
-
--- ─────────────────────────────────────────── manifeste des FK effectives
-
-select con.conname,
-       src.relname as table_source,
+create temp view _fk_canonique as
+select src_ns.nspname || '.' || src.relname as source,
        (select string_agg(a.attname, ',' order by k.ord)
           from unnest(con.conkey) with ordinality k(attnum, ord)
-          join pg_attribute a on a.attrelid = con.conrelid and a.attnum = k.attnum) as colonnes,
+          join pg_attribute a on a.attrelid = con.conrelid and a.attnum = k.attnum) as colonnes_source,
        tgt_ns.nspname || '.' || tgt.relname as cible,
-       case con.confdeltype when 'a' then 'NO ACTION' when 'r' then 'RESTRICT'
-            when 'c' then 'CASCADE' when 'n' then 'SET NULL' when 'd' then 'SET DEFAULT' end as on_delete
+       (select string_agg(a.attname, ',' order by k.ord)
+          from unnest(con.confkey) with ordinality k(attnum, ord)
+          join pg_attribute a on a.attrelid = con.confrelid and a.attnum = k.attnum) as colonnes_cible,
+       con.confdeltype::text as on_delete,
+       con.confupdtype::text as on_update
 from pg_constraint con
 join pg_class src on src.oid = con.conrelid
+join pg_namespace src_ns on src_ns.oid = src.relnamespace
 join pg_class tgt on tgt.oid = con.confrelid
 join pg_namespace tgt_ns on tgt_ns.oid = tgt.relnamespace
 where con.contype = 'f'
   and ((tgt_ns.nspname = 'auth' and tgt.relname = 'users')
-    or (tgt_ns.nspname = 'public' and tgt.relname in ('profiles', 'restaurants')))
-order by con.confdeltype, src.relname;
+    or (tgt_ns.nspname = 'public' and tgt.relname in ('profiles', 'restaurants')));
+
+-- ────────────────────────── garde anti-dérive : les invariants du code
+--
+-- Deux invariants, chacun vérifié DEUX FOIS : la sémantique attendue existe,
+-- ET elle est la seule à partir de cette colonne. Le second contrôle est ce
+-- qui manquait : une FK supplémentaire sur la même colonne, avec une autre
+-- action, passait inaperçue.
+
+do $$
+declare
+  v_conforme int;
+  v_total    int;
+begin
+  -- restaurants.user_id -> auth.users(id), ON DELETE CASCADE, et rien d'autre.
+  select count(*) into v_conforme from _fk_canonique
+   where source = 'public.restaurants' and colonnes_source = 'user_id'
+     and cible = 'auth.users' and colonnes_cible = 'id' and on_delete = 'c';
+  select count(*) into v_total from _fk_canonique
+   where source = 'public.restaurants' and colonnes_source = 'user_id';
+
+  if v_conforme <> 1 then
+    raise exception 'DÉRIVE : aucune FK public.restaurants(user_id) -> auth.users(id) ON DELETE CASCADE (% trouvée(s), 1 attendue). `suppression-compte.ts` réattribue cette colonne À CAUSE de cette cascade — si elle a disparu, relire le raisonnement avant de simplifier le code.', v_conforme;
+  end if;
+  if v_total <> 1 then
+    raise exception 'DÉRIVE : % FK partent de public.restaurants(user_id), 1 attendue. Une contrainte supplémentaire sur la même colonne peut porter une autre action ON DELETE et invalider le raisonnement du code.', v_total;
+  end if;
+
+  -- profiles.id -> auth.users(id), ON DELETE CASCADE, et rien d'autre.
+  select count(*) into v_conforme from _fk_canonique
+   where source = 'public.profiles' and colonnes_source = 'id'
+     and cible = 'auth.users' and colonnes_cible = 'id' and on_delete = 'c';
+  select count(*) into v_total from _fk_canonique
+   where source = 'public.profiles' and colonnes_source = 'id';
+
+  if v_conforme <> 1 then
+    raise exception 'DÉRIVE : aucune FK public.profiles(id) -> auth.users(id) ON DELETE CASCADE (% trouvée(s), 1 attendue). La séquence de suppression compte sur cette cascade pour emporter le profil, ce qui rend l''action rejouable après un échec Auth. Sans elle, le profil resterait orphelin.', v_conforme;
+  end if;
+  if v_total <> 1 then
+    raise exception 'DÉRIVE : % FK partent de public.profiles(id), 1 attendue.', v_total;
+  end if;
+
+  raise notice 'GARDE ANTI-DÉRIVE : les deux invariants tiennent, sémantique et cardinalité vérifiées.';
+end $$;
+
+-- Manifeste lisible, pour l'humain qui lit la sortie.
+select source, colonnes_source, cible, colonnes_cible,
+       case on_delete when 'a' then 'NO ACTION' when 'r' then 'RESTRICT'
+            when 'c' then 'CASCADE' when 'n' then 'SET NULL' when 'd' then 'SET DEFAULT' end as on_delete
+from _fk_canonique
+order by on_delete, source, colonnes_source;
 
 -- ───────────────────────────────── l'expérience, dans les deux sens
 
 create temp table _cascade (ordre int, etape text, valeur text) on commit drop;
+
+-- Manifeste de SCHÉMA capturé AVANT toute mutation. L'« après » est calculé
+-- plus bas par la MÊME expression, et les deux sont confrontés par une
+-- assertion. Sans ce point de départ, le manifeste ne comparait rien.
+insert into _cascade values (0, 'manifeste_schema_avant', (
+  select count(*)::text || ':' || coalesce(md5(string_agg(
+           source || '(' || colonnes_source || ')->' || cible || '(' || colonnes_cible ||
+           ') del=' || on_delete || ' upd=' || on_update,
+           '|' order by source, colonnes_source, cible, colonnes_cible, on_delete, on_update)), 'vide')
+  from _fk_canonique));
 
 insert into _cascade values (1, 'empreinte_donnees_avant', (
   select md5(concat_ws('|', (select count(*) from auth.users), (select count(*) from public.profiles),
@@ -230,26 +312,37 @@ insert into _cascade values (6, 'temoins_residuels',
   (select count(*)::text from public.restaurants where name = 'harnais-cascade'));
 
 -- ── Manifeste de SCHEMA (FK), distinct de l'empreinte de DONNEES ────────
--- Recalcule apres l'experience et compare : une experience qui modifierait
--- une contrainte serait une regression, pas un test.
-insert into _cascade values (7, 'manifeste_schema_fk', (
-  select md5(string_agg(con.conname || ':' || con.confdeltype::text, '|' order by con.conname))
-  from pg_constraint con
-  join pg_class tgt on tgt.oid = con.confrelid
-  join pg_namespace tgt_ns on tgt_ns.oid = tgt.relnamespace
-  where con.contype = 'f'
-    and ((tgt_ns.nspname = 'auth' and tgt.relname = 'users')
-      or (tgt_ns.nspname = 'public' and tgt.relname in ('profiles','restaurants')))));
+-- Meme expression que l'« avant », recalculee apres l'experience : une
+-- experience qui modifierait une contrainte serait une regression, pas un
+-- test. La comparaison a lieu dans le verdict fail-closed ci-dessous.
+insert into _cascade values (7, 'manifeste_schema_apres', (
+  select count(*)::text || ':' || coalesce(md5(string_agg(
+           source || '(' || colonnes_source || ')->' || cible || '(' || colonnes_cible ||
+           ') del=' || on_delete || ' upd=' || on_update,
+           '|' order by source, colonnes_source, cible, colonnes_cible, on_delete, on_update)), 'vide')
+  from _fk_canonique));
 
 -- ── VERDICT FAIL-CLOSED : une regression leve, elle ne s'affiche pas ────
 do $$
 declare
   v_avant text; v_apres text; v_users text; v_temoins text;
+  v_schema_avant text; v_schema_apres text;
 begin
   select valeur into v_avant   from _cascade where etape = 'empreinte_donnees_avant';
   select valeur into v_apres   from _cascade where etape = 'empreinte_donnees_apres';
   select valeur into v_users   from _cascade where etape = 'auth_users_final';
   select valeur into v_temoins from _cascade where etape = 'temoins_residuels';
+  select valeur into v_schema_avant from _cascade where etape = 'manifeste_schema_avant';
+  select valeur into v_schema_apres from _cascade where etape = 'manifeste_schema_apres';
+
+  if v_schema_avant is null or v_schema_apres is null then
+    raise exception 'ASSERTION FINALE : manifeste de schema manquant (avant=%, apres=%) — la comparaison n''a pas eu lieu, donc rien n''est prouve.',
+      coalesce(v_schema_avant, 'NULL'), coalesce(v_schema_apres, 'NULL');
+  end if;
+  if v_schema_avant is distinct from v_schema_apres then
+    raise exception 'ASSERTION FINALE : le manifeste de schema a change pendant l''experience (% -> %). Une contrainte a ete ajoutee, retiree, repointee ou son action modifiee : ce n''est plus un test, c''est une regression.',
+      v_schema_avant, v_schema_apres;
+  end if;
 
   if v_avant is distinct from v_apres then
     raise exception 'ASSERTION FINALE : empreinte de donnees differente avant/apres — l''experience a laisse une trace.';
@@ -268,7 +361,19 @@ end $$;
  *   SANS  -> resto=0 jeux=0 lots=0 gagnants=0 contacts=0 avis=0
  *   AVEC  -> resto=1 jeux=1 lots=1 gagnants=1 contacts=1 avis=1
  *            profil_cible=0 (cascade), rattachement_root=1
- *   manifeste_avant = manifeste_apres, auth_users_final = 0, témoins = 0
+ *   manifeste_schema_avant = manifeste_schema_apres (assertion, pas lecture)
+ *   empreinte_donnees_avant = empreinte_donnees_apres
+ *   auth_users_final = 0, témoins = 0
+ *
+ * Joué le 19/08/2026 sur la branche de test synthétique (0 utilisateur Auth,
+ * 0 profil, 0 restaurant avant et après) :
+ *
+ *   manifeste_schema_avant  = 21:54f1b6f0e1c264be81c9c2ef3bd8f4ef
+ *   manifeste_schema_apres  = 21:54f1b6f0e1c264be81c9c2ef3bd8f4ef  (identique)
+ *   SANS  -> resto=0 jeux=0 lots=0 gagnants=0 contacts=0 avis=0
+ *   AVEC  -> resto=1 jeux=1 lots=1 gagnants=1 contacts=1 avis=1
+ *            profil_cible=0, rattachement_root=1
+ *   auth_users_final = 0, temoins_residuels = 0
  */
 select etape, valeur from _cascade order by ordre;
 

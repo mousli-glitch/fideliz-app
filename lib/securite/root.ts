@@ -77,6 +77,41 @@ export async function resoudreRootHeritier(): Promise<Heritier> {
   return { ok: true, rootId: ligne.id };
 }
 
+/*
+ * ─── LIRE LE PROFIL DE LA CIBLE : QUATRE ISSUES, PAS DEUX ───
+ *
+ * `cibleEstProtegee()` replie quatre situations distinctes sur un booléen.
+ * C'est ce qu'il faut pour une garde — dans le doute, on refuse — mais c'est
+ * exactement ce qui bloquait la CONVERGENCE d'une suppression reprise :
+ * « profil absent » y devient « protégé », donc un refus définitif, alors
+ * qu'un profil absent peut signifier que la suppression a DÉJÀ abouti.
+ *
+ * L'appelant qui a besoin de distinguer lit donc l'état brut ; celui qui
+ * veut seulement une autorisation garde le booléen, construit dessus, avec
+ * exactement le même comportement qu'avant.
+ */
+export type LectureRole =
+  | { etat: "present"; role: string }
+  | { etat: "absent" }
+  | { etat: "ambigu" }
+  | { etat: "erreur" };
+
+export async function lireRoleCible(userId: string): Promise<LectureRole> {
+  if (!userId) return { etat: "erreur" };
+
+  const { data, error } = await admin()
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .limit(2);
+
+  if (error) return { etat: "erreur" };
+  const lignes = (data as { role: string }[] | null) ?? [];
+  if (lignes.length === 0) return { etat: "absent" };
+  if (lignes.length > 1) return { etat: "ambigu" };
+  return { etat: "present", role: lignes[0].role };
+}
+
 /**
  * Le compte visé est-il un super-admin ? Protège la suppression.
  *
@@ -85,16 +120,7 @@ export async function resoudreRootHeritier(): Promise<Heritier> {
  * sait pas lire n'est pas un compte qu'on peut supprimer sans risque.
  */
 export async function cibleEstProtegee(userId: string): Promise<boolean> {
-  if (!userId) return true;
-
-  const { data, error } = await admin()
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .limit(2);
-
-  if (error) return true;                       // illisible → on refuse
-  const lignes = (data as { role: string }[] | null) ?? [];
-  if (lignes.length !== 1) return true;         // absent ou ambigu → on refuse
-  return lignes[0].role === "root";
+  const lecture = await lireRoleCible(userId);
+  if (lecture.etat !== "present") return true;  // absent, ambigu, illisible → on refuse
+  return lecture.role === "root";
 }

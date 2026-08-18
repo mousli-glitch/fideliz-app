@@ -53,8 +53,15 @@ let operations: { cle: string; payload?: unknown; predicat?: [string, unknown] }
 let echecs: Record<string, { message: string }> = {};
 /* Réponse du résolveur d'héritier. */
 let heritier: unknown = { ok: true, rootId: "root-synthetique" };
-/* Ce que la relecture autoritative d'existence Auth doit répondre. */
-let relectureAuth: "present" | "absent" | "erreur" = "present";
+/*
+ * Ce que la relecture autoritative d'existence Auth doit répondre.
+ * `brut` : on impose l'objet d'erreur exact, pour éprouver la CLASSIFICATION
+ * elle-même plutôt qu'un raccourci du simulateur.
+ */
+let relectureAuth: "present" | "absent" | "erreur" | "brut" = "present";
+let erreurBruteGetUser: Record<string, unknown> = {};
+/* Ce que le préflight lit dans `profiles` pour la cible. */
+let profilCible: unknown = { etat: "present", role: "sales" };
 
 function reponsePour(cle: string, payload?: unknown, predicat?: [string, unknown]) {
   journal.push(cle);
@@ -96,11 +103,16 @@ function clientSimule() {
         // Relecture autoritative apres un echec de deleteUser.
         getUserById: async () => {
           journal.push("auth:getUserById");
+          if (relectureAuth === "brut") {
+            return { data: null, error: erreurBruteGetUser };
+          }
           if (relectureAuth === "erreur") {
             return { data: null, error: { message: "transport indisponible", status: 503 } };
           }
           if (relectureAuth === "absent") {
-            return { data: null, error: { message: "User not found", status: 404 } };
+            // Forme réelle d'`AuthApiError` : le code typé est le signal,
+            // le message n'est qu'un texte d'affichage.
+            return { data: null, error: { message: "User not found", status: 404, code: "user_not_found" } };
           }
           return { data: { user: { id: "cible" } }, error: null };
         },
@@ -114,6 +126,7 @@ vi.mock("@supabase/supabase-js", () => ({ createClient: () => clientSimule() }))
 vi.mock("@/lib/securite/root", () => ({
   resoudreRootHeritier: async () => heritier,
   cibleEstProtegee: async () => false,
+  lireRoleCible: async () => profilCible,
 }));
 
 const { repairOrphansAction } = await import("./repair-orphans");
@@ -126,6 +139,8 @@ beforeEach(() => {
   echecs = {};
   heritier = { ok: true, rootId: "root-synthetique" };
   relectureAuth = "present";
+  erreurBruteGetUser = {};
+  profilCible = { etat: "present", role: "sales" };
 });
 
 describe("repairOrphansAction — aucune écriture sans héritier positivement identifié", () => {
@@ -373,5 +388,146 @@ describe("issue Auth ambiguë — l'erreur ne prouve pas l'absence de suppressio
     echecs["auth:deleteUser"] = { message: "coupure" };
     relectureAuth = "absent";
     expect((await masterDeleteUser("cible")).success).toBe(true);
+  });
+});
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA CONVERGENCE AU SECOND APPEL — le cas que je déclarais couvert à tort
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Signalé le 19/08/2026. J'avais écrit au tour précédent que « la relecture
+ * couvre les trois cas mesurables ». C'était faux pour celui-ci, et les
+ * tests d'alors ne le voyaient pas : ils ne jouaient qu'UN appel.
+ *
+ * Le scénario : `deleteUser` réussit côté serveur mais rend une erreur, ET
+ * la relecture échoue elle aussi → `AUTH_OUTCOME_AMBIGUOUS`. Le profil est
+ * pourtant déjà parti par cascade. Au SECOND appel, la première ligne du
+ * code traitait « profil absent » comme « protégé » et refusait avant même
+ * de regarder Auth : l'opération ne convergeait jamais.
+ *
+ * Ces tests jouent DEUX appels et vérifient l'état du monde entre les deux.
+ */
+describe("second appel : le préflight décide, il ne refuse plus par défaut", () => {
+  it("P0 : ambigu au 1er appel, puis convergence au 2nd — sans aucune mutation", async () => {
+    echecs["auth:deleteUser"] = { message: "coupure sur la réponse" };
+    relectureAuth = "erreur";
+    const premier = await masterDeleteUser("cible");
+    expect(premier.success).toBe(false);
+    expect((premier as { etat?: string }).etat).toBe("AUTH_OUTCOME_AMBIGUOUS");
+
+    /*
+     * Entre les deux appels, le monde est celui que ce scénario décrit :
+     * la suppression avait bel et bien abouti côté serveur, donc le profil
+     * est parti par cascade et le compte Auth n'existe plus.
+     */
+    journal = [];
+    operations = [];
+    echecs = {};
+    profilCible = { etat: "absent" };
+    relectureAuth = "absent";
+
+    const second = await masterDeleteUser("cible");
+    expect(second.success, "le 2nd appel doit converger, pas refuser").toBe(true);
+    expect((second as { idempotent?: boolean }).idempotent).toBe(true);
+    expect(
+      journal.filter((c) => c !== "auth:getUserById"),
+      "aucune mutation ne doit être tentée sur un état déjà atteint",
+    ).toEqual([]);
+  });
+
+  it("profil absent + compte Auth ENCORE PRÉSENT : refus, et rien n'est touché", async () => {
+    // Un orphelin qui ne vient pas de cette séquence : on ne peut plus
+    // prouver qu'il n'est pas root. Ce n'est pas à cette action de trancher.
+    profilCible = { etat: "absent" };
+    relectureAuth = "present";
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal).not.toContain("auth:deleteUser");
+    expect(journal).not.toContain("restaurants:update");
+  });
+
+  it("profil absent + existence Auth INDÉTERMINÉE : refus explicite, aucune mutation", async () => {
+    profilCible = { etat: "absent" };
+    relectureAuth = "erreur";
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect((r as { etat?: string }).etat).toBe("AUTH_OUTCOME_AMBIGUOUS");
+    expect(journal).not.toContain("auth:deleteUser");
+    expect(journal).not.toContain("restaurants:update");
+  });
+
+  it("profil AMBIGU : refus, et on ne demande même pas à Auth", async () => {
+    profilCible = { etat: "ambigu" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal, "un profil ambigu se refuse sans autre lecture").toEqual([]);
+  });
+
+  it("profil ILLISIBLE : refus, et on ne demande même pas à Auth", async () => {
+    profilCible = { etat: "erreur" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal).toEqual([]);
+  });
+
+  it("profil root : protection inchangée", async () => {
+    profilCible = { etat: "present", role: "root" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal).toEqual([]);
+  });
+
+  it("un double appel nominal converge sans rien détruire de plus", async () => {
+    expect((await masterDeleteUser("cible")).success).toBe(true);
+    expect(journal).toEqual(SEQUENCE_NOMINALE);
+
+    journal = [];
+    profilCible = { etat: "absent" };   // le profil est parti par cascade
+    relectureAuth = "absent";
+    const second = await masterDeleteUser("cible");
+    expect(second.success).toBe(true);
+    expect((second as { idempotent?: boolean }).idempotent).toBe(true);
+    expect(journal.filter((c) => c !== "auth:getUserById")).toEqual([]);
+  });
+});
+
+/*
+ * ─── CLASSER L'ABSENCE PAR CONTRAT, PAS PAR TEXTE ───
+ *
+ * Le motif `/not.?found/i` sur le MESSAGE est retiré : un message d'API
+ * n'est pas un contrat. Ces tests fixent le comportement attendu à la place.
+ */
+describe("relecture d'existence : seuls les signaux structurés concluent", () => {
+  const cas: [string, Record<string, unknown>, boolean][] = [
+    ["code user_not_found", { code: "user_not_found", status: 400, message: "" }, true],
+    ["statut 404 sans code", { status: 404, message: "" }, true],
+    ["message « not found » SEUL", { status: 500, message: "User not found" }, false],
+    ["code session_not_found", { code: "session_not_found", status: 404 }, true],
+    ["erreur de transport", { status: 503, message: "service unavailable" }, false],
+    ["erreur sans statut ni code", { message: "boom" }, false],
+  ];
+
+  for (const [nom, erreur, conclutAbsent] of cas) {
+    it(`${nom} → ${conclutAbsent ? "absent (succès idempotent)" : "indéterminé (refus)"}`, async () => {
+      echecs["auth:deleteUser"] = { message: "erreur" };
+      relectureAuth = "brut";
+      erreurBruteGetUser = erreur;
+      const r = await masterDeleteUser("cible");
+      expect(r.success).toBe(conclutAbsent);
+      if (!conclutAbsent) {
+        expect((r as { ambigu?: boolean }).ambigu ?? false).toBe(true);
+      }
+    });
+  }
+
+  it("le message seul ne suffit JAMAIS à conclure à l'absence", async () => {
+    // Le cas qui piégeait l'ancien code : un 500 dont le texte contient
+    // « not found » était classé « absent », donc succès sur une panne.
+    echecs["auth:deleteUser"] = { message: "erreur" };
+    relectureAuth = "brut";
+    erreurBruteGetUser = { status: 500, message: "Not Found (upstream)" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success, "une panne ne doit pas devenir un succès").toBe(false);
   });
 });
