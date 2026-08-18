@@ -22,6 +22,19 @@ piège. 100 courses, 0 violation, les deux linéarisations réellement
 exercées. Cycle complet bouclé sur l'empreinte exacte. État : installé,
 **inactif**.
 
+**Tour 11 — commits `de86808`, `d428b3a`, `524ab45`** :
+ambiguïté Auth **fermée** (relecture autoritative, trois issues dont
+`AUTH_OUTCOME_AMBIGUOUS` ; une erreur de transport n'est jamais repliée sur
+« absent »). Harnais de cascade rendu **fail-closed** : chaque attendu est
+asserté et lève, SQLSTATE privés `P9001`/`P9002` au lieu d'une comparaison
+de message, empreinte de DONNÉES et manifeste de SCHÉMA distingués.
+Prouvé qu'il mord : une variante volontairement fausse fait lever
+l'assertion. Commentaire faux corrigé (`sales_restaurants.sales_user_id`
+EST en CASCADE). **383 tests, typecheck 0.**
+
+⚠ Les quatre couches restent à rejouer, sur `fusion-tests-2` (pas de
+branche payante).
+
 **Tour 10 — preuve rendue rejouable, commit `8501bca`** :
 `supabase/verifications/harnais-cascade-suppression.sql` versionne
 l'expérience de cascade (transaction annulée, garde de cible synthétique
@@ -478,7 +491,7 @@ modifiés, tests, preuves catalogue anonymisées et réserves restantes.
 | Dépôt | Branche | Commit | État |
 |---|---|---|---|
 | `fideliz-app` | `main` (production) | `5094af3` | déployé — durcissement, fingerprint `2d2e463f…` |
-| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `8501bca` | arbre propre, 370 tests verts |
+| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `524ab45` | arbre propre, 383 tests verts |
 | `fideliz-app` | `feat/fusion-fideliz` | — | base de référence pour les diffs cumulés |
 | `cartiz` | `feat/fusion-fideliz` | `49206fe` | — |
 
