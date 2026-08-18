@@ -3,6 +3,68 @@
 Mesuré le 18/08/2026, nuit, sur la branche synthétique déjà active. Aucune
 production touchée. Gel installé, mais **INACTIF** à l'état final.
 
+## 0. P0 trouvé et corrigé — le fichier versionné n'était pas celui exécuté
+
+Un audit indépendant a signalé un commentaire bloc ouvert ligne 58, jamais
+refermé. PostgreSQL imbrique les commentaires bloc (contrairement à C) :
+confirmé **indépendamment**, par un scanner caractère par caractère écrit
+pour l'occasion (pas en faisant confiance à l'audit) : `profondeur_finale:
+1`, ouverture orpheline en ligne 58. Tracé complet : à partir de cette
+ligne, tout le reste du fichier (jusqu'à la 286) vivait à l'intérieur d'un
+commentaire. Exécuté tel quel via `psql -f` ou `supabase db push`, **rien
+après la ligne 57 ne se serait exécuté** — ni les fonctions, ni les
+triggers, ni les revokes. Seule la table `maintenance` aurait existé, sans
+aucune application réelle du gel.
+
+**Cause exacte** : un `*/` manquant après « …jamais l'empreinte. » (fin de
+la section « AUCUNE LECTURE DIRECTE »), avant le prochain `--` de section.
+**Corrigé** : `*/` ajouté au bon endroit. Réverifié : `profondeur_finale: 0`,
+aucune ouverture orpheline, 10 `/*` pour 10 `*/`.
+
+**Ce que ça change pour la qualification déjà faite (§ Application, ci-
+dessous, mesurée avant cette découverte)** : cette qualification avait été
+faite en extrayant à la main les instructions SQL du fichier (lecture,
+identification des blocs `create table`/`create function`/etc., puis
+soumission de ce texte reconstruit) — pas en exécutant le fichier brut. Le
+risque exact que l'audit signalait : un extracteur, humain ou automatique,
+pouvait avoir appliqué un texte différent du fichier réel.
+
+**Vérifié en le rejouant avec le fichier brut, SHA-256 à l'appui** :
+
+- SHA-256 du fichier corrigé (calculé par `shasum -a 256`, avant tout
+  envoi) : `d60c34204bfbc1bad9b162468db12ca8c8e1d57dee17585f5cf041de09ad6ea6`
+  (13 563 octets).
+- Branche remise à l'état pré-gel (mêmes empreintes qu'avant tout ce
+  chantier gel : `colonnes` 214/`8a1ce810…`, `fonctions` 22/`1776bfde…`,
+  `triggers` 6/`eed0d031…`, `acl_relations` 78/`e16eae01…` — identiques).
+- Fichier **complet et brut** (commentaires compris, aucune extraction)
+  soumis en un seul envoi. Exécuté sans erreur.
+- Empreintes après : identiques sur 7 des 8 dimensions comparées à la
+  qualification manuelle précédente. **`fonctions` diffère**
+  (`0f439b46b227bd02b165148f4f119aad` contre l'ancien
+  `1b2c9ef55d32af72308cb0b909826718`) — la preuve concrète que le texte
+  retapé à la main différait bien, légèrement, des octets réels du corps
+  des fonctions. C'est exactement ce que l'audit anticipait. Rien d'autre
+  n'a changé (mêmes `acl_fonctions`, `acl_relations`, `colonnes`,
+  `contraintes`, `index`, `rls`, `triggers`).
+- Rollback (mêmes instructions `drop`) → retour exact aux empreintes
+  pré-gel, les 8 dimensions. Réapplication du même fichier brut → empreintes
+  identiques à la première exécution brute, `fonctions` compris.
+- Écriture normale (insert + delete sur une ligne de test) toujours non
+  bloquée, `actif = false` confirmé à l'état final.
+
+**Conclusion : la qualification structurelle et comportementale de la
+couche 4 (§ ci-dessous) est reconfirmée avec le fichier réellement
+versionné — les seules valeurs à corriger sont les empreintes `fonctions`,
+désormais celles ci-dessus, pas celles obtenues par extraction manuelle.**
+Aucune autre affirmation du rapport précédent n'est infirmée.
+
+Test permanent ajouté : `supabase/migrations/equilibre-lexical.test.ts` —
+scanner récursif réel (imbrication, chaînes simple-quote/double-quote/
+dollar-quote neutralisées), appliqué à toutes les migrations, avec un test
+de non-régression prouvant qu'une regex non imbriquée aurait laissé passer
+ce défaut précis.
+
 ## 1-2. Audit du candidat avant exécution
 
 **Relu intégralement** : `supabase/migrations/20260818160000_gel_de_bascule.sql`

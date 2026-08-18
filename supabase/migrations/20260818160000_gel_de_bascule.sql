@@ -68,6 +68,7 @@ alter table public.maintenance enable row level security;
  * pour tous les rôles non privilégiés. L'application lit l'état par la
  * fonction étroite `public.en_maintenance()`, qui ne rend qu'un booléen et
  * un message — jamais l'empreinte.
+ */
 
 -- ───────────────────────────────────────────────────── la garde elle-même
 
