@@ -29,6 +29,14 @@
  * Un seul fichier supprime la question au lieu d'y répondre à moitié. Le DDL
  * de PostgreSQL est transactionnel : tout s'applique, ou rien.
  *
+ * ─── Rejouable ───
+ *
+ * Chaque `create policy` est précédé de son `drop policy if exists`. La
+ * migration est atomique, donc un échec ne laisse rien — mais une reprise
+ * après un état posé à la main, ou après une intervention d'urgence, doit
+ * pouvoir passer. Une migration qui ne s'exécute qu'une fois est un script
+ * d'installation.
+ *
  * ─── L'ordre interne n'est pas une préférence ───
  *
  * `current_role()` passe en SECURITY DEFINER EN PREMIER. Les policies larges
@@ -254,15 +262,18 @@ drop policy if exists "Sales can create restaurants" on public.restaurants;
  */
 drop policy if exists "Super Admin Restaurants Access" on public.restaurants;
 
+drop policy if exists "Super Admin Restaurants Read" on public.restaurants;
 create policy "Super Admin Restaurants Read" on public.restaurants
   as permissive for select to authenticated
   using ((public."current_role"() = 'root') or (owner_id = auth.uid()));
 
+drop policy if exists "Super Admin Restaurants Update" on public.restaurants;
 create policy "Super Admin Restaurants Update" on public.restaurants
   as permissive for update to authenticated
   using ((public."current_role"() = 'root') or (owner_id = auth.uid()))
   with check ((public."current_role"() = 'root') or (owner_id = auth.uid()));
 
+drop policy if exists "Super Admin Restaurants Delete" on public.restaurants;
 create policy "Super Admin Restaurants Delete" on public.restaurants
   as permissive for delete to authenticated
   using ((public."current_role"() = 'root') or (owner_id = auth.uid()));
@@ -312,6 +323,7 @@ create policy "Super Admin Restaurants Delete" on public.restaurants
  * `auth.uid() = '04eb7091-…'` sur les quatre verbes.
  */
 drop policy if exists "ADMIN_GAMES_FULL_ACCESS" on public.games;
+drop policy if exists "ADMIN_GAMES_FULL_ACCESS" on public.games;
 create policy "ADMIN_GAMES_FULL_ACCESS" on public.games
   as permissive for all to authenticated
   using (public."current_role"() = 'root')
@@ -320,6 +332,7 @@ create policy "ADMIN_GAMES_FULL_ACCESS" on public.games
 /*
  * ─────────────────────────────────────── system_logs · autorisation
  */
+drop policy if exists "Root Full Access" on public.system_logs;
 drop policy if exists "Root Full Access" on public.system_logs;
 create policy "Root Full Access" on public.system_logs
   as permissive for all to authenticated
