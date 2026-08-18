@@ -100,6 +100,58 @@ dollar-quote neutralisées), appliqué à toutes les migrations, avec un test
 de non-régression prouvant qu'une regex non imbriquée aurait laissé passer
 ce défaut précis.
 
+## 0bis. P0 #2 trouvé et corrigé — `service_role` pouvait lever le gel lui-même
+
+Signalé le 19/08/2026, **vérifié indépendamment avant toute correction**
+(`has_table_privilege`/`has_function_privilege` sur `fusion-tests-2`,
+confirmé réel — pas seulement accepté sur la foi du signalement) :
+
+- `revoke all on public.maintenance from anon, authenticated;` — le premier
+  jet ne visait QUE ces deux rôles.
+- `service_role` gardait donc, par les DEFAULT PRIVILEGES, SELECT/INSERT/
+  UPDATE/DELETE **directs** sur `maintenance`, et EXECUTE sur
+  `maintenance_actif()` et `refuser_pendant_maintenance()`.
+- Conséquence : un appel authentifié avec la clé de service (PostgREST ou
+  SDK applicatif) pouvait remettre `actif = false`, ou supprimer l'unique
+  ligne — auquel cas `maintenance_actif()` retombe sur son
+  `coalesce(..., false)` et redevient inerte — puis écrire librement sur
+  les dix tables gelées. Un contournement réel du gel, par le chemin même
+  que le trigger est censé fermer, et qui n'exigeait aucun accès privilégié
+  hors de la clé de service déjà utilisée par l'application au quotidien.
+
+**Corrigé** : `revoke all ... from public, anon, authenticated, service_role`
+sur la table ET sur les deux fonctions internes. Le runbook (commentaires
+« L'ORDRE DES OPÉRATIONS ») précise désormais explicitement que
+l'activation/la levée se font en SQL direct sous le rôle propriétaire
+(connexion admin), **jamais** avec la clé de service — qui n'a plus aucun
+droit pour le faire de toute façon.
+
+**Revérifié après correction**, sur `fusion-tests-2` :
+
+- Catalogue : `has_table_privilege`/`has_function_privilege` pour
+  `service_role`/`authenticated`/`anon`/`public` sur la table et les 3
+  fonctions — 0 écart. Seule `en_maintenance()` reste exécutable par les
+  rôles applicatifs.
+- **Test vivant, `SET ROLE service_role`** : SELECT, INSERT, UPDATE,
+  DELETE sur `maintenance` tous refusés (`insufficient_privilege`) ;
+  `en_maintenance()` fonctionne toujours. Gel ensuite activé sous le rôle
+  propriétaire : une tentative d'écriture métier (`restaurants`) sous
+  `service_role` est refusée avec `P0100`, message du gel. Gel levé sous
+  le rôle propriétaire : écriture normale sous `service_role` de nouveau
+  acceptée, aucune trace laissée. État final `actif = false`.
+
+Test permanent ajouté : `supabase/verifications/preuve-privileges-maintenance.sql`
+(matrice `has_table_privilege`/`has_function_privilege`, sur le modèle de
+`preuve-acl-avis.sql`) + deux gardes statiques dans `durcissement.test.ts`
+qui font échouer la suite si un futur `revoke` sur `maintenance` ou ses
+fonctions internes omet `service_role`.
+
+**Observation annexe, non corrigée (hors périmètre de cette demande)** :
+`maintenance_actif()` retombe sur `false` (gel inactif) si la ligne
+unique venait à manquer, plutôt que sur `true` (fail-closed). Le
+`DELETE` étant désormais bloqué pour tous sauf le propriétaire, ce chemin
+n'est plus exploitable en pratique — signalé pour mémoire, pas changé.
+
 ## 1-2. Audit du candidat avant exécution
 
 **Relu intégralement** : `supabase/migrations/20260818160000_gel_de_bascule.sql`

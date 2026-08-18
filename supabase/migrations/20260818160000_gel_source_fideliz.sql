@@ -209,31 +209,52 @@ comment on table public.maintenance is
 -- ─────────────────────────────────────────────── qui peut toucher au drapeau
 
 /*
+ * ─── PERSONNE, Y COMPRIS SERVICE_ROLE, N'ÉCRIT DIRECTEMENT SUR CE DRAPEAU ───
+ *
+ * Corrigé le 19/08/2026 — P0 : le premier jet ne retirait les droits qu'à
+ * `anon` et `authenticated`. `service_role` gardait donc, par les DEFAULT
+ * PRIVILEGES, SELECT/INSERT/UPDATE/DELETE directs sur `maintenance` — un
+ * appel PostgREST ou Supabase JS authentifié avec la clé de service pouvait
+ * remettre `actif = false`, OU supprimer l'unique ligne (auquel cas
+ * `maintenance_actif()` retombe sur son `coalesce(..., false)` et redevient
+ * inerte), puis écrire librement sur les tables gelées. Un contournement
+ * réel du gel, par le chemin même que le trigger est censé fermer.
+ *
  * La table est lisible par tous (l'application doit pouvoir afficher un
- * message honnête) et écrite par personne via PostgREST. Le basculement se
- * fait à la clé de service, depuis le runbook, et par rien d'autre.
+ * message honnête, via `en_maintenance()` uniquement) et écrite par
+ * PERSONNE via PostgREST ou le SDK applicatif — ni `anon`, ni
+ * `authenticated`, ni `service_role`. Le basculement se fait exclusivement
+ * en SQL direct, sous le rôle propriétaire de la table (la connexion
+ * `postgres`/`supabase_admin` du runbook), jamais avec la clé de service de
+ * l'application — la clé de service n'a plus aucun droit ici pour l'exercer.
  *
  * Sans ce revoke, les DEFAULT PRIVILEGES de `postgres` accorderaient
- * automatiquement INSERT, SELECT, UPDATE, DELETE et MAINTAIN à `anon` et
- * `authenticated` — n'importe quel visiteur pourrait lever le gel.
+ * automatiquement INSERT, SELECT, UPDATE, DELETE et MAINTAIN à `anon`,
+ * `authenticated` ET `service_role` — n'importe quel visiteur, ou
+ * n'importe quel appel fait avec la clé de service, pourrait lever le gel.
  */
-revoke all on public.maintenance from anon, authenticated;
+revoke all on public.maintenance from public, anon, authenticated, service_role;
 
 /*
- * La fonction interne non plus. Les DEFAULT PRIVILEGES accordent EXECUTE à
- * tout nouvel objet ; `refuser_pendant_maintenance()` est une fonction de
- * trigger, que PostgreSQL refuse d'appeler directement — mais un droit
- * inutile ne se garde pas pour autant.
+ * Les fonctions internes non plus. Les DEFAULT PRIVILEGES accordent EXECUTE
+ * à tout nouvel objet ; `refuser_pendant_maintenance()` est une fonction de
+ * trigger que PostgreSQL refuse d'appeler directement, et `maintenance_actif()`
+ * n'a besoin d'être exécutable par personne côté application — mais un
+ * droit inutile ne se garde pas pour autant, et un appel direct par
+ * `service_role` (hors trigger) n'apporte rien de légitime.
  */
-revoke all on function public.maintenance_actif() from public, anon, authenticated;
-revoke all on function public.refuser_pendant_maintenance() from public, anon, authenticated;
+revoke all on function public.maintenance_actif() from public, anon, authenticated, service_role;
+revoke all on function public.refuser_pendant_maintenance() from public, anon, authenticated, service_role;
 
 /*
  * ═══════════════════════════════════════════════════════════════════════
  *  L'ORDRE DES OPÉRATIONS — CÔTÉ SOURCE UNIQUEMENT
  * ═══════════════════════════════════════════════════════════════════════
  *
- *  1. GELER LA SOURCE.
+ *  1. GELER LA SOURCE. En SQL direct, sous le rôle propriétaire de la
+ *     table (connexion admin du runbook) — JAMAIS avec la clé de service
+ *     de l'application, qui n'a plus aucun droit sur `maintenance` depuis
+ *     la correction du 19/08/2026 (voir plus haut).
  *     update public.maintenance set actif = true, depuis = now(),
  *       message = '…';
  *
@@ -253,7 +274,8 @@ revoke all on function public.refuser_pendant_maintenance() from public, anon, a
  *  5. CONTRÔLER. Témoins QR des cinq parcours, réconciliation des comptages,
  *     sondes de sécurité. Un seul rouge : on ne lève pas.
  *
- *  6. LEVER — et seulement après le GO.
+ *  6. LEVER — et seulement après le GO. Même rôle propriétaire qu'à
+ *     l'étape 1, jamais la clé de service.
  *     update public.maintenance set actif = false, depuis = null;
  *
  *  EN CAS DE ROLLBACK : revenir à l'ancienne application AVANT de lever le

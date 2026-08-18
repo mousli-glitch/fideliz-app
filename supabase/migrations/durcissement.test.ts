@@ -315,6 +315,28 @@ describe("gel source Fideliz — aucun laissez-passer, jamais", () => {
     expect(texte).not.toMatch(/encode\(/i);
     expect(texte).not.toMatch(/digest\(/i);
   });
+
+  it("P0 du 19/08 : le revoke sur `maintenance` cible aussi service_role, pas seulement anon/authenticated", () => {
+    // Le premier jet ne retirait les droits qu'à anon/authenticated : service_role
+    // gardait, par les DEFAULT PRIVILEGES, un accès direct en écriture sur la table
+    // du drapeau — de quoi désactiver le gel sans jamais toucher au trigger.
+    const sql = sansCommentaires(gel.sql);
+    const revokeTable = sql.match(/revoke all on public\.maintenance from ([^;]+);/i);
+    expect(revokeTable, "revoke sur la table maintenance introuvable").toBeTruthy();
+    const cibles = revokeTable![1].toLowerCase();
+    for (const role of ["anon", "authenticated", "service_role"]) {
+      expect(cibles, `\`${role}\` doit être dans le revoke sur maintenance`).toContain(role);
+    }
+  });
+
+  it("P0 du 19/08 : les revoke sur les fonctions internes ciblent aussi service_role", () => {
+    const sql = sansCommentaires(gel.sql);
+    for (const fn of ["maintenance_actif", "refuser_pendant_maintenance"]) {
+      const revoke = sql.match(new RegExp(`revoke all on function public\\.${fn}\\(\\) from ([^;]+);`, "i"));
+      expect(revoke, `revoke sur ${fn}() introuvable`).toBeTruthy();
+      expect(revoke![1].toLowerCase(), `\`service_role\` doit être dans le revoke sur ${fn}()`).toContain("service_role");
+    }
+  });
 });
 
 describe("gel source Fideliz — inventaire exhaustif des tables, aucun angle mort", () => {
