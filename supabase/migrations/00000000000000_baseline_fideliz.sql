@@ -274,8 +274,16 @@ create table if not exists public.system_logs (
   metadata jsonb not null default '{}'::jsonb
 );
 
+/*
+ * La clé primaire s'appelle `activity_logs_pkey`, sans le `_legacy` : la
+ * table a été renommée en production, et renommer une table ne renomme pas
+ * ses contraintes. Sans le nom explicite, PostgreSQL déduirait
+ * `activity_logs_legacy_pkey` du nom actuel — et l'index qui la porte
+ * changerait de nom avec elle. C'est ce seul détail qui faisait diverger les
+ * empreintes des contraintes ET des index.
+ */
 create table if not exists public.activity_logs_legacy (
-  id uuid primary key default gen_random_uuid(),
+  id uuid constraint activity_logs_pkey primary key default gen_random_uuid(),
   action_type text not null,
   admin_id uuid,
   target_id uuid,
@@ -420,7 +428,12 @@ as $$ select public.current_role() = 'restaurant'; $$;
 create or replace function public.check_restaurant_status()
 returns json language sql stable set search_path to 'public'
 as $$
-  select json_build_object('is_blocked', coalesce(r.is_blocked, false), 'restaurant_id', p.restaurant_id)
+  select json_build_object(
+    'is_blocked',
+    coalesce(r.is_blocked, false),
+    'restaurant_id',
+    p.restaurant_id
+  )
   from public.profiles p
   left join public.restaurants r on r.id = p.restaurant_id
   where p.id = auth.uid();
@@ -429,12 +442,25 @@ $$;
 create or replace function public.check_restaurant_status(slug_input text)
 returns jsonb language plpgsql security definer set search_path to 'public'
 as $$
-declare v_blocked_at timestamptz; v_id uuid;
-begin
-  select id, blocked_at into v_id, v_blocked_at from public.restaurants where slug = slug_input;
-  if v_id is null then return jsonb_build_object('is_blocked', true, 'reason', 'not_found'); end if;
-  return jsonb_build_object('is_blocked', (v_blocked_at is not null), 'restaurant_id', v_id);
-end;
+DECLARE
+  v_blocked_at timestamptz;
+  v_id uuid;
+BEGIN
+  SELECT id, blocked_at INTO v_id, v_blocked_at
+  FROM public.restaurants
+  WHERE slug = slug_input;
+
+  -- Si le resto n'existe pas, on renvoie une erreur
+  IF v_id IS NULL THEN
+    RETURN jsonb_build_object('is_blocked', true, 'reason', 'not_found');
+  END IF;
+
+  -- On renvoie le vrai statut sans filtre
+  RETURN jsonb_build_object(
+    'is_blocked', (v_blocked_at IS NOT NULL),
+    'restaurant_id', v_id
+  );
+END;
 $$;
 
 create or replace function public._log_event(
@@ -443,9 +469,18 @@ create or replace function public._log_event(
 returns void language plpgsql security definer set search_path to 'public'
 as $$
 begin
-  insert into public.system_logs(level, action_type, message, user_id, user_email, restaurant_id, metadata)
-  values (coalesce(p_level,'info'), coalesce(p_action_type,'INFO'), coalesce(p_message,''),
-          p_user_id, p_user_email, p_restaurant_id, coalesce(p_metadata,'{}'::jsonb));
+  insert into public.system_logs(
+    level, action_type, message, user_id, user_email, restaurant_id, metadata
+  )
+  values (
+    coalesce(p_level,'info'),
+    coalesce(p_action_type,'INFO'),
+    coalesce(p_message,''),
+    p_user_id,
+    p_user_email,
+    p_restaurant_id,
+    coalesce(p_metadata,'{}'::jsonb)
+  );
 end;
 $$;
 
@@ -495,13 +530,13 @@ $$;
 create or replace function public.handle_deleted_commercial()
 returns trigger language plpgsql security definer
 as $$
-begin
-  update public.restaurants
-  set created_by = '04eb7091-6876-41e0-84c6-5891658a5768'::uuid,
-      owner_id = '04eb7091-6876-41e0-84c6-5891658a5768'::uuid
-  where created_by = old.id or owner_id = old.id;
-  return old;
-end;
+BEGIN
+    UPDATE public.restaurants
+    SET created_by = '04eb7091-6876-41e0-84c6-5891658a5768'::uuid,
+        owner_id = '04eb7091-6876-41e0-84c6-5891658a5768'::uuid
+    WHERE created_by = OLD.id OR owner_id = OLD.id;
+    RETURN OLD;
+END;
 $$;
 
 -- Sans search_path figé, SECURITY DEFINER, et ATTACHÉE À AUCUN TRIGGER.
@@ -511,47 +546,91 @@ $$;
 create or replace function public.fn_audit_restaurant_changes()
 returns trigger language plpgsql security definer
 as $$
-begin
-  if (new.blocked_at is not null) then
-    update public.games set status = 'ended' where restaurant_id = new.id and status = 'active';
-  end if;
-  begin
-    insert into public.activity_logs (
-      user_id, user_email, user_role, action_type, entity_id, entity_type, restaurant_id, metadata
-    ) values (
-      auth.uid(),
-      (select email from public.profiles where id = auth.uid()),
-      (select role from public.profiles where id = auth.uid()),
-      case
-        when (old.blocked_at is null and new.blocked_at is not null) then 'RESTAURANT_BLOCKED'
-        when (old.blocked_at is not null and new.blocked_at is null) then 'RESTAURANT_UNBLOCKED'
-        else 'RESTAURANT_UPDATED'
-      end,
-      new.id, 'restaurant', new.id,
-      jsonb_build_object('name', new.name, 'reason', new.blocked_reason)
-    );
-  exception when others then
-    return new;
-  end;
-  return new;
-end;
+BEGIN
+    -- 1. SECURITÉ : Si le restaurant est bloqué, on termine les campagnes
+    IF (NEW.blocked_at IS NOT NULL) THEN
+        UPDATE public.games 
+        SET status = 'ended' 
+        WHERE restaurant_id = NEW.id 
+          AND status = 'active';
+    END IF;
+
+    -- 2. VOTRE LOGIQUE D'AUDIT (Inchangée, telle que dans votre CSV)
+    BEGIN
+        INSERT INTO public.activity_logs (
+            user_id, user_email, user_role, action_type, 
+            entity_id, entity_type, restaurant_id, metadata
+        ) VALUES (
+            auth.uid(),
+            (SELECT email FROM public.profiles WHERE id = auth.uid()),
+            (SELECT role FROM public.profiles WHERE id = auth.uid()),
+            CASE 
+                WHEN (OLD.blocked_at IS NULL AND NEW.blocked_at IS NOT NULL) THEN 'RESTAURANT_BLOCKED'
+                WHEN (OLD.blocked_at IS NOT NULL AND NEW.blocked_at IS NULL) THEN 'RESTAURANT_UNBLOCKED'
+                ELSE 'RESTAURANT_UPDATED'
+            END,
+            NEW.id, 'restaurant', NEW.id,
+            jsonb_build_object('name', NEW.name, 'reason', NEW.blocked_reason)
+        );
+    EXCEPTION WHEN OTHERS THEN
+        -- On ne bloque pas la transaction si le log échoue
+        RETURN NEW;
+    END;
+
+    RETURN NEW;
+END;
 $$;
 
 create or replace function public.trg_log_profile_active()
 returns trigger language plpgsql security definer set search_path to 'public'
 as $$
-declare v_action text; v_level text; v_actor_id uuid; v_actor_email text;
+declare
+  v_action text;
+  v_level  text;
+  v_actor_id uuid;
+  v_actor_email text;
 begin
   if new.is_active is distinct from old.is_active then
-    begin v_actor_id := auth.uid(); exception when others then v_actor_id := null; end;
-    begin v_actor_email := nullif(current_setting('request.jwt.claim.email', true), ''); exception when others then v_actor_email := null; end;
-    if new.is_active = false then v_action := 'USER_DISABLED'; v_level := 'warning';
-    else v_action := 'USER_ENABLED'; v_level := 'info'; end if;
-    perform public._log_event(v_level, v_action,
-      case when new.is_active = false then 'Compte utilisateur désactivé' else 'Compte utilisateur réactivé' end,
-      v_actor_id, v_actor_email, null,
-      jsonb_build_object('target_user_id', new.id, 'old_is_active', old.is_active, 'new_is_active', new.is_active));
+
+    -- Acteur (celui qui déclenche l'update) si dispo
+    begin
+      v_actor_id := auth.uid();
+    exception when others then
+      v_actor_id := null;
+    end;
+
+    begin
+      v_actor_email := nullif(current_setting('request.jwt.claim.email', true), '');
+    exception when others then
+      v_actor_email := null;
+    end;
+
+    if new.is_active = false then
+      v_action := 'USER_DISABLED';
+      v_level  := 'warning';
+    else
+      v_action := 'USER_ENABLED';
+      v_level  := 'info';
+    end if;
+
+    perform public._log_event(
+      v_level,
+      v_action,
+      case when new.is_active = false
+        then 'Compte utilisateur désactivé'
+        else 'Compte utilisateur réactivé'
+      end,
+      v_actor_id,
+      v_actor_email,
+      null,
+      jsonb_build_object(
+        'target_user_id', new.id,
+        'old_is_active', old.is_active,
+        'new_is_active', new.is_active
+      )
+    );
   end if;
+
   return new;
 end;
 $$;
@@ -559,19 +638,55 @@ $$;
 create or replace function public.trg_log_restaurant_block()
 returns trigger language plpgsql security definer set search_path to 'public'
 as $$
-declare v_action text; v_level text; v_user_id uuid; v_user_email text;
+declare
+  v_action text;
+  v_level  text;
+  v_user_id uuid;
+  v_user_email text;
 begin
   if new.is_blocked is distinct from old.is_blocked then
-    begin v_user_id := auth.uid(); exception when others then v_user_id := null; end;
-    begin v_user_email := nullif(current_setting('request.jwt.claim.email', true), ''); exception when others then v_user_email := null; end;
-    if new.is_blocked = true then v_action := 'RESTAURANT_BLOCKED'; v_level := 'warning';
-    else v_action := 'RESTAURANT_UNBLOCKED'; v_level := 'info'; end if;
-    perform public._log_event(v_level, v_action,
-      case when new.is_blocked = true then 'Accès établissement suspendu' else 'Accès établissement réactivé' end,
-      v_user_id, v_user_email, new.id,
-      jsonb_build_object('restaurant_name', new.name, 'restaurant_slug', new.slug,
-                         'old_is_blocked', old.is_blocked, 'new_is_blocked', new.is_blocked));
+
+    -- Essayez de récupérer l'identité de l'acteur si présent (PostgREST/JWT)
+    begin
+      v_user_id := auth.uid();
+    exception when others then
+      v_user_id := null;
+    end;
+
+    begin
+      v_user_email := nullif(current_setting('request.jwt.claim.email', true), '');
+    exception when others then
+      v_user_email := null;
+    end;
+
+    if new.is_blocked = true then
+      v_action := 'RESTAURANT_BLOCKED';
+      v_level  := 'warning';
+    else
+      v_action := 'RESTAURANT_UNBLOCKED';
+      v_level  := 'info';
+    end if;
+
+    perform public._log_event(
+      v_level,
+      v_action,
+      -- Message "humain" (tu peux ajuster)
+      case when new.is_blocked = true
+        then 'Accès établissement suspendu'
+        else 'Accès établissement réactivé'
+      end,
+      v_user_id,
+      v_user_email,
+      new.id,
+      jsonb_build_object(
+        'restaurant_name', new.name,
+        'restaurant_slug', new.slug,
+        'old_is_blocked', old.is_blocked,
+        'new_is_blocked', new.is_blocked
+      )
+    );
   end if;
+
   return new;
 end;
 $$;
@@ -977,6 +1092,23 @@ create trigger trg_contacts_marketing_optin_at before update of marketing_optin 
 drop trigger if exists trg_set_prize_initial_quantity on public.prizes;
 create trigger trg_set_prize_initial_quantity before insert on public.prizes
   for each row execute function public.set_prize_initial_quantity();
+
+/*
+ * Le seul trigger du projet hors du schéma `public`, et le plus important de
+ * tous : sans lui, aucun compte créé n'obtient de profil, donc ni rôle, ni
+ * restaurant, ni accès. Une base reconstruite sans ce trigger paraît saine et
+ * verrouille tout le monde dehors au premier compte.
+ *
+ * Il manquait. Mon empreinte des triggers ne regardait que `public` — les
+ * cinq ci-dessus concordaient, et j'en ai conclu « triggers identiques ».
+ * L'erreur était le périmètre de la mesure, pas son résultat.
+ *
+ * Les autres triggers hors `public` (cron, realtime, storage) appartiennent à
+ * la plateforme Supabase, qui les pose elle-même. Ils n'ont rien à faire ici.
+ */
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created after insert on auth.users
+  for each row execute function public.handle_new_user_profile();
 
 -- `fn_audit_restaurant_changes` n'est attachée à AUCUN trigger. Ce n'est pas
 -- un oubli de la baseline : c'est l'état de la production.
