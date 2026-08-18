@@ -70,7 +70,7 @@ describe("durcissement — les nouveaux objets naissent fermés", () => {
   });
 
   it("elle vient avant le gel de bascule", () => {
-    const gel = migrations.find((m) => m.nom.includes("gel_de_bascule"));
+    const gel = migrations.find((m) => m.nom.includes("gel_source_fideliz"));
     expect(gel).toBeDefined();
     expect(DURCISSEMENT < gel!.version).toBe(true);
   });
@@ -277,5 +277,42 @@ describe("tables de sauvegarde — 133 lignes personnelles, fermées par la RLS 
         new RegExp(`alter table[^;]*\\b${t}\\b[^;]*enable row level security`, "i"),
       );
     }
+  });
+});
+
+describe("gel source Fideliz — aucun laissez-passer, jamais", () => {
+  /*
+   * Le premier candidat mélangeait gel source (Fideliz, lecture seule pour
+   * le migrateur) et gel destination (Cartiz, où le migrateur DOIT écrire)
+   * dans un seul mécanisme à jeton. Le migrateur n'écrit JAMAIS dans la
+   * source : un jeton de contournement y est une surface privilégiée sans
+   * besoin, pas une protection. Séparé le 19/08/2026 — ce test empêche
+   * qu'un jeton, une empreinte, ou un `current_setting` ne revienne ici.
+   */
+  const gel = migrations.find((m) => m.nom.includes("gel_source_fideliz"))!;
+
+  it("la migration existe", () => {
+    expect(gel, "aucune migration gel_source_fideliz").toBeDefined();
+  });
+
+  it("aucune mention de jeton, empreinte de jeton, ou current_setting", () => {
+    const sql = sansCommentaires(gel.sql);
+    expect(sql).not.toMatch(/jeton/i);
+    expect(sql).not.toMatch(/empreinte_jeton/i);
+    expect(sql).not.toMatch(/current_setting/i);
+    expect(sql).not.toMatch(/bascule\.jeton/i);
+  });
+
+  it("refuser_pendant_maintenance() ne contient aucune branche de passage", () => {
+    // Le corps entier, une fois le "if maintenance_actif()" retiré de la
+    // lecture, ne doit contenir qu'un raise exception — jamais un chemin
+    // qui laisserait passer l'écriture pendant que actif = true.
+    const sql = sansCommentaires(gel.sql);
+    const corps = sql.match(/create or replace function public\.refuser_pendant_maintenance\(\)[\s\S]*?\$\$;/);
+    expect(corps, "fonction refuser_pendant_maintenance introuvable").toBeTruthy();
+    const texte = corps![0];
+    expect(texte).toMatch(/raise exception/i);
+    expect(texte).not.toMatch(/encode\(/i);
+    expect(texte).not.toMatch(/digest\(/i);
   });
 });

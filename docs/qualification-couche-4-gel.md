@@ -1,7 +1,42 @@
 # Qualification couche 4 — gel de bascule
 
-Mesuré le 18/08/2026, nuit, sur la branche synthétique déjà active. Aucune
-production touchée. Gel installé, mais **INACTIF** à l'état final.
+Mesuré le 18/08-19/08/2026, nuit, sur la branche synthétique déjà active.
+Aucune production touchée. Gel installé, mais **INACTIF** à l'état final.
+
+## -1. Séparation gel source Fideliz / gel destination Cartiz
+
+Le candidat initial mélangeait deux finalités dans un seul mécanisme : gel
+de la SOURCE Fideliz (le migrateur y LIT seulement) et gel de la
+DESTINATION Cartiz (le migrateur DOIT y écrire), avec un laissez-passer par
+jeton pensé pour le second cas mais présent dans le fichier qui ne déploie
+QUE le premier.
+
+**Décision technique** : ce dépôt (`fideliz-app`) ne gouverne QUE la base
+Fideliz — la source. Le migrateur n'a JAMAIS besoin d'écrire dans la
+source ; un mécanisme de contournement qu'aucun besoin ne justifie est une
+surface privilégiée gratuite, pas une protection. Retiré entièrement :
+jeton, colonne `empreinte_jeton`, `current_setting`, toute branche de
+passage dans `refuser_pendant_maintenance()`. Le refus est désormais
+**inconditionnel** — `actif = true` bloque tout le monde, sans exception,
+y compris un jeton falsifié ou copié (prouvé, voir plus bas).
+
+Fichier renommé `20260818160000_gel_source_fideliz.sql` (périmètre
+explicite dans le nom). Le gel de la destination Cartiz reste un
+**mécanisme séparé, non conçu ici** — aucun nom de table, de fonction ou
+d'hypothèse Cartiz n'est introduit dans ce fichier ; il appartiendra au
+dépôt Cartiz quand le migrateur existera.
+
+**Prouvé en live sur `fusion-tests-2`** : gel activé, un jeton arbitraire
+posé via `set local bascule.jeton = '…'` avant une écriture — l'écriture
+échoue quand même (`P0100`, aucune branche de passage n'existe). Cycle
+empreinte avant/après/rollback/réapplication rejoué en entier avec le
+nouveau fichier (SHA-256
+`b283368442da2563963b4547e4eb2f2582fcb84ebdef0aac457ea09efb5ac99d`,
+11 141 octets) : correspondance exacte à chaque étape.
+
+Test permanent ajouté (`durcissement.test.ts`) : aucune mention de
+« jeton », `empreinte_jeton`, ou `current_setting` n'est tolérée dans ce
+fichier — regard vers l'avenir, pas seulement l'état actuel.
 
 ## 0. P0 trouvé et corrigé — le fichier versionné n'était pas celui exécuté
 

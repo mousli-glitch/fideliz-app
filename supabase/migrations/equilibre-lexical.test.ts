@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 //  ÉQUILIBRE LEXICAL — les commentaires bloc PostgreSQL s'imbriquent
 // ═══════════════════════════════════════════════════════════════════════
 //
-// Trouvé le 18/08/2026 : `20260818160000_gel_de_bascule.sql` portait une
+// Trouvé le 18/08/2026 : `20260818160000_gel_de_bascule.sql` (depuis
+// renommé `20260818160000_gel_source_fideliz.sql`, périmètre séparé de
+// la destination Cartiz) portait une
 // ouverture de commentaire (ligne 58) jamais refermée. PostgreSQL imbrique
 // les commentaires bloc — contrairement à C — donc chaque nouvelle
 // ouverture rouvrait un niveau au lieu d'être une erreur de syntaxe

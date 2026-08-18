@@ -1,11 +1,29 @@
 -- ═══════════════════════════════════════════════════════════════════════
---  LE GEL DE BASCULE — imposé par la base, pas par l'écran
+--  GEL SOURCE FIDELIZ — lecture seule pour le migrateur, aucun laissez-passer
 -- ═══════════════════════════════════════════════════════════════════════
 --
 --  ⚠ CETTE MIGRATION N'EST PAS APPLIQUÉE EN PRODUCTION.
 --    Elle est écrite, testée sur la branche temporaire, et appliquée le jour
 --    de la bascule — jamais avant. Tant que `actif = false`, elle ne fait
 --    rigoureusement rien.
+--
+--  ─── PÉRIMÈTRE STRICT : SOURCE SEULEMENT ───
+--
+--  Ce fichier gèle UNIQUEMENT la base Fideliz, en tant que SOURCE d'une
+--  migration vers Cartiz. Le migrateur LIT Fideliz et ÉCRIT dans Cartiz —
+--  il n'a donc besoin d'AUCUNE écriture ici, jamais, y compris pendant la
+--  fenêtre de bascule. C'est pourquoi ce mécanisme ne porte aucun laissez-
+--  passer, aucun jeton, aucun contournement : une capacité de
+--  contournement qu'aucun besoin ne justifie est une surface privilégiée
+--  gratuite, pas une protection.
+--
+--  Le gel de la base CARTIZ (la destination, où le migrateur DOIT écrire
+--  pendant la fenêtre) est un mécanisme SÉPARÉ, distinct de celui-ci,
+--  à concevoir dans le dépôt Cartiz quand le migrateur existera. Aucun nom
+--  de table, de fonction ou d'hypothèse propre à Cartiz n'est introduit
+--  ici — ce fichier ne présuppose rien de ce mécanisme, et rien ici ne
+--  peut le contourner : les deux gels sont indépendants, chacun sur sa
+--  propre base, sans jeton partagé entre eux.
 --
 --  ─── POURQUOI DES TRIGGERS, ET PAS UN DRAPEAU DANS L'APPLICATION ───
 --
@@ -35,20 +53,15 @@
 -- ─────────────────────────────────────────────────────────────── l'état
 
 create table if not exists public.maintenance (
-  id           boolean primary key default true,
-  actif        boolean not null default false,
-  message      text    not null default 'Service momentanément suspendu. Merci de réessayer dans quelques minutes.',
-  depuis       timestamptz,
-  par          uuid,
-  -- L'EMPREINTE du laissez-passer, jamais le laissez-passer lui-même.
-  -- Nulle en temps normal : sans empreinte posée, rien ne passe le gel.
-  empreinte_jeton text,
+  id      boolean primary key default true,
+  actif   boolean not null default false,
+  message text    not null default 'Service momentanément suspendu. Merci de réessayer dans quelques minutes.',
+  depuis  timestamptz,
+  par     uuid,
   -- Une seule ligne possible : un drapeau qui existerait en double serait un
   -- drapeau dont personne ne saurait lequel fait foi.
   constraint maintenance_ligne_unique check (id = true)
 );
-
-alter table public.maintenance add column if not exists empreinte_jeton text;
 
 insert into public.maintenance (id, actif) values (true, false)
 on conflict (id) do nothing;
@@ -58,16 +71,9 @@ alter table public.maintenance enable row level security;
 /*
  * ─── AUCUNE LECTURE DIRECTE ───
  *
- * La première version posait une policy `for select using (true)` : tout le
- * monde lisait la table entière, empreinte du jeton comprise.
- *
- * Une empreinte SHA-256 ne rend pas un secret de 32 octets retrouvable. Mais
- * elle n'a aucune raison d'être publiée, et la publier invite à chercher.
- *
- * Aucune policy de lecture n'est donc créée. RLS activée sans policy = refus
- * pour tous les rôles non privilégiés. L'application lit l'état par la
- * fonction étroite `public.en_maintenance()`, qui ne rend qu'un booléen et
- * un message — jamais l'empreinte.
+ * RLS activée sans policy = refus pour tous les rôles non privilégiés.
+ * L'application lit l'état par la fonction étroite
+ * `public.en_maintenance()`, qui ne rend qu'un booléen et un message.
  */
 
 -- ───────────────────────────────────────────────────── la garde elle-même
@@ -75,8 +81,8 @@ alter table public.maintenance enable row level security;
 /*
  * L'état PUBLIC : un booléen et un message, rien d'autre.
  *
- * C'est la seule porte laissée aux rôles applicatifs. Elle ne lit pas
- * l'empreinte, ne l'expose pas, et ne peut rien modifier.
+ * C'est la seule porte laissée aux rôles applicatifs. Elle ne peut rien
+ * modifier.
  */
 create or replace function public.en_maintenance()
 returns table(actif boolean, message text)
@@ -97,64 +103,25 @@ security definer
 set search_path to 'public'
 as $$ select coalesce((select actif from public.maintenance where id), false) $$;
 
+/*
+ * ─── AUCUN LAISSEZ-PASSER — LE REFUS EST INCONDITIONNEL ───
+ *
+ * Contrairement à un gel de destination (où le migrateur doit écrire),
+ * ce gel de SOURCE ne connaît aucune exception. `actif = true` refuse
+ * TOUT LE MONDE, y compris `service_role`, y compris le migrateur — qui
+ * n'a de toute façon jamais besoin d'écrire dans la source. Aucun jeton,
+ * aucune colonne d'empreinte, aucun `current_setting` : la surface de
+ * contournement est nulle parce qu'aucun mécanisme de contournement
+ * n'existe, pas parce qu'il est bien gardé.
+ */
 create or replace function public.refuser_pendant_maintenance()
 returns trigger
 language plpgsql
 security definer
 set search_path to 'public'
 as $$
-declare
-  v_jeton text;
-  v_presente text;
 begin
   if public.maintenance_actif() then
-    /*
-     * ─── LE LAISSEZ-PASSER DU MIGRATEUR ───
-     *
-     * Le gel bloque tout le monde, y compris `service_role` — c'est tout son
-     * intérêt. Mais le migrateur, lui, DOIT écrire pendant la fenêtre : il
-     * n'aurait aucun autre moment pour le faire.
-     *
-     * Une exception pour `service_role` serait la pire réponse : c'est
-     * l'identité que l'application entière utilise déjà, donc la protection
-     * s'annulerait d'elle-même.
-     *
-     * D'où un jeton présenté PAR TRANSACTION :
-     *
-     *     begin;
-     *     set local bascule.jeton = '<le jeton brut, jamais ecrit nulle part>';
-     *     -- … les écritures du migrateur …
-     *     commit;
-     *
-     * `set local` meurt avec la transaction : rien à nettoyer, rien qui
-     * traîne. Le jeton est tiré au hasard à chaque bascule et n'existe que
-     * dans la mémoire du migrateur.
-     *
-     * L'empreinte est effacée à la levée du gel : hors bascule,
-     * `empreinte_jeton` est nulle, et un laissez-passer nul ne laisse passer
-     * personne — pas même celui qui aurait retenu l'ancien jeton.
-     */
-    select empreinte_jeton into v_jeton from public.maintenance where id;
-    v_presente := nullif(current_setting('bascule.jeton', true), '');
-
-    /*
-     * On compare des EMPREINTES, pas des jetons.
-     *
-     * Stocker le jeton en clair aurait suffi à annuler tout le raisonnement :
-     * `service_role` contourne la RLS, donc l'application aurait pu le lire
-     * dans la table et se le présenter à elle-même. « L'application ne
-     * connaît pas le jeton » ne se décrète pas — il faut qu'elle ne PUISSE
-     * pas le connaitre.
-     *
-     * Le jeton brut n'existe donc que dans la mémoire du migrateur, le temps
-     * de la bascule. La base n'en garde que le sha256, qui ne permet pas de
-     * le retrouver.
-     */
-    if v_jeton is not null and v_presente is not null
-       and encode(extensions.digest(v_presente, 'sha256'), 'hex') = v_jeton then
-      return case tg_op when 'DELETE' then old else new end;
-    end if;
-
     /*
      * 57014 (query_canceled) est déjà pris. On choisit une classe applicative
      * dédiée pour que l'application distingue « on est en maintenance » de
@@ -204,7 +171,7 @@ begin
 end $$;
 
 comment on table public.maintenance is
-  'Drapeau unique du gel de bascule. actif = true fait echouer toute ecriture sur les tables metier, y compris via service_role et RPC — les triggers ne se contournent pas. Les lectures restent ouvertes : menus, QR et /verify continuent de repondre.';
+  'Drapeau du gel SOURCE Fideliz. actif = true fait echouer toute ecriture sur les tables metier, y compris via service_role et RPC — les triggers ne se contournent pas, et aucun laissez-passer n''existe. Les lectures restent ouvertes : menus, QR et /verify continuent de repondre. Le gel de la destination Cartiz est un mecanisme separe.';
 
 -- ─────────────────────────────────────────────── qui peut toucher au drapeau
 
@@ -213,50 +180,29 @@ comment on table public.maintenance is
  * message honnête) et écrite par personne via PostgREST. Le basculement se
  * fait à la clé de service, depuis le runbook, et par rien d'autre.
  *
- * Sans ce revoke, `authenticated` hériterait des droits par défaut de
- * Supabase sur les nouvelles tables — et n'importe quel compte connecté
- * pourrait lever le gel ou se donner le laissez-passer.
- */
-/*
- * La table : rien pour personne hors propriétaire et service_role. Sans ce
- * revoke, les DEFAULT PRIVILEGES de `postgres` accorderaient automatiquement
- * INSERT, SELECT, UPDATE, DELETE et MAINTAIN à `anon` et `authenticated` —
- * n'importe quel visiteur pourrait lever le gel.
+ * Sans ce revoke, les DEFAULT PRIVILEGES de `postgres` accorderaient
+ * automatiquement INSERT, SELECT, UPDATE, DELETE et MAINTAIN à `anon` et
+ * `authenticated` — n'importe quel visiteur pourrait lever le gel.
  */
 revoke all on public.maintenance from anon, authenticated;
 
 /*
- * Les deux fonctions internes non plus. Les DEFAULT PRIVILEGES accordent
- * EXECUTE à tout nouvel objet ; `refuser_pendant_maintenance()` est une
- * fonction de trigger, que PostgreSQL refuse d'appeler directement — mais un
- * droit inutile ne se garde pas pour autant.
- *
- * Elles restent utilisables : `refuser_pendant_maintenance()` s'exécute comme
- * trigger avec les droits de son propriétaire, et `maintenance_actif()` est
- * appelée depuis elle, donc dans le même contexte.
+ * La fonction interne non plus. Les DEFAULT PRIVILEGES accordent EXECUTE à
+ * tout nouvel objet ; `refuser_pendant_maintenance()` est une fonction de
+ * trigger, que PostgreSQL refuse d'appeler directement — mais un droit
+ * inutile ne se garde pas pour autant.
  */
 revoke all on function public.maintenance_actif() from public, anon, authenticated;
 revoke all on function public.refuser_pendant_maintenance() from public, anon, authenticated;
 
 /*
  * ═══════════════════════════════════════════════════════════════════════
- *  L'ORDRE DES OPÉRATIONS — 6 h à 8 h, heure de Paris
+ *  L'ORDRE DES OPÉRATIONS — CÔTÉ SOURCE UNIQUEMENT
  * ═══════════════════════════════════════════════════════════════════════
  *
- *  Les sept tables gelées vivent dans la base FIDELIZ. Le migrateur, lui,
- *  LIT Fideliz et ÉCRIT dans Cartiz : le gel de Fideliz ne le gêne donc pas.
- *  C'est le gel de CARTIZ — la même migration, appliquée là-bas — qu'il doit
- *  traverser, et c'est à cela que sert le jeton.
- *
- *  1. GELER LES DEUX BASES, Fideliz d'abord.
+ *  1. GELER LA SOURCE.
  *     update public.maintenance set actif = true, depuis = now(),
- *       message = '…',
- *       empreinte_jeton = encode(extensions.digest('<jeton brut>', 'sha256'), 'hex');
- *
- *     Le jeton brut est tiré au hasard au moment de la bascule (32 octets,
- *     `openssl rand -hex 32`), gardé dans la memoire du migrateur, et ecrit
- *     nulle part : ni dans Git, ni dans une migration, ni dans Vercel, ni
- *     dans une variable d'environnement. La base n'en voit que l'empreinte.
+ *       message = '…';
  *
  *  2. LAISSER FINIR CE QUI EST EN VOL. Le gel arrête les nouvelles écritures,
  *     pas celles déjà commencées. Attendre que `pg_stat_activity` ne montre
@@ -267,17 +213,15 @@ revoke all on function public.refuser_pendant_maintenance() from public, anon, a
  *     auquel un rollback ramènerait. Le prendre avant le gel n'aurait aucun
  *     sens ; le prendre après les écritures non plus.
  *
- *  4. MIGRER. Chaque transaction du migrateur présente le jeton :
- *       begin; set local bascule.jeton = '…'; … ; commit;
+ *  4. MIGRER. Le migrateur LIT la source (gelée, cohérente) et ÉCRIT dans
+ *     Cartiz — dont le propre mécanisme de gel, séparé, gère ses propres
+ *     écritures. Rien ici ne le concerne.
  *
  *  5. CONTRÔLER. Témoins QR des cinq parcours, réconciliation des comptages,
  *     sondes de sécurité. Un seul rouge : on ne lève pas.
  *
  *  6. LEVER — et seulement après le GO.
- *     update public.maintenance set actif = false, depuis = null,
- *       empreinte_jeton = null;
- *     Effacer le jeton fait partie de la levée : un laissez-passer qui
- *     survivrait à la bascule serait une porte laissée entrouverte.
+ *     update public.maintenance set actif = false, depuis = null;
  *
  *  EN CAS DE ROLLBACK : revenir à l'ancienne application AVANT de lever le
  *  gel. Lever d'abord rouvrirait les écritures sur une application qu'on
