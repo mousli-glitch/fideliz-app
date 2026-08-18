@@ -148,18 +148,51 @@ declare
    * Cartiz sans équivalent dans Fideliz — c'est-à-dire exactement ce qu'un
    * rollback ne saurait pas réconcilier.
    *
-   * `system_logs` n'y est PAS : le journal doit continuer d'écrire pendant
-   * la bascule, c'est même le moment où on en a le plus besoin.
-   * `maintenance` non plus, sans quoi on ne pourrait plus lever le gel.
+   * Inventaire complet des 17 tables de `public`, classées nominativement
+   * le 19/08/2026 (voir `docs/qualification-couche-4-gel.md` pour le
+   * détail de chaque décision) :
+   *
+   *   `system_logs`, `activity_logs_legacy` — journaux techniques,
+   *     volontairement OUVERTS : ils doivent continuer d'écrire pendant
+   *     la bascule, c'est même le moment où on en a le plus besoin.
+   *     Vérifié : `activity_logs_legacy` est un journal non bloquant
+   *     (`app/actions/update-restaurant-email.ts`), même nature que
+   *     `system_logs`.
+   *   `maintenance` — état interne du gel, exclue : gelée, elle
+   *     s'auto-verrouillerait.
+   *   `auth_ghosts_backup_20260606`, `auth_orphan_backup_20260606`,
+   *     `contacts_backup_20260606`, `winners_backup_20260606` —
+   *     historique/backup non mutable, RLS activée sans policy (aucune
+   *     migration ne leur ajoute de policy ni ne désactive leur RLS,
+   *     vérifié par test permanent) : déjà fermées, sans avoir besoin
+   *     de ce trigger.
+   *   `crm_notes` — AJOUTÉE. Zéro usage trouvé dans le code applicatif
+   *     (`grep` vide sur `app/`, `lib/`, `components/`), mais figure dans
+   *     la sauvegarde logique et n'a pas de preuve exhaustive d'exclusion
+   *     du périmètre de migration — le doute joue pour la geler.
+   *   `sales_restaurants` — AJOUTÉE. Usage applicatif confirmé
+   *     (`app/actions/admin-actions.ts`, `app/api/sales/dashboard/
+   *     route.ts`, `app/actions/delete-sales-user.ts`,
+   *     `app/api/restaurants/block/route.ts`) : rattachements
+   *     commercial↔restaurant, participent à l'isolation multi-tenant.
+   *   `winners_archive` — AJOUTÉE par prudence. Son seul écrivain est
+   *     `archive_redeemed_winners()`, qui insère ici et supprime de
+   *     `winners` dans UN SEUL statement à CTE (donc déjà protégée par
+   *     le gel de `winners`, atomiquement) — la geler directement aussi
+   *     évite de dépendre indéfiniment de ce couplage implicite si la
+   *     fonction est un jour réécrite en deux statements.
    */
   tables text[] := array[
-    'winners',      -- participations, gains, validations, consommations
-    'contacts',     -- inscriptions clients
-    'prizes',       -- stocks des lots
-    'games',        -- configuration des jeux
-    'restaurants',  -- réglages, abonnements, jetons
-    'profiles',     -- comptes et rôles
-    'avis'          -- miroir des avis Google (le cron écrit ici)
+    'winners',            -- participations, gains, validations, consommations
+    'contacts',           -- inscriptions clients
+    'prizes',             -- stocks des lots
+    'games',               -- configuration des jeux
+    'restaurants',        -- réglages, abonnements, jetons
+    'profiles',            -- comptes et rôles
+    'avis',                -- miroir des avis Google (le cron écrit ici)
+    'crm_notes',           -- notes commerciales (0 usage applicatif actuel, geler par prudence)
+    'sales_restaurants',   -- rattachement commercial↔restaurant
+    'winners_archive'      -- déjà protégée transitivement, gelée aussi directement
   ];
 begin
   foreach t in array tables loop

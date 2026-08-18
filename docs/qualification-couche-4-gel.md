@@ -122,24 +122,81 @@ SOURCE... ne pas transposer"). Le candidat retenu résout précisément ce cas.
 **Conservé tel quel** — c'est le design le plus complet, pas un brouillon à
 remplacer.
 
-## 3. Couverture des tables gelées
+## 3. Couverture des tables gelées — 10 tables, inventaire nominatif complet
 
-7 tables : `winners, contacts, prizes, games, restaurants, profiles, avis`.
-Explicitement exclues par le fichier lui-même : `system_logs` (doit
-continuer à journaliser) et `maintenance` (s'auto-verrouillerait).
+**Mise à jour du 19/08/2026 : les deux questions ouvertes ci-dessous sont
+tranchées.** `crm_notes` et `sales_restaurants` sont désormais gelées, avec
+`winners_archive` ajoutée par prudence. Voir le detail ci-dessous et le
+nouveau cycle d'empreinte en fin de section.
 
-**Deux questions ouvertes, non tranchées ici** — signalées, pas résolues :
+**Les 10 tables gelées** : `winners, contacts, prizes, games, restaurants,
+profiles, avis, crm_notes, sales_restaurants, winners_archive`.
 
-- `crm_notes` (notes commerciales) n'est pas gelée. Si elle fait partie du
-  périmètre de migration vers Cartiz, une écriture pendant la fenêtre
-  créerait la même incohérence que les 7 tables gelées.
-- `sales_restaurants` (rattachement commercial↔restaurant) n'est pas gelée,
-  même remarque.
+**Inventaire nominatif des 17 tables de `public`**, chacune classée
+explicitement — aucun angle mort implicite accepté :
 
-Ni l'une ni l'autre n'est mentionnée dans le commentaire du fichier comme
-délibérément exclue (contrairement à `system_logs`/`maintenance`) — ce
-pourrait être un oubli ou un choix implicite. **Décision de Samy attendue**
-avant la bascule réelle.
+| Table | Classification | Justification |
+|---|---|---|
+| `winners` | Gelée | participations, gains, validations, consommations |
+| `contacts` | Gelée | inscriptions clients |
+| `prizes` | Gelée | stocks des lots |
+| `games` | Gelée | configuration des jeux |
+| `restaurants` | Gelée | réglages, abonnements, jetons |
+| `profiles` | Gelée | comptes et rôles |
+| `avis` | Gelée | miroir des avis Google, écrit par le cron |
+| `crm_notes` | Gelée (ajoutée) | zéro usage applicatif trouvé (`grep` vide sur `app/`, `lib/`, `components/`), mais présente dans la sauvegarde logique, sans preuve exhaustive d'exclusion du périmètre de migration — le doute joue pour la geler |
+| `sales_restaurants` | Gelée (ajoutée) | usage applicatif confirmé (`app/actions/admin-actions.ts`, `app/api/sales/dashboard/route.ts`, `app/actions/delete-sales-user.ts`, `app/api/restaurants/block/route.ts`) : rattachement commercial↔restaurant, participe à l'isolation multi-tenant |
+| `winners_archive` | Gelée (ajoutée par prudence) | son seul écrivain, `archive_redeemed_winners()`, insère ici et supprime de `winners` dans **un seul statement à CTE** — déjà protégée transitivement par le gel de `winners`. Gelée directement aussi pour ne pas dépendre indéfiniment de ce couplage implicite si la fonction est un jour réécrite en deux statements distincts |
+| `maintenance` | Exclue — état interne du gel | gelée, elle s'auto-verrouillerait (le `update actif = true` du runbook serait lui-même refusé) |
+| `system_logs` | Exclue — journal technique volontairement ouvert | doit continuer à écrire pendant la bascule, c'est le moment où on en a le plus besoin |
+| `activity_logs_legacy` | Exclue — journal technique volontairement ouvert | même nature que `system_logs`, vérifié : journal non bloquant (`app/actions/update-restaurant-email.ts`) |
+| `auth_ghosts_backup_20260606` | Exclue — sauvegarde historique immuable | RLS activée sans policy, aucune migration ne lui ajoute de policy ni ne désactive sa RLS (vérifié par test permanent) — déjà fermée sans ce trigger |
+| `auth_orphan_backup_20260606` | Exclue — sauvegarde historique immuable | idem |
+| `contacts_backup_20260606` | Exclue — sauvegarde historique immuable | idem |
+| `winners_backup_20260606` | Exclue — sauvegarde historique immuable | idem |
+
+17 tables au total, 10 gelées, 7 exclues avec justification individuelle —
+aucune table de `public` non classée.
+
+### Cycle d'empreinte complet rejoué avec les 10 tables
+
+Fichier **brut, complet, sans abréviation** (SHA-256
+`c13dff1e40d2917194e925fe4dc9dc76dc82f7f9fc76f23724cb8e22bae22236`,
+13 330 octets, 263 lignes) soumis en un seul envoi à `fusion-tests-2`.
+
+| Étape | colonnes | fonctions | triggers | rls | acl_relations | acl_fonctions |
+|---|---|---|---|---|---|---|
+| Après 1re application | 239/`249debac…` | 25/`22e9e0f8…` | 35/`39c574bd…` | 17/`f9c98e60…` | 434/`bc634d5d…` | 88/`7d9cc34d…` |
+| Rollback → | 234/`742de13e…` | 22/`e6266426…` | 5/`db9da30c…` | 16/`0cea333d…` | 423/`de253aeb…` | 80/`1f6c087c…` |
+| 2e application | 239/`249debac…` ✅ | 25/`22e9e0f8…` ✅ | 35/`39c574bd…` ✅ | 17/`f9c98e60…` ✅ | 434/`bc634d5d…` ✅ | 88/`7d9cc34d…` ✅ |
+
+(contraintes 80/75, index 46/45, policies 41/41, default_privileges 26/26,
+vues 4/4 — identiques aux deux applications, écarts uniquement avec le
+rollback, comme attendu.)
+
+**Ces chiffres ne sont pas directement comparables à ceux du § « Application,
+rollback, réapplication — mesuré » ci-dessus** (214/22/6/78/22...) : la
+branche `fusion-tests-2` a grossi entretemps avec les migrations Soukara et
+le mapping exécutable, sans rapport avec ce gel. Le nombre de `triggers`
+délivré par `information_schema.triggers` compte une ligne par événement —
+un trigger `BEFORE INSERT OR UPDATE OR DELETE` sur 10 tables donne 30
+lignes, cohérent avec le delta 35→5 mesuré au rollback.
+
+**Correspondance exacte, hashes inclus, sur toutes les dimensions entre la
+1re et la 2e application.** État final : `actif = false`, `depuis = null`,
+`par = null` — inactif par défaut, confirmé par mesure directe.
+
+**Vérification structurelle des 10 tables** : les 10 triggers portent
+tous le nom `gel_de_bascule`, `BEFORE`, `INSERT/UPDATE/DELETE`, même
+fonction — vérifié par requête catalogue.
+
+**Écriture normale pendant l'état inactif, testée en direct** sur
+`restaurants`, `crm_notes`, `winners_archive` (insert + update + delete,
+aucune erreur, aucune trace laissée après le test). `sales_restaurants` non
+testée en écriture live — bloquée par une contrainte FK vers `auth.users`
+sans rapport avec le gel (branche synthétique sans aucun utilisateur créé) ;
+couverte par la vérification structurelle ci-dessus (même trigger, même
+fonction que les 9 autres tables, dont 3 testées en écriture réelle).
 
 ## 4. Compatibilité avec les migrations réconciliées (couches 1-2-3)
 

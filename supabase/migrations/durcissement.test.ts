@@ -316,3 +316,63 @@ describe("gel source Fideliz — aucun laissez-passer, jamais", () => {
     expect(texte).not.toMatch(/digest\(/i);
   });
 });
+
+describe("gel source Fideliz — inventaire exhaustif des tables, aucun angle mort", () => {
+  /*
+   * Classées nominativement le 19/08/2026 (docs/qualification-couche-4-gel.md
+   * §3) : 10 gelées, 7 exclues avec justification individuelle. Ce test ne
+   * vérifie pas que la classification est *correcte* — c'est une décision
+   * produit, pas un fait vérifiable par regex — mais qu'aucune table créée
+   * par une migration ne reste NON classée : ni gelée, ni sur la liste des
+   * exclusions documentées. Une future migration qui ajoute une table sans
+   * mettre à jour l'un des deux camps fait échouer ce test, au lieu de
+   * laisser un angle mort silencieux.
+   */
+  const gel = migrations.find((m) => m.nom.includes("gel_source_fideliz"))!;
+
+  const TABLES_GELEES = [
+    "winners", "contacts", "prizes", "games", "restaurants", "profiles",
+    "avis", "crm_notes", "sales_restaurants", "winners_archive",
+  ];
+
+  const TABLES_EXCLUES_DOCUMENTEES = [
+    "maintenance", "system_logs", "activity_logs_legacy",
+    "auth_ghosts_backup_20260606", "auth_orphan_backup_20260606",
+    "contacts_backup_20260606", "winners_backup_20260606",
+  ];
+
+  it("le tableau `tables` du fichier gel contient exactement les 10 tables attendues", () => {
+    const sql = sansCommentaires(gel.sql);
+    const bloc = sql.match(/tables\s+text\[\]\s*:=\s*array\[([\s\S]*?)\]/);
+    expect(bloc, "tableau `tables` introuvable dans le fichier gel").toBeTruthy();
+    const trouvees = Array.from(bloc![1].matchAll(/'([a-z_]+)'/g)).map((m) => m[1]);
+    expect(new Set(trouvees)).toEqual(new Set(TABLES_GELEES));
+  });
+
+  it("chaque exclusion documentée l'est nommément dans le commentaire d'inventaire", () => {
+    for (const table of TABLES_EXCLUES_DOCUMENTEES) {
+      expect(gel.sql, `\`${table}\` n'est plus mentionnée dans l'inventaire du fichier gel`).toMatch(
+        new RegExp("`" + table + "`"),
+      );
+    }
+  });
+
+  it("aucune table créée par une migration n'échappe aux deux camps (gelée ou exclue documentée)", () => {
+    const connues = new Set([...TABLES_GELEES, ...TABLES_EXCLUES_DOCUMENTEES]);
+    const nonClassees = new Set<string>();
+    for (const m of migrations) {
+      const sansCom = sansCommentaires(m.sql);
+      const matches = sansCom.matchAll(
+        /create table(?:\s+if not exists)?\s+(?:public\.)?"?([a-zA-Z_][a-zA-Z0-9_]*)"?/gi,
+      );
+      for (const match of matches) {
+        const table = match[1].toLowerCase();
+        if (!connues.has(table)) nonClassees.add(table);
+      }
+    }
+    expect(
+      Array.from(nonClassees),
+      "table(s) créée(s) par une migration mais absente(s) des deux listes de classification (gelée / exclue documentée) — mettre à jour le fichier gel et ce test",
+    ).toEqual([]);
+  });
+});
