@@ -61,6 +61,34 @@ répondent. `pg_cron` **absent** (6 extensions contre 7).
 - Sauvegarde logique vérifiée : 2 980 lignes, 20 fichiers, empreintes relues,
   permissions `700`/`600`.
 
+## Diff sémantique — VERT le 18/08
+
+**Dix dimensions sur onze identiques à la production**, reconstruites par le
+vrai runner depuis une base réellement vierge : colonnes, contraintes,
+fonctions, index, policies, RLS, triggers, vues, ACL des relations, ACL des
+fonctions. Détail et empreintes : `docs/diff-semantique.md`.
+
+La onzième — les privilèges par défaut — ne peut pas devenir verte : trois
+entrées appartiennent à `supabase_admin`, dont `postgres` n'est pas membre.
+Elles sont **inertes** (aucun objet de `public` ne lui appartient), et l'ACL
+effectif des 20 relations est identique des deux côtés. Écart borné, pas ignoré.
+
+Quatre défauts trouvés et corrigés : le trigger `on_auth_user_created` absent
+(sans lui, aucun profil créé au premier compte), le nom de la clé primaire de
+`activity_logs_legacy`, huit corps de fonction cosmétiquement divergents, et
+les policies Storage qui empêchaient tout rejeu.
+
+## Matrice A/B — les vues classées le 18/08
+
+Aucune écriture anonyme n'aboutit ; aucune mutation de A sur les données de B.
+Les droits DML des quatre vues sont **inertes** (`security_invoker`) :
+**défaut d'hygiène, pas vulnérabilité**. Détail : `docs/matrice-ab-tenants.md`.
+
+Deux points restent au lot RLS : n'importe quel compte authentifié crée des
+restaurants (`"Sales can create restaurants"`, `with check (true)`), et la
+lecture de tous les profils vient de **trois** policies `using (true)`, pas
+d'une — `temp_open_profiles`, `final_profile_access_v3`, `global_nav_profiles`.
+
 ## État de la baseline
 
 `supabase/migrations/00000000000000_baseline_fideliz.sql` — **22 fonctions**,
@@ -78,14 +106,19 @@ dans une table absente.
 
 ## Prochaine commande sûre
 
+⚠ **`reset_branch` ne rejoue PAS les fichiers du dépôt** : il rejoue les
+instructions stockées dans le registre de la branche. Il remet donc l'ANCIENNE
+baseline. Pour éprouver une baseline corrigée, il faut vider les objets à la
+main — schéma `public`, policies de `storage`, privilèges par défaut, registre
+— puis pousser. La séquence est dans `docs/diff-semantique.md`.
+
 ```bash
-# 1. reset de la branche temporaire (vérifier with_data = false d'abord)
-#    MCP : reset_branch sur 5aeec608-4c2b-49c6-9cc6-ea4e0d00d300
-# 2. replay baseline + 8 SEULEMENT (pas le gel)
+# page blanche réelle, puis rejeu SANS le gel
 cd /Users/samy/fideliz-app
+mkdir -p .gel-en-attente && mv supabase/migrations/20260818020000_gel_de_bascule.sql .gel-en-attente/
 npx supabase@2.114.0 db push --project-ref bngtokpnuebvvxbtnayn --include-all --yes
-# 3. diff structurel contre la production
-# 4. puis le gel séparément
+mv .gel-en-attente/*.sql supabase/migrations/ && rmdir .gel-en-attente
+# puis empreintes.sql sur les deux bases
 ```
 
 ## Interdictions en vigueur
@@ -112,12 +145,12 @@ npx supabase@2.114.0 db push --project-ref bngtokpnuebvvxbtnayn --include-all --
 
 ## Ce qui reste à faire
 
-1. Reset + replay baseline + 8 · diff structurel complet
-2. Gel séparément, delta attendu seul
-3. `migration repair` en production, puis **deuxième branche** comme preuve du
+1. ~~Reset + replay baseline + 8 · diff structurel complet~~ **fait, vert**
+2. Durcissement des privilèges par défaut, puis sentinelles
+3. Gel séparément, delta attendu seul
+4. `migration repair` en production, puis **deuxième branche** comme preuve du
    bootstrap automatique
-4. Seeds synthétiques, 6 comptes, matrice RLS, Auth, Storage, RPC, gel,
-   reconstruction, rollback chronométré
-5. Phase 2 : `CLAUDE.md`, modules et entitlements, marque Fideliz, charte
+5. Matrice RLS complète, Auth, Storage, RPC, rollback chronométré
+6. Phase 2 : `CLAUDE.md`, modules et entitlements, marque Fideliz, charte
    blanc/orange `#F5821E`, portage jeux et avis, migrateur idempotent,
    dry-runs, réconciliation, verdict

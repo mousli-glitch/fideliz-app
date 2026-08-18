@@ -404,7 +404,12 @@ create index if not exists winners_ip_hash_created_idx on public.winners (ip_has
 
 create or replace function public."current_role"()
 returns text language sql stable set search_path to 'public'
-as $$ select coalesce((select role from public.profiles where id = auth.uid()), 'anon'); $$;
+as $$
+  select coalesce(
+    (select role from public.profiles where id = auth.uid()),
+    'anon'
+  );
+$$;
 
 create or replace function public.current_restaurant_id()
 returns uuid language sql stable set search_path to 'public'
@@ -1260,13 +1265,21 @@ create policy winners_update_own on public.winners as permissive for update to a
 
 create policy archive_root_only on public.winners_archive as permissive for all to authenticated using (is_root()) with check (is_root());
 
+drop policy if exists "Allow deletes for authenticated users" on storage.objects;
 create policy "Allow deletes for authenticated users" on storage.objects as permissive for delete to authenticated using ((bucket_id = 'backgrounds'::text));
+drop policy if exists "Allow public read access" on storage.objects;
 create policy "Allow public read access" on storage.objects as permissive for select to public using ((bucket_id = 'backgrounds'::text));
+drop policy if exists "Allow updates for authenticated users" on storage.objects;
 create policy "Allow updates for authenticated users" on storage.objects as permissive for update to authenticated using ((bucket_id = 'backgrounds'::text));
+drop policy if exists "Allow uploads for authenticated users" on storage.objects;
 create policy "Allow uploads for authenticated users" on storage.objects as permissive for insert to authenticated with check ((bucket_id = 'backgrounds'::text));
+drop policy if exists "admin_access 1peuqw_0" on storage.objects;
 create policy "admin_access 1peuqw_0" on storage.objects as permissive for select to authenticated using ((bucket_id = 'logos'::text));
+drop policy if exists "admin_access 1peuqw_1" on storage.objects;
 create policy "admin_access 1peuqw_1" on storage.objects as permissive for insert to authenticated with check ((bucket_id = 'logos'::text));
+drop policy if exists "admin_access 1peuqw_2" on storage.objects;
 create policy "admin_access 1peuqw_2" on storage.objects as permissive for update to authenticated using ((bucket_id = 'logos'::text));
+drop policy if exists "admin_access 1peuqw_3" on storage.objects;
 create policy "admin_access 1peuqw_3" on storage.objects as permissive for delete to authenticated using ((bucket_id = 'logos'::text));
 
 -- ─────────────────────────────────────────────────────────────── grants
