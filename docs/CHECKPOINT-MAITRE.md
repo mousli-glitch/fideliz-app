@@ -1,5 +1,28 @@
 # Checkpoint maître — fusion Fideliz → Cartiz
 
+## ⚡ Où reprendre (18/08, fin de séance)
+
+**Production** : `main` = `41659a8`. Deux hotfix APPLICATIFS déployés, aucune
+migration SQL. `4353595` ferme le P0 d'autorisation par slug ; `41659a8`
+ignore `sauvegardes/`. Vercel `READY`, `app.fideliz-app.fr` attaché, témoins
+QR verts. Rollback : `dpl_335jdhvgyAF6ReH3SaAkftUMz4V6` (`a475a03`).
+
+**Branche** `feat/fusion-fideliz` = `aa4e6d0`, 151 tests verts.
+
+**Fait cette séance** : P0 slug corrigé et déployé · rollback RLS joué dans
+les deux sens et corrigé (`crm_notes` manquait son `with check`) · rollback
+qualifié « continuité, pas sécurité » + plan de correction en avant ·
+traversée UI du hotfix RLS verte.
+
+**À reprendre, dans cet ordre** :
+1. Durcissement des privilèges par défaut — appliqué sur la branche, **son
+   rollback n'est pas joué**.
+2. Gel de bascule — **jamais appliqué**, à éprouver seul.
+3. `migration repair` — toujours bloqué.
+
+⚠ Le hotfix RLS (`20260818011000` + `20260818012000`) est **prouvé mais NON
+déployé**. Il attend ta décision.
+
 Écrit le **18/08/2026 vers 02 h 20** (Paris). Aucun secret, aucune donnée
 personnelle. À lire en premier si le contexte a été réduit.
 
