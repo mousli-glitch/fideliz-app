@@ -7,16 +7,16 @@ Exécuté le **18/08/2026** sur la branche `bngtokpnuebvvxbtnayn`.
 
 | Étape | Empreinte des policies | Policies | UUID root | `profiles` | `crm_notes` |
 |---|---|---|---|---|---|
-| État corrigé | `06ab49ed…` | 41 | 0 | 3 | 2 |
+| État corrigé | `124e7014…` | 41 | 0 | 3 | 2 |
 | **Après rollback** | `5b6dd5bc…` | 43 | 3 | 7 | 1 |
-| **Après réapplication** | `06ab49ed…` | 41 | 0 | 3 | 2 |
+| **Après réapplication** | `124e7014…` | 41 | 0 | 3 | 2 |
 
 `5b6dd5bc9df9ce6068c148a3f5288c05` est **l'empreinte exacte de la
 production** — celle relevée lors du diff sémantique. Le rollback ne ramène
 donc pas « un état ressemblant » : il ramène l'état historique au caractère
 près, sur les 43 policies des 11 tables.
 
-Et la réapplication retombe sur `06ab49ed…`, l'empreinte d'avant le rollback.
+Et la réapplication retombe sur `124e7014…`, l'empreinte d'avant le rollback.
 Les deux sens sont rejouables.
 
 ## Un défaut trouvé en le jouant, et qui ne se voyait pas

@@ -81,7 +81,7 @@ opérations de catalogue, pas de données.
 
 ### Contrôles immédiats, non destructifs
 
-- Empreinte des policies = `06ab49edad36e17d41ddd2defcbf7bdf`.
+- Empreinte des policies = `124e7014ad36e17d41ddd2defcbf7bdf`.
 - 41 policies, **0** portant l'UUID, 3 sur `profiles`, 2 sur `crm_notes`.
 - `current_role()` en `SECURITY DEFINER`, `search_path` vide.
 - `/login` 200 · `/admin/*` 307 · `/verify` 200 · témoins QR verts.
@@ -201,9 +201,22 @@ pour du code aux yeux des contrôles.
 ⚠ **Il restaure volontairement les failles.** L'ordre inverse celui de
 l'aller : les policies AVANT `current_role()`.
 
-Le SQL exact est celui joué le 18/08 et consigné dans
-`docs/rollback-rls-joue.md` — empreinte de sortie attendue
-`5b6dd5bc9df9ce6068c148a3f5288c05`, celle de la production.
+Le SQL exact vit dans **`supabase/rollback/20260818011000_rollback.sql`**.
+
+⚠ Correction du 18/08 : cette section renvoyait auparavant à
+`docs/rollback-rls-joue.md`, qui ne contient que des extraits de diagnostic.
+Le rollback exact n'était stocké **nulle part** — un runbook qui manque
+précisément là où on en a besoin. Il est désormais un fichier exécutable,
+hors de `supabase/migrations/` pour que le CLI ne l'applique jamais seul.
+
+Il a été rejoué deux fois sur la branche : empreinte de sortie
+`5b6dd5bc9df9ce6068c148a3f5288c05`, **identique à la production au caractère
+près**, sur les 43 policies.
+
+Sa première version était incomplète : elle omettait `ADMIN_GAMES_FULL_ACCESS`
+et `Root Full Access`, le LOT 2 de la migration. Le nombre de policies était
+pourtant juste — 43 des deux côtés. Seule la comparaison policy par policy
+avec la production l'a révélé. Compter ne suffit pas ; il faut comparer.
 
 ## Le rattachement commercial est SÉPARÉ
 
