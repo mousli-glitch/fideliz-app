@@ -96,7 +96,14 @@ set local search_path = public, extensions;
  * Résultat mesuré sur une reconstruction : 114 privilèges de plus qu'en
  * production, dont TRUNCATE — que la RLS ne filtre pas.
  *
- * Le retrait rend le résultat déterministe quel que soit l'état de départ.
+ * Le retrait rend le résultat déterministe pour un excès posé dans CETTE
+ * portée (schéma `public`) sous LE RÔLE qui exécute cette migration. Il ne
+ * peut rien retirer d'un excès posé GLOBALEMENT (`alter default privileges
+ * for role x` sans `in schema`), ni d'un excès posé par un AUTRE rôle
+ * propriétaire (ex. un rôle de plateforme) — un retrait par schéma ne
+ * soustrait jamais un droit accordé ailleurs. Borné, pas absolu. Voir
+ * `supabase/verifications/sentinelle-privileges-anon.sql`, qui vérifie les
+ * deux portées et tous les rôles propriétaires, pas seulement celle-ci.
  */
 alter default privileges in schema public
   revoke all on tables from anon, authenticated;
