@@ -8,32 +8,32 @@ si une information manque pour cette raison, elle est signalée comme
 
 ---
 
-## ⚡ Où reprendre MAINTENANT (19/08, septième passe)
+## ⚡ Où reprendre MAINTENANT (19/08, huitième passe — relais autonome actif)
 
-**Sept tours traités.** Commits `7cbd08a`, `689b193`, `d814ebe`, `f6a6403`,
-`a961939`, `f735576`…`206adc4`, `214e0b3`, `0fd1971`, puis `aa0ec35` sur
-`candidat/baseline-acl`. Détail et preuves couche 4 :
+**Huit tours traités.** Derniers commits : `c246eab`, `29d260b`, `c0ff5f9`,
+`1ee2c0e` sur `candidat/baseline-acl`. Détail couche 4 :
 `docs/qualification-couche-4-gel.md` ; sentinelle/fonctions :
 `docs/preuve-sentinelle-et-fonctions.md`.
 
-**Tour 7 (REPEATABLE READ résolu, harnais gardé, transitions strictes) —
-traité** : la limite REPEATABLE READ du tour 6 est **levée** — la bonne
-forme est un attribut de fonction (`set default_transaction_isolation to
-'repeatable read'` dans l'en-tête, `pg_proc.proconfig`), vérifiée en
-direct (appel REST réel → `repeatable read`), sans toucher `anon` ni
-`authenticator`. Deux failles de sécurité corrigées : le harnais créait
-et accordait ses fonctions `security definer` AVANT toute garde
-d'identité (corrigé — garde SQL sur `auth.users`/volumes AVANT toute
-création, une seule transaction) ; le nettoyage DDL forçait
-inconditionnellement `actif = false`, ce qui aurait levé un vrai gel
-(corrigé — refuse si l'état n'est pas exactement ligne présente/actif
-false). Harnais Node rendu fail-closed (timeouts, non-2xx = erreur,
-sortie expurgée de tout identifiant). Activation/levée : vérification
-exhaustive des 10 triggers (pas un simple compte) + transitions strictes
-(2e activation/levée refusées). Un vrai bug de course dans le harnais
-lui-même trouvé et corrigé en cours de route (pas un défaut du candidat).
-Matrice finale : 10/10 scénarios, rejouée 3 fois de suite. 213 tests
-verts.
+**Gel de bascule : `GO concurrence`.** Deux attaques vivantes (trigger
+STATEMENT, fonction homonyme d'OID différent) refusées — et la même
+expérience mesure que l'ancien contrôle textuel `ILIKE` aurait accepté le
+piège. 100 courses, 0 violation, les deux linéarisations réellement
+exercées. Cycle complet bouclé sur l'empreinte exacte. État : installé,
+**inactif**.
+
+**Tour 8 (fail-closed) — traité, commit `1ee2c0e`** : trois chemins
+destructifs fermés. `idDuCompteRoot()` **supprimé** — il ne lisait même pas
+son `error` et son `null` partait dans un `update` à la clé de service
+(`user_id = null` écrit, puis `success: true`). Il ne reste qu'un résolveur
+applicatif. `masterDeleteUser` et `deleteSalesUserAction` vérifient
+désormais chaque étape avant l'étape destructive suivante. Le filet SQL
+`handle_deleted_commercial()` refuse (`P0102`) au lieu d'écrire `null` —
+défaut prouvé en vivant AVANT correction, puis reprouvé corrigé, sur le
+vrai trigger avec identités Auth synthétiques en transaction annulée.
+Rollback rendu compatible par analyse des quatre fenêtres (les deux
+résolveurs ne décident jamais du même événement). **363 tests verts,
+typecheck code 0.**
 
 **Tours 1 et 2** (rapports 018/019 → réponses) : voir historique ci-dessous
 (§ archivé) — sentinelle durcie, harnais rejouable, `preuve-acl-avis.sql`
@@ -452,7 +452,7 @@ modifiés, tests, preuves catalogue anonymisées et réserves restantes.
 | Dépôt | Branche | Commit | État |
 |---|---|---|---|
 | `fideliz-app` | `main` (production) | `5094af3` | déployé — durcissement, fingerprint `2d2e463f…` |
-| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `aa0ec35` | arbre propre, 213 tests verts |
+| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `1ee2c0e` | arbre propre, 363 tests verts |
 | `fideliz-app` | `feat/fusion-fideliz` | — | base de référence pour les diffs cumulés |
 | `cartiz` | `feat/fusion-fideliz` | `49206fe` | — |
 
