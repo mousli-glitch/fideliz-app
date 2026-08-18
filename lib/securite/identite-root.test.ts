@@ -31,8 +31,7 @@ const UUID_ROOT = "04eb7091-6876-41e0-84c6-5891658a5768";
    sont exemptés, nommément. */
 const EXEMPTS = new Set([
   "00000000000000_baseline_fideliz.sql",
-  "20260818011000_rls_profils_et_restaurants.sql",
-  "20260818012000_identite_root_par_le_role.sql",
+  "20260818011000_rls_isolation_inter_tenant.sql",
 ]);
 
 function fichiers(dossier: string, ext: string[]): string[] {
@@ -89,7 +88,7 @@ describe("aucune autorisation attachée à une personne", () => {
 
   it("la migration corrective retire bien les deux dernières policies", () => {
     const sql = readFileSync(
-      join(RACINE, "supabase", "migrations", "20260818012000_identite_root_par_le_role.sql"),
+      join(RACINE, "supabase", "migrations", "20260818011000_rls_isolation_inter_tenant.sql"),
       "utf8",
     );
     const propre = sansCommentaires(sql);
@@ -104,7 +103,7 @@ describe("aucune autorisation attachée à une personne", () => {
   it("handle_deleted_commercial cherche le root au lieu de le nommer", () => {
     const sql = sansCommentaires(
       readFileSync(
-        join(RACINE, "supabase", "migrations", "20260818012000_identite_root_par_le_role.sql"),
+        join(RACINE, "supabase", "migrations", "20260818011000_rls_isolation_inter_tenant.sql"),
         "utf8",
       ),
     );

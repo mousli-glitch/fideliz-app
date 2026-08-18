@@ -29,7 +29,14 @@ import { fileURLToPath } from "node:url";
  */
 
 const ICI = dirname(fileURLToPath(import.meta.url));
-const DURCISSEMENT = "20260818010000";
+/*
+ * Réconcilié le 18/08/2026 soir avec le candidat réellement déployé en
+ * production (`5094af3`) : l'ancien brouillon `20260818010000` (avec
+ * fonction d'audit, positionné AVANT la RLS) a été remplacé par le fichier
+ * effectivement livré, `20260818150000` — après la RLS/identité-root
+ * (`20260818011000_rls_isolation_inter_tenant.sql`), sans fonction d'audit.
+ */
+const DURCISSEMENT = "20260818150000";
 
 const migrations = readdirSync(ICI)
   .filter((f) => f.endsWith(".sql"))
@@ -130,22 +137,15 @@ describe("durcissement — les nouveaux objets naissent fermés", () => {
     expect(sql).not.toMatch(/grant all on sequences to service_role/i);
   });
 
-  it("la fonction d'audit voit les fonctions dont l'ACL est absente", () => {
-    /* Une fonction à `proacl` NULL porte le défaut câblé — propriétaire ET
-       PUBLIC. Elle est donc ouverte à tous sans qu'aucun `grant` n'existe.
-       Un audit qui ne regarde que les grants explicites passe à côté du cas
-       exact qui a produit les deux P0. */
-    const sql = sansCommentaires(durcissement!.sql);
-    expect(sql).toMatch(/auditer_privileges_publics/);
-    expect(sql).toMatch(/proacl is null/i);
-  });
-
-  it("la fonction d'audit n'est pas joignable par anon ni authenticated", () => {
-    const sql = sansCommentaires(durcissement!.sql);
-    expect(sql).toMatch(
-      /revoke all on function public\.auditer_privileges_publics\(\)[^;]*from[^;]*public/i,
-    );
-  });
+  /*
+   * La fonction `auditer_privileges_publics()` a existé dans un brouillon de
+   * cette migration. Le candidat réellement déployé en production (`5094af3`,
+   * commit "candidat minimal, sans fonction d'audit") l'exclut délibérément —
+   * la détection repose sur `sentinelle-privileges-anon.sql` et
+   * `empreintes.sql`, versionnés et rejouables, plutôt que sur une fonction
+   * vivant dans la base. Pas de test la réclamant ici : ce serait tester un
+   * brouillon abandonné, pas ce qui protège réellement.
+   */
 });
 
 /*
