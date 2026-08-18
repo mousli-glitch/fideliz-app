@@ -182,3 +182,68 @@ describe("baseline — les ACL des fonctions sensibles", () => {
     }
   });
 });
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ *  LES VUES NE DOIVENT JAMAIS PERDRE security_invoker
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * Sans cette option, une vue s'exécute avec les droits de son PROPRIÉTAIRE —
+ * `postgres`, qui contourne la RLS. `public_winners_safe` expose des colonnes
+ * de `winners` et accorde SELECT à `anon` : sans l'option, tout visiteur y
+ * lirait l'état de tous les tickets, tous restaurants confondus.
+ *
+ * La première baseline créait les quatre vues sans aucune option. Constaté le
+ * 18/08/2026 en comparant `reloptions` : production `security_invoker` sur les
+ * quatre, branche reconstruite AUCUNE.
+ */
+describe("baseline — security_invoker sur les quatre vues", () => {
+  const baseline = readFileSync(
+    join(ICI, migrations.find((n) => n.includes("baseline_fideliz"))!),
+    "utf8"
+  );
+  const code = baseline
+    .split("\n")
+    .filter((l) => !l.trimStart().startsWith("--") && !l.trimStart().startsWith("*"))
+    .join("\n");
+
+  /* Orthographe exacte de la production : « on » pour deux vues, « true »
+     pour les deux autres. Même sémantique, mais on restitue tel quel —
+     uniformiser corrigerait un état historique sans mandat. */
+  const attendu: Record<string, string> = {
+    public_restaurants: "on",
+    view_integrity_check: "on",
+    public_winners_safe: "true",
+    v_my_access_status: "true",
+  };
+
+  for (const [vue, valeur] of Object.entries(attendu)) {
+    it(`${vue} porte security_invoker = ${valeur}`, () => {
+      const motif = new RegExp(
+        `alter\\s+view\\s+public\\.${vue}\\s+set\\s*\\(\\s*security_invoker\\s*=\\s*${valeur}\\s*\\)`,
+        "i"
+      );
+      expect(code).toMatch(motif);
+    });
+  }
+
+  it("les quatre vues sont créées, et aucune de plus", () => {
+    const creees = [...code.matchAll(/create\s+or\s+replace\s+view\s+public\.(\w+)/gi)].map((m) => m[1]);
+    expect(creees.sort()).toEqual(Object.keys(attendu).sort());
+  });
+
+  /*
+   * Le test qui compte le plus. Si quelqu'un recrée `public_winners_safe`
+   * plus bas dans le fichier sans repasser l'option, la vue la perd — un
+   * `create or replace view` réinitialise les reloptions.
+   */
+  it("public_winners_safe ne peut pas être recréée après son ALTER VIEW", () => {
+    const iAlter = code.search(/alter\s+view\s+public\.public_winners_safe/i);
+    const apres = code.slice(iAlter);
+    expect(apres).not.toMatch(/create\s+or\s+replace\s+view\s+public\.public_winners_safe/i);
+  });
+
+  it("les définitions des vues restent inchangées", () => {
+    expect(code).toMatch(/create or replace view public\.public_winners_safe as\s+select id, prize_label_snapshot, created_at, status from public\.winners/i);
+  });
+});

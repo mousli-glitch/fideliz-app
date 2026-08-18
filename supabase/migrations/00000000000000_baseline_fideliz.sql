@@ -978,6 +978,33 @@ create or replace view public.view_integrity_check as
   from public.restaurants
   where owner_id is null or created_by is null;
 
+/*
+ * ─── security_invoker : LA SEULE CHOSE QUI SÉPARE CES VUES D'UNE FUITE ───
+ *
+ * Sans cette option, une vue s'exécute avec les droits de son PROPRIÉTAIRE —
+ * ici `postgres`, qui contourne la RLS. Avec elle, elle s'exécute avec les
+ * droits de l'appelant, et la RLS de la table sous-jacente s'applique.
+ *
+ * `public_winners_safe` expose des colonnes de `winners` et accorde SELECT à
+ * `anon`. Sans `security_invoker`, n'importe quel visiteur y lirait l'état de
+ * TOUS les tickets, tous restaurants confondus.
+ *
+ * La première version de cette baseline créait les quatre vues sans aucune
+ * option. Elle aurait donc ouvert, dans le fichier même censé décrire la
+ * production fidèlement, un trou que la production n'a pas. Constaté le
+ * 18/08/2026 en comparant `reloptions` : production `security_invoker` sur
+ * les quatre, branche reconstruite AUCUNE.
+ *
+ * L'orthographe diffère d'une vue à l'autre en production — `on` pour deux,
+ * `true` pour deux autres. Même sémantique. On restitue chacune telle qu'elle
+ * est écrite : « uniformiser » serait corriger un état historique sans
+ * mandat, et ferait diverger l'empreinte.
+ */
+alter view public.public_restaurants   set (security_invoker = on);
+alter view public.view_integrity_check set (security_invoker = on);
+alter view public.public_winners_safe  set (security_invoker = true);
+alter view public.v_my_access_status   set (security_invoker = true);
+
 -- ────────────────────────────────────────────────────────────── Storage
 
 insert into storage.buckets (id, name, public) values ('backgrounds', 'backgrounds', true)
