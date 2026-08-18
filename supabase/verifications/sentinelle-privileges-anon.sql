@@ -1,10 +1,22 @@
 /*
  * ═══════════════════════════════════════════════════════════════════════════
- *  SENTINELLE — aucun droit excessif pour anon / authenticated
+ *  SENTINELLE — MODE STRICT — aucun droit excessif pour anon / authenticated
  * ═══════════════════════════════════════════════════════════════════════════
  *
  *  À jouer après toute reconstruction, et avant de déclarer un environnement
  *  conforme. Elle échoue bruyamment plutôt que de rendre une ligne verte.
+ *
+ *  ─── Mode STRICT, pas opérationnel (18/08/2026) ───
+ *
+ *  Ce fichier contrôle TOUS les propriétaires sans exception, y compris
+ *  `supabase_admin` — c'est la référence pour le dossier fournisseur et les
+ *  audits exhaustifs. Il lève donc actuellement sur la production elle-même
+ *  (l'entrée `supabase_admin`, `NEEDS_VENDOR_CONFIRMATION`), ce qui est
+ *  voulu ici mais bloquerait à tort un pipeline quotidien qui n'a aucune
+ *  action possible sur ce rôle. Pour l'usage courant, voir
+ *  `sentinelle-mode-operationnel.sql`, qui sépare FAIL PROJECT (bloquant,
+ *  sous contrôle du projet) de PLATFORM WARNING (non bloquant, visible,
+ *  scopé au seul `supabase_admin`).
  *
  *  ─── Ce qu'elle attrape, et pourquoi ça compte ───
  *

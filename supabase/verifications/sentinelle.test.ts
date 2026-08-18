@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 const ICI = dirname(fileURLToPath(import.meta.url));
 const sentinelle = readFileSync(join(ICI, "sentinelle-privileges-anon.sql"), "utf8");
 const harnais = readFileSync(join(ICI, "harnais-scenarios-sentinelle.sql"), "utf8");
+const modeOperationnel = readFileSync(join(ICI, "sentinelle-mode-operationnel.sql"), "utf8");
 const preuveAvis = readFileSync(join(ICI, "preuve-acl-avis.sql"), "utf8");
 const empreintes = readFileSync(join(ICI, "empreintes.sql"), "utf8");
 
@@ -39,26 +40,58 @@ function extraireAncres(texte: string, nom: string): string[] {
   return trouvailles;
 }
 
-describe("le harnais des 4 scénarios ne peut pas diverger de la sentinelle", () => {
+describe("le harnais et le mode opérationnel ne peuvent pas diverger de la sentinelle (mode strict)", () => {
+  const consommateurs = { harnais, "mode-opérationnel": modeOperationnel };
+
   for (const nom of ["RELATIONS", "DEFAUTS"] as const) {
     it(`ancre ${nom} : la sentinelle en porte exactement une définition canonique`, () => {
       const canoniques = extraireAncres(sentinelle, nom);
       expect(canoniques, `aucune ancre ${nom} trouvée dans sentinelle-privileges-anon.sql`).toHaveLength(1);
     });
 
-    it(`ancre ${nom} : le harnais en porte au moins une occurrence`, () => {
-      const occurrences = extraireAncres(harnais, nom);
-      expect(occurrences.length, `aucune occurrence de l'ancre ${nom} dans le harnais`).toBeGreaterThan(0);
-    });
+    for (const [etiquette, texte] of Object.entries(consommateurs)) {
+      it(`ancre ${nom} : ${etiquette} en porte au moins une occurrence`, () => {
+        const occurrences = extraireAncres(texte, nom);
+        expect(occurrences.length, `aucune occurrence de l'ancre ${nom} dans ${etiquette}`).toBeGreaterThan(0);
+      });
 
-    it(`ancre ${nom} : chaque occurrence du harnais est identique caractère pour caractère à la sentinelle`, () => {
-      const [canonique] = extraireAncres(sentinelle, nom);
-      const occurrences = extraireAncres(harnais, nom);
-      for (const [i, occ] of occurrences.entries()) {
-        expect(occ, `occurrence #${i} de l'ancre ${nom} dans le harnais a dérivé de la sentinelle`).toBe(canonique);
-      }
-    });
+      it(`ancre ${nom} : chaque occurrence dans ${etiquette} est identique caractère pour caractère à la sentinelle`, () => {
+        const [canonique] = extraireAncres(sentinelle, nom);
+        const occurrences = extraireAncres(texte, nom);
+        for (const [i, occ] of occurrences.entries()) {
+          expect(occ, `occurrence #${i} de l'ancre ${nom} dans ${etiquette} a dérivé de la sentinelle`).toBe(canonique);
+        }
+      });
+    }
   }
+});
+
+describe("mode opérationnel — FAIL PROJECT vs PLATFORM WARNING, classification stricte", () => {
+  it("émet un FAIL PROJECT bloquant (raise exception) pour les divergences du projet", () => {
+    expect(modeOperationnel).toMatch(/raise exception 'FAIL PROJECT/);
+  });
+
+  it("émet un PLATFORM WARNING non bloquant (raise warning, pas exception) pour supabase_admin", () => {
+    expect(modeOperationnel).toMatch(/raise warning 'PLATFORM WARNING/);
+    /* Le warning ne doit jamais devenir une exception : la clause doit rester
+       `raise warning`, pas `raise exception`, sur la branche supabase_admin. */
+    const blocWarningDefauts = modeOperationnel.slice(modeOperationnel.indexOf("v_platform_warning > 0"));
+    expect(blocWarningDefauts.slice(0, 120)).not.toMatch(/raise exception/);
+  });
+
+  it("la classification est un nom littéral ('supabase_admin'), pas une heuristique sur postgres", () => {
+    expect(modeOperationnel).toMatch(/=\s*'supabase_admin'/);
+    expect(modeOperationnel).not.toMatch(/<>\s*'postgres'/);
+    expect(modeOperationnel).not.toMatch(/!=\s*'postgres'/);
+  });
+
+  it("le mode strict (sentinelle-privileges-anon.sql) ne filtre aucun propriétaire dans son corps exécutable", () => {
+    /* Le fichier DOCUMENTE supabase_admin dans ses commentaires (c'est le
+       sujet du mode strict) — ce qui est interdit, c'est un filtre dans le
+       do $$ qui l'exclurait du contrôle. */
+    const corpsDoBlock = sentinelle.slice(sentinelle.indexOf("do $$"));
+    expect(corpsDoBlock).not.toMatch(/supabase_admin/i);
+  });
 });
 
 describe("régression — les clauses qui ferment les angles morts restent présentes", () => {
