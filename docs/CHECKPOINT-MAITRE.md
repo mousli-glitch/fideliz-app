@@ -22,6 +22,17 @@ piège. 100 courses, 0 violation, les deux linéarisations réellement
 exercées. Cycle complet bouclé sur l'empreinte exacte. État : installé,
 **inactif**.
 
+**Tour 12 — commit `3c67ad7`, P0 `deleteRestaurantFullAction`** :
+ce chemin `service_role` n'avait aucun test et contournait toutes les
+garanties. L'`ownerId` venait de l'appelant sans preuve d'appartenance au
+restaurant ; `(count ?? 0) > 0` transformait une panne de lecture en
+« aucun autre restaurant » puis supprimait le compte ; les erreurs
+profil/Auth devenaient des warnings avec `success: true`. Corrigé :
+owner **lu** sur la ligne, comptage positivement réussi exigé, issues
+partielles explicites, suppression de compte déléguée à la primitive
+commune. **`deleteUser` n'a plus qu'un seul point d'appel réel dans tout
+le dépôt.** 17 tests dédiés. **400 tests, typecheck 0.**
+
 **Tour 11 — commits `de86808`, `d428b3a`, `524ab45`** :
 ambiguïté Auth **fermée** (relecture autoritative, trois issues dont
 `AUTH_OUTCOME_AMBIGUOUS` ; une erreur de transport n'est jamais repliée sur
@@ -491,7 +502,7 @@ modifiés, tests, preuves catalogue anonymisées et réserves restantes.
 | Dépôt | Branche | Commit | État |
 |---|---|---|---|
 | `fideliz-app` | `main` (production) | `5094af3` | déployé — durcissement, fingerprint `2d2e463f…` |
-| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `524ab45` | arbre propre, 383 tests verts |
+| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `3c67ad7` | arbre propre, 400 tests verts |
 | `fideliz-app` | `feat/fusion-fideliz` | — | base de référence pour les diffs cumulés |
 | `cartiz` | `feat/fusion-fideliz` | `49206fe` | — |
 
