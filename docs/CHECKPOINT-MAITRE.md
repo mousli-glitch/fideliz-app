@@ -22,6 +22,21 @@ piège. 100 courses, 0 violation, les deux linéarisations réellement
 exercées. Cycle complet bouclé sur l'empreinte exacte. État : installé,
 **inactif**.
 
+**Tour 10 — preuve rendue rejouable, commit `8501bca`** :
+`supabase/verifications/harnais-cascade-suppression.sql` versionne
+l'expérience de cascade (transaction annulée, garde de cible synthétique
+avant toute mutation, garde anti-dérive sur les deux FK dont le code
+dépend). Tests granulaires : le mock enregistre désormais charge utile ET
+prédicat — un compte de trois `restaurants:update` passait même si le code
+mettait trois fois à jour la même colonne. Plus aucun `as any`.
+**370 tests, typecheck 0.**
+
+⚠ **Décision en attente de Samy** : les quatre couches restent à rejouer
+une par une. Une branche synthétique NEUVE coûterait ~0,013 $/h sur le
+compte Supabase ; je n'ai pas engagé cette dépense. À défaut, la
+qualification se fera sur `fusion-tests-2`, déjà provisionnée, après
+retour à une baseline propre.
+
 **Tour 8-9 (fail-closed puis cascade) — commits `1ee2c0e`, `e98a8a7`** :
 
 `idDuCompteRoot()` **supprimé** (ne lisait pas son `error` ; son `null`
@@ -463,7 +478,7 @@ modifiés, tests, preuves catalogue anonymisées et réserves restantes.
 | Dépôt | Branche | Commit | État |
 |---|---|---|---|
 | `fideliz-app` | `main` (production) | `5094af3` | déployé — durcissement, fingerprint `2d2e463f…` |
-| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `e98a8a7` | arbre propre, 367 tests verts |
+| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `8501bca` | arbre propre, 370 tests verts |
 | `fideliz-app` | `feat/fusion-fideliz` | — | base de référence pour les diffs cumulés |
 | `cartiz` | `feat/fusion-fideliz` | `49206fe` | — |
 
