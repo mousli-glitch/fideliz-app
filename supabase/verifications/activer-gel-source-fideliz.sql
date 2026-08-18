@@ -12,25 +12,40 @@
  *  d'un simple COMPTE de triggers. Avant d'écrire, vérifie :
  *   1. que la table `maintenance` existe ;
  *   2. que les 10 triggers `gel_de_bascule` attendus existent EXACTEMENT
- *      comme prévu — pas seulement leur nombre. Signalé le 19/08/2026
- *      (3e tour) : dix triggers pourraient être présents mais posés sur
- *      les MAUVAISES tables, ou en `AFTER` au lieu de `BEFORE`, ou ne
- *      couvrir que deux événements sur trois, ou pointer vers une autre
- *      fonction, ou être désactivés (`tgenabled <> 'O'`) — un simple
- *      `count(*) = 10` ne détecterait aucun de ces cas. Compare
- *      maintenant, table par table : présence, `BEFORE`, portée ligne,
- *      les trois événements INSERT/UPDATE/DELETE ensemble, la fonction
- *      exacte `refuser_pendant_maintenance`, et l'état activé — ET
- *      l'absence de tout trigger `gel_de_bascule` sur une table hors
- *      de la liste attendue.
- *   3. que `actif` vaut `false` avant l'écriture — une activation ne
- *      doit jamais s'exécuter par-dessus une activation déjà en cours
- *      (qui réinitialiserait silencieusement `depuis`).
+ *      comme prévu — pas seulement leur nombre.
  *  Après l'`update`, vérifie qu'EXACTEMENT une ligne est passée à `true`.
  *
  *  Signalé le 19/08/2026 : un `update ... where id;` nu, sans contrôle du
  *  nombre de lignes affectées, peut échouer silencieusement — l'opérateur
  *  du runbook croit avoir gelé la source, elle ne l'est pas.
+ *
+ *  ─── VÉRIFICATION EXHAUSTIVE PAR pg_trigger/pg_proc, PAS PAR TEXTE ───
+ *
+ *  Signalé le 19/08/2026 (5e tour) : la version précédente lisait
+ *  `information_schema.triggers` et reconnaissait la fonction par
+ *  `action_statement ilike '%refuser_pendant_maintenance%'` — une
+ *  correspondance TEXTUELLE, pas une identité. Une fonction nommée
+ *  `evil_refuser_pendant_maintenance_bypass()` aurait matché. La portée
+ *  `FOR EACH ROW` n'était jamais contrôlée du tout (`information_schema`
+ *  ne l'expose pas directement de façon fiable pour ce contrôle).
+ *
+ *  Corrigé : lecture directe de `pg_trigger`/`pg_proc`, catalogues
+ *  système, pas du texte reconstruit.
+ *   - `t.tgfoid = 'public.refuser_pendant_maintenance()'::regprocedure`
+ *     — comparaison d'OID, identité exacte de la fonction, aucune
+ *     ambiguïté possible avec un nom ressemblant.
+ *   - `t.tgtype = 31` — bitmask PostgreSQL vérifié en direct sur cette
+ *     branche avant d'être codé en dur (`ROW`=1 + `BEFORE`=2 +
+ *     `INSERT`=4 + `DELETE`=8 + `UPDATE`=16 = 31). L'égalité STRICTE,
+ *     pas une comparaison par bit, exclut aussi bien un trigger
+ *     `STATEMENT` (bit `ROW` absent) qu'un trigger portant en plus
+ *     `TRUNCATE` (bit 32 présent) — « aucun événement supplémentaire »,
+ *     pas seulement « au moins ces trois-là ».
+ *   - `t.tgenabled = 'O'` — activé normalement (`D` = désactivé,
+ *     `R`/`A` = activé seulement en mode replica/always, jamais
+ *     l'attendu ici).
+ *   - Un trigger PAR table (compté depuis `pg_trigger` directement, pas
+ *     reconstruit depuis des lignes déjà éclatées par événement).
  */
 
 begin;
@@ -51,23 +66,17 @@ begin
     raise exception 'ACTIVATION REFUSÉE : table public.maintenance introuvable.';
   end if;
 
-  -- ─── Comparaison exacte : présence, BEFORE, ROW, les 3 événements,
-  -- la bonne fonction, activé — table par table, contre la liste attendue.
+  -- ─── Comparaison exacte, par catalogue système, table par table.
   with attendues as (
     select unnest(v_tables_attendues) as table_nom
   ),
   reels as (
     select
-      it.event_object_table as table_nom,
-      it.action_timing,
-      string_agg(distinct it.event_manipulation, ',' order by it.event_manipulation) as evenements,
-      bool_or(it.action_statement ilike '%refuser_pendant_maintenance%') as bonne_fonction
-    from information_schema.triggers it
-    where it.trigger_schema = 'public' and it.trigger_name = 'gel_de_bascule'
-    group by it.event_object_table, it.action_timing
-  ),
-  actives as (
-    select c.relname as table_nom, bool_and(t.tgenabled = 'O') as toutes_activees
+      c.relname as table_nom,
+      count(*) as n,
+      bool_and(t.tgtype = 31) as type_exact,
+      bool_and(t.tgenabled = 'O') as toutes_activees,
+      bool_and(t.tgfoid = 'public.refuser_pendant_maintenance()'::regprocedure) as bonne_fonction
     from pg_trigger t
     join pg_class c on c.oid = t.tgrelid
     join pg_namespace n on n.oid = c.relnamespace
@@ -77,35 +86,35 @@ begin
   verdict as (
     select
       a.table_nom,
-      (r.table_nom is not null)                                  as trigger_present,
-      coalesce(r.action_timing = 'BEFORE', false)                as bien_before,
-      coalesce(r.evenements = 'DELETE,INSERT,UPDATE', false)     as tous_evenements,
-      coalesce(r.bonne_fonction, false)                          as bonne_fonction,
-      coalesce(act.toutes_activees, false)                       as active
+      coalesce(r.n, 0) = 1                as exactement_un,
+      coalesce(r.type_exact, false)       as type_exact,
+      coalesce(r.toutes_activees, false)  as active,
+      coalesce(r.bonne_fonction, false)   as bonne_fonction
     from attendues a
     left join reels r on r.table_nom = a.table_nom
-    left join actives act on act.table_nom = a.table_nom
   )
   select count(*),
          string_agg(
-           table_nom || ' (présent=' || trigger_present || ' before=' || bien_before ||
-           ' evenements=' || tous_evenements || ' fonction=' || bonne_fonction || ' actif=' || active || ')',
+           table_nom || ' (n=' || (select coalesce(r.n, 0) from reels r where r.table_nom = verdict.table_nom) ||
+           ' type_exact=' || type_exact || ' actif=' || active || ' fonction=' || bonne_fonction || ')',
            ', '
          )
     into v_ecarts, v_detail
   from verdict
-  where not (trigger_present and bien_before and tous_evenements and bonne_fonction and active);
+  where not (exactement_un and type_exact and active and bonne_fonction);
 
   if v_ecarts > 0 then
-    raise exception 'ACTIVATION REFUSÉE : % table(s) sans trigger gel_de_bascule conforme (présent+BEFORE+3 événements+bonne fonction+activé). Détail : %',
+    raise exception 'ACTIVATION REFUSÉE : % table(s) sans trigger gel_de_bascule conforme (exactement 1, tgtype=31 [BEFORE+ROW+INSERT+UPDATE+DELETE, rien de plus], tgenabled=O, tgfoid=refuser_pendant_maintenance exact). Détail : %',
       v_ecarts, left(v_detail, 800);
   end if;
 
   -- ─── Aucun trigger gel_de_bascule sur une table HORS de la liste attendue.
   select count(*) into v_extra
-  from information_schema.triggers it
-  where it.trigger_schema = 'public' and it.trigger_name = 'gel_de_bascule'
-    and it.event_object_table <> all (v_tables_attendues);
+  from pg_trigger t
+  join pg_class c on c.oid = t.tgrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and t.tgname = 'gel_de_bascule' and not t.tgisinternal
+    and c.relname <> all (v_tables_attendues);
 
   if v_extra > 0 then
     raise exception 'ACTIVATION REFUSÉE : % trigger(s) gel_de_bascule trouvé(s) sur une table imprévue.', v_extra;
@@ -131,7 +140,7 @@ begin
     raise exception 'ACTIVATION REFUSÉE : % ligne(s) affectée(s) par l''activation, 1 attendue. AUCUNE activation effective.', v_lignes;
   end if;
 
-  raise notice 'GEL SOURCE FIDELIZ ACTIVÉ — 10 triggers vérifiés conformes (table, BEFORE, 3 événements, fonction, actif), 1 ligne passée à true.';
+  raise notice 'GEL SOURCE FIDELIZ ACTIVÉ — 10 triggers vérifiés conformes par catalogue système (tgtype=31 exact, tgenabled=O, tgfoid exact), 1 ligne passée à true.';
 end $$;
 
 commit;

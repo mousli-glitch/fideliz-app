@@ -455,20 +455,40 @@ describe("gel source Fideliz — activation/levée fail-closed, jamais service_r
   // silencieux.
   const VERIFICATIONS = join(ICI, "..", "verifications");
 
-  it("activer-gel-source-fideliz.sql existe, compare les triggers table par table (pas un simple compte), contrôle le row_count, transition stricte, jamais service_role", () => {
+  it("activer-gel-source-fideliz.sql vérifie les triggers par catalogue système (identité exacte, pas correspondance textuelle)", () => {
+    // Signalé le 19/08 (5e tour) : la version précédente reconnaissait la
+    // fonction par `action_statement ilike '%refuser_pendant_maintenance%'`
+    // — textuel, pas une identité : une fonction nommée
+    // `evil_refuser_pendant_maintenance_bypass()` aurait matché. Et la
+    // portée FOR EACH ROW n'était jamais contrôlée. Ces gardes-ci vérifient
+    // que le script lit bien pg_trigger/pg_proc ; la preuve VIVANTE que les
+    // deux cas d'attaque sont effectivement refusés est en §10 de
+    // docs/qualification-couche-4-gel.md (jouée sur fusion-tests-2).
     const sql = readFileSync(join(VERIFICATIONS, "activer-gel-source-fideliz.sql"), "utf8");
     const sansCom = sansCommentaires(sql);
     expect(sansCom).toMatch(/get diagnostics\s+\w+\s*=\s*row_count/i);
     expect(sansCom).toMatch(/if\s+\w+\s*<>\s*1\s+then\s+raise exception/i);
     expect(sansCom).toMatch(/tgname\s*=\s*'gel_de_bascule'/i);
-    // Comparaison exhaustive : présence, BEFORE, les 3 événements, la
-    // fonction exacte, l'état activé — pas seulement un compte.
-    expect(sansCom).toMatch(/action_timing\s*=\s*'BEFORE'/i);
-    expect(sansCom).toMatch(/'DELETE,INSERT,UPDATE'/i);
-    expect(sansCom).toMatch(/refuser_pendant_maintenance/i);
+
+    // Identité EXACTE de la fonction par OID, jamais une correspondance de nom.
+    expect(sansCom, "la fonction doit être identifiée par regprocedure, pas par ILIKE").toMatch(
+      /tgfoid\s*=\s*'public\.refuser_pendant_maintenance\(\)'::regprocedure/i,
+    );
+    expect(sansCom, "aucune reconnaissance de fonction par correspondance textuelle").not.toMatch(
+      /action_statement\s+ilike/i,
+    );
+
+    // tgtype = 31 en égalité STRICTE : BEFORE+ROW+INSERT+UPDATE+DELETE et
+    // rien d'autre. Exclut un trigger STATEMENT (bit ROW absent) comme un
+    // trigger portant TRUNCATE en plus (bit 32).
+    expect(sansCom, "tgtype doit être comparé en égalité stricte à 31").toMatch(/tgtype\s*=\s*31/i);
+
     expect(sansCom).toMatch(/tgenabled\s*=\s*'O'/i);
-    // Aucun trigger gel_de_bascule sur une table hors de la liste attendue.
-    expect(sansCom).toMatch(/event_object_table\s*<>\s*all\s*\(/i);
+    // Exactement un trigger par table attendue.
+    expect(sansCom).toMatch(/coalesce\(r\.n,\s*0\)\s*=\s*1/i);
+    // Aucun trigger gel_de_bascule sur une table hors de la liste attendue,
+    // lu depuis pg_class (pas information_schema).
+    expect(sansCom).toMatch(/c\.relname\s*<>\s*all\s*\(/i);
     // Transition stricte : refuse si déjà actif.
     expect(sansCom).toMatch(/if\s+v_actif_avant\s+then\s+raise exception/i);
     expect(sansCom).not.toMatch(/service_role/i);
