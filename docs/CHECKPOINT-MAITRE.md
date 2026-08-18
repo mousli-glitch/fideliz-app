@@ -23,11 +23,13 @@ et `empreintes.sql` corrigés, refs de projet retirées, dossier
 
 1. ✅ **Le « cycle GRANT/REVOKE en production » du rapport 020 était une
    erreur de rédaction, pas une action réelle.** Vérifié : toutes les
-   mutations de `preuve-acl-avis` ont eu lieu sur `fusion-tests-2`, jamais
-   sur `kzeuplszcqjqaqohfbzk`. Empreintes des 11 dimensions re-mesurées en
+   mutations de `preuve-acl-avis` ont eu lieu sur la branche synthétique,
+   jamais sur la production. Empreintes des 11 dimensions re-mesurées en
    production : identiques, octet pour octet, à toutes les mesures
    précédentes. Une seule phrase ambiguë du rapport 020 mélangeait les deux
    environnements — corrigé, pas de `NEEDS_USER` puisque rien ne divergeait.
+   Preuve de confinement détaillée (cibles et ordre des appels, alias
+   d'environnement) : `docs/preuve-confinement-grant-revoke.md`.
 2. ✅ **Deux modes de sentinelle**, commit `d814ebe` :
    `sentinelle-privileges-anon.sql` = mode STRICT (tout propriétaire,
    lève sur `supabase_admin`) ; `sentinelle-mode-operationnel.sql` = sépare
@@ -72,11 +74,46 @@ et `empreintes.sql` corrigés, refs de projet retirées, dossier
    `service_role` = exactement les 4 verbes attendus, avant ET après
    réapplication).
 
-**175 tests verts.** **Pas encore fait, dans l'ordre** : couche 4 (gel,
-matrice de concurrence à 2 sessions — jamais tentée, c'est le morceau le
-plus long) · réserves du candidat UUID-root · migrateur/dry-run/UI/
-compatibilité. Voir le rapport complet donné directement dans le chat (le
-relais reste considéré inactif — bloqué à l'ID `017` depuis deux tours).
+**Tour 4 (couche 4 + tentative de matrice de concurrence) — traité,
+commit `a961939`** :
+
+6. ✅ **Couche 4 (gel de bascule) qualifiée en écriture sur
+   `fusion-tests-2`** : candidat comparé à `candidat/gel-matrice` (deux
+   designs différents — source-only vs bidirectionnel avec laissez-passer
+   migrateur par jeton ; le candidat retenu est le plus complet, conservé
+   tel quel). Couverture des 7 tables gelées vérifiée, deux questions
+   ouvertes signalées (`crm_notes`, `sales_restaurants` non gelées — ni
+   exclues explicitement ni couvertes). Cycle empreinte
+   avant/après/rollback/réapplication bouclé sur 11 dimensions,
+   correspondance exacte à chaque étape. Écritures normales prouvées non
+   bloquées tant qu'inactif. État final : installé, **inactif**. Détail :
+   `docs/qualification-couche-4-gel.md`.
+7. ⚠️ **Matrice de concurrence à deux sessions : non réalisable avec les
+   outils disponibles.** `dblink_connect` refuse toute connexion émise par
+   un rôle non superutilisateur (`rolsuper = false` confirmé pour
+   `postgres` sur cette branche managée) ; `pg_background` absent ; aucun
+   `psql`/Docker local sur cette machine (constaté en tout début de
+   séance). Tentative complète menée (rôle jetable à mot de passe aléatoire
+   jamais affiché) puis intégralement nettoyée avant de conclure au
+   blocage. **Analyse théorique** du scénario critique identifié par Samy
+   (REPEATABLE READ, snapshot fixé avant activation) à partir de la
+   sémantique MVCC documentée de PostgreSQL : le mécanisme n'a aucun
+   dispositif indépendant du snapshot (pas de verrou, pas de `LOCK TABLE`),
+   le risque est réel et non réfuté. **Verdict : `NO-GO concurrence`**, non
+   requalifié en acceptable faute de preuve du contraire — conformément à
+   la consigne. Piste de correction proposée (verrou consultatif +
+   drainage `pg_stat_activity`), non implémentée ni vérifiée : bloquée par
+   la même contrainte d'outillage.
+
+**175 tests verts** (inchangé depuis le tour 3 — ce tour n'a modifié aucun
+fichier de test). **Pas encore fait** : lever le blocage d'outillage de la
+matrice de concurrence (nécessiterait Docker/Postgres local ou un accès
+`psql` sur cette machine — à décider par Samy, sort du périmètre d'une
+modification de base de données) · implémenter et vérifier la piste de
+correction du gel · réserves du candidat UUID-root · migrateur/dry-run/UI/
+compatibilité · comparaison avec `FIDELIZ_MASTER_DOC`. Voir le rapport
+complet donné directement dans le chat (le relais reste considéré inactif
+— bloqué à l'ID `017` depuis trois tours).
 
 ---
 
@@ -373,29 +410,40 @@ modifiés, tests, preuves catalogue anonymisées et réserves restantes.
 
 ---
 
-## 4. État Git (18/08, soirée, vérifié)
+## 4. État Git (19/08, nuit, vérifié)
 
 | Dépôt | Branche | Commit | État |
 |---|---|---|---|
 | `fideliz-app` | `main` (production) | `5094af3` | déployé — durcissement, fingerprint `2d2e463f…` |
-| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `689b193` | arbre propre, 171 tests verts |
+| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `a961939` | arbre propre, 175 tests verts |
 | `fideliz-app` | `feat/fusion-fideliz` | — | base de référence pour les diffs cumulés |
 | `cartiz` | `feat/fusion-fideliz` | `49206fe` | — |
 
-**Diff cumulé `feat/fusion-fideliz..candidat/baseline-acl`** : 16 fichiers,
-+1685/−266.
+**Diff cumulé `feat/fusion-fideliz..candidat/baseline-acl`** : 28 fichiers,
++2645/−738.
 
-**Commits du candidat** (4, sur `baseline-acl`) :
+**Commits du candidat** (10, sur `baseline-acl`, du plus ancien au plus récent) :
 - `f70ccb3` — retirer avant d'accorder, 114 privilèges de trop dont TRUNCATE à anon
 - `9edefbc` — test permanent de l'ordre revoke-puis-grant
 - `7cbd08a` — sentinelle droits effectifs/tout propriétaire/global/PUBLIC,
   22 fonctions closes, découverte `supabase_admin` en production
+- `2ef0a4e` — docs (checkpoint)
 - `689b193` — harnais rejouable + garde anti-dérive, preuve-acl-avis en
   droits effectifs, empreintes.sql exact + manifeste, CASE explicite PUBLIC,
   dossier fournisseur `supabase_admin`, refs de projet retirées des docs
+- `44cf1e3` — docs (checkpoint)
+- `d814ebe` — deux modes de sentinelle : FAIL PROJECT / PLATFORM WARNING
+- `f6a6403` — **réconciliation des migrations durcissement/RLS/identité-root
+  avec le candidat réellement déployé** (`5094af3`) — le brouillon antérieur
+  ne correspondait pas à la production
+- `b4a4cb2` — docs (checkpoint)
+- `a961939` — couche 4 (gel) qualifiée en écriture ; matrice de concurrence
+  `NO-GO` faute d'outillage (voir `docs/qualification-couche-4-gel.md`)
 
 **Worktree de reconstruction** `/Users/samy/.fideliz-recon` : SHA épinglé
-`facb20c`, 0 modification (propre).
+`facb20c`, 0 modification (propre) — inchangé depuis sa création, ce
+worktree décrit l'état du socle, pas les couches appliquées sur la branche
+Supabase synthétique.
 
 **Autres branches `candidat/*` existantes** (aucune fusionnée) :
 `candidat/durcissement`, `candidat/gardes-server-only`,
@@ -509,52 +557,73 @@ actives : `role_jamais_depuis_les_metadonnees`,
 
 - Reconstruction depuis zéro (baseline + migrations historiques) reproduit
   la production sur : colonnes, contraintes, index, vues, RLS, triggers,
-  policies, Storage, séquences, ACL des relations. **Sauf** les 9 corps de
-  fonction (ouverts) et l'entrée de plateforme (divergence signalée §3/§4).
+  policies, Storage, séquences, ACL des relations.
+- **Les 22 fonctions closes**, verdict individuel par empreinte `prosrc`
+  exacte + lecture brute (aucune heuristique) : 11 identiques exactement,
+  9 différence de présentation démontrée (espaces/mise en forme, corps lu),
+  2 différences réelles entièrement attribuées à des migrations déjà
+  écrites (désormais appliquées, voir ci-dessous). Détail :
+  `docs/preuve-sentinelle-et-fonctions.md`.
 - Cycle RLS déterministe dans les deux sens ; atomicité par échec délibéré
   en milieu de fichier.
-- Cycle durcissement `06ee5db5` ↔ `2d2e463f` avec sentinelles sous le vrai
-  rôle créateur.
-- Gel de bascule refuse 16 opérations, fonctions cron, RPC et
-  `service_role`, zéro mutation — jamais appliqué hors synthétique.
-- 156 tests verts sur `candidat/baseline-acl`.
+- **Couches 1 (durcissement) et 2+3 (RLS+identité-root) qualifiées sur
+  `fusion-tests-2`** : cycle empreinte avant/après/rollback/réapplication
+  bouclé, correspondance exacte à chaque étape, `policies` après
+  application identique à la production en direct (`124e7014…`).
+- **Couche 4 (gel) qualifiée en écriture** sur `fusion-tests-2` : même
+  cycle bouclé sur 11 dimensions, écritures normales prouvées non bloquées
+  tant qu'inactif, état final installé-inactif. **Matrice de concurrence à
+  deux sessions non réalisable avec les outils disponibles** (contrainte
+  d'outillage documentée, pas un échec du candidat) — verdict
+  `NO-GO concurrence` par analyse théorique de la sémantique MVCC
+  documentée de PostgreSQL, non requalifié en acceptable faute de preuve
+  du contraire. Détail : `docs/qualification-couche-4-gel.md`.
+- **Découverte et correction majeure** : les migrations durcissement/RLS/
+  identité-root de cette branche étaient un brouillon jamais déployé,
+  différent du candidat réel de production — réconcilié (commit `f6a6403`).
+  Qualifier contre le brouillon n'aurait rien prouvé.
+- **175 tests verts** sur `candidat/baseline-acl`.
 
 **Dette assumée, non corrigée délibérément** : `updateGameAction` non
 transactionnel (test de caractérisation en place) ; 4 fichiers
 `service_role` dormants durcis seulement sur `candidat/p0-dormant` ; 5 crons
 production avec 4 doublons de la même fonction d'archivage (3 à la même
-minute) — signalé, pas corrigé.
+minute) — signalé, pas corrigé ; `supabase_admin` classé
+`NEEDS_VENDOR_CONFIRMATION`, dossier fournisseur prêt non soumis ; deux
+tables (`crm_notes`, `sales_restaurants`) ni gelées ni explicitement
+exclues du gel — signalé, décision de Samy attendue.
 
 ---
 
 ## 9. Tâches en attente, dans l'ordre
 
-1. ~~Exécuter la réponse au rapport 018~~ **fait** (commit `7cbd08a`).
-   ~~Exécuter l'audit du rapport 019~~ **fait** (commit `689b193`) : harnais
-   rejouable, droits effectifs partout, empreinte exacte + manifeste,
-   CASE explicite, refs de projet retirées, dossier fournisseur
-   `supabase_admin` en brouillon non soumis. Reste seulement : la décision
-   de Samy sur `supabase_admin` (remédiation séparée, autorisée
-   explicitement, ou risque assumé tel quel — pas une décision technique).
-   Déposer le rapport 020 dans le relais (§3).
-2. Appliquer les quatre couches **séparément** sur la branche synthétique :
-   durcissement, RLS, identité root, gel inactif — chacune avec fingerprint
-   avant, delta attendu seul, sentinelles, vrai rollback, fingerprint
-   restauré, réapplication exacte.
-3. Matrice de concurrence du gel avec deux connexions réelles : READ
-   COMMITTED, REPEATABLE READ avec snapshot fixé avant activation, écriture
-   déjà engagée, nouvelle transaction après activation, requête de
-   drainage `pg_stat_activity`, timeout de drainage → NO-GO, création
-   Auth/profil pendant le gel sans orphelin, traduction `GEL01` seule,
-   rollback puis réinstallation, état final inactif.
+1. ~~Exécuter la réponse au rapport 018~~ **fait** (`7cbd08a`).
+   ~~Exécuter l'audit du rapport 019~~ **fait** (`689b193`).
+   ~~Incident GRANT/REVOKE, deux modes de sentinelle, réconciliation des
+   migrations, couches 1+2+3~~ **fait** (`d814ebe`, `f6a6403`).
+   ~~Couche 4 (gel), tentative de matrice de concurrence~~ **fait**
+   (`a961939`) — qualifiée en écriture, `NO-GO concurrence` par contrainte
+   d'outillage documentée.
+2. **Décision de Samy attendue, pas une tâche technique** : lever le
+   blocage d'outillage de la matrice de concurrence nécessiterait Docker +
+   Postgres local ou un accès `psql` sur cette machine — sort du périmètre
+   d'une modification de base de données synthétique, non fait
+   unilatéralement. Sans cela, la piste de correction proposée (verrou
+   consultatif + drainage) ne peut être ni implémentée avec confiance ni
+   vérifiée.
+3. Trancher `crm_notes`/`sales_restaurants` : à geler aussi, ou
+   explicitement hors périmètre de migration — décision produit.
 4. Finir les réserves du candidat UUID-root : tests d'intégration des deux
    actions complètes, test d'ordre sensible aux arguments de `.order()`,
    commentaire obsolète dans `delete-sales-user.ts` ("root actif"),
    qualification séparée du risque de mutation partielle. Local uniquement,
-   pas de déploiement.
+   pas de déploiement. Candidat distinct, non fusionné.
 5. Matrice de fusion Fideliz → Cartiz : gating de fonctionnalités,
-   migrateur rejouable, compatibilité QR/URL, UI blanc-orange, répétition
-   synthétique complète — arrêt strict à `READY_FOR_MIGRATION`.
+   migrateur rejouable + preuve d'idempotence + rollback synthétique,
+   compatibilité QR/URL/comptes/fidélité/jeu 100%-gagnant/lots/tickets/
+   avis/menus, isolation multi-tenant et usages `service_role`, UI
+   blanc-orange, répétition synthétique complète — arrêt strict à
+   `READY_FOR_MIGRATION`.
 6. Comparer avec `FIDELIZ_MASTER_DOC` seulement après l'avoir réellement lu
    dans le projet Cartiz.
 
@@ -562,11 +631,15 @@ minute) — signalé, pas corrigé.
 
 ## 10. Documents liés
 
-`docs/preuve-sentinelle-et-fonctions.md` (18/08 soir — sentinelle durcie, 22
-fonctions closes, découverte `supabase_admin` ; **prime sur**
-`docs/diff-semantique.md` du 18/08 matin pour tout ce qui concerne les
-fonctions et les privilèges par défaut, dont la méthode d'empreinte s'est
-révélée insuffisante), `docs/dette-p0-server-actions.md`,
+`docs/preuve-sentinelle-et-fonctions.md` (sentinelle durcie, 22 fonctions
+closes, découverte `supabase_admin` ; **prime sur** `docs/diff-semantique.md`
+pour tout ce qui concerne les fonctions et les privilèges par défaut, dont
+la méthode d'empreinte s'est révélée insuffisante),
+`docs/qualification-couche-4-gel.md` (audit, application, rollback,
+tentative de matrice de concurrence et son blocage d'outillage),
+`docs/preuve-confinement-grant-revoke.md` (reconstitution des cibles
+GRANT/REVOKE), `docs/dossier-support-supabase-admin.md`
+(brouillon non soumis), `docs/dette-p0-server-actions.md`,
 `docs/checkpoint-p0-server-actions.md`, `docs/runbook-production-rls.md`,
 `docs/matrice-gel-source.md`, `docs/diff-semantique.md`,
 `docs/matrice-ab-tenants.md`, `docs/matrice-rls-16-tables.md`,

@@ -9,7 +9,7 @@
 --  Conséquence mesurée le 18/08/2026 : une branche Supabase créée depuis ce
 --  projet rejoue les huit migrations du registre sur une base vierge, et
 --  ÉCHOUE dès la première — `avis` référence `public.restaurants(id)`, une
---  table qu'aucune migration ne crée. Branche `bngtokpnuebvvxbtnayn` :
+--  table qu'aucune migration ne crée. Branche synthétique :
 --  statut MIGRATIONS_FAILED, 0 table, 0 fonction, 0 policy, registre vide.
 --
 --  Ce fichier comble ce trou. Il décrit l'état du schéma tel qu'il était
