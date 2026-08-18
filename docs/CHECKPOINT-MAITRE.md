@@ -89,6 +89,43 @@ restaurants (`"Sales can create restaurants"`, `with check (true)`), et la
 lecture de tous les profils vient de **trois** policies `using (true)`, pas
 d'une — `temp_open_profiles`, `final_profile_access_v3`, `global_nav_profiles`.
 
+## Durcissement des privilèges par défaut — appliqué sur la branche le 18/08
+
+Migration `20260818010000`. Les nouveaux objets naissent fermés — **et les
+20 relations existantes sont inchangées**, empreinte `e16eae01…` avant comme
+après. Sentinelles : `supabase/verifications/sentinelles.sql`.
+
+⚠ **Découverte qui change la conception.** `ALTER DEFAULT PRIVILEGES … REVOKE
+EXECUTE ON FUNCTIONS FROM PUBLIC` **n'enregistre rien** sur cette instance
+(PostgreSQL 17.6, mesuré sur deux transactions séparées, avant grant, après
+grant, sur entrée vierge). Toute fonction neuve reste exécutable par `PUBLIC`,
+donc par `anon`. C'est le mécanisme exact des deux P0 du 17/08.
+
+La protection est donc une **règle**, pas un réglage : chaque fonction porte
+son propre `revoke … from public`, et `durcissement.test.ts` refuse toute
+migration qui l'oublie. Cinq de ses tests prouvent que la détection mord.
+
+Audit de l'existant : **14 fonctions ouvertes à `PUBLIC`**. Sept sont des
+fonctions de trigger, inappelables (`0A000` mesuré). Six sont `SECURITY
+INVOKER` et ne rendent rien à `anon`. Reste `check_restaurant_status(slug)`,
+`DEFINER`, qui révèle l'existence et l'UUID d'un restaurant depuis son slug —
+les slugs étant imprimés sur les QR. À fermer dans le lot RLS, pas une urgence.
+
+## Le garde — deux étages, et ce que chacun vaut
+
+| Étage | Empêche ? | Contournable ? |
+|---|---|---|
+| `.githooks/pre-push` + `prepare` npm | **oui**, bloque la poussée | `--no-verify` |
+| `.github/workflows/garde.yml` | non, **détecte** | non |
+
+`prepare` branche `core.hooksPath` à chaque `npm install` : un clone neuf
+ressort protégé, et la CI le vérifie. Aucun secret requis — le garde tourne
+entièrement hors ligne.
+
+**Reste vrai** : un `--no-verify` délibéré passe. La CI le signale ensuite en
+rouge, et une protection de branche GitHub le rendrait bloquant pour toute
+fusion. Ce dernier réglage est côté GitHub, pas dans le dépôt.
+
 ## État de la baseline
 
 `supabase/migrations/00000000000000_baseline_fideliz.sql` — **22 fonctions**,

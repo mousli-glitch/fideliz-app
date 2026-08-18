@@ -1,0 +1,67 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  LE GARDE, CÔTÉ SERVEUR
+# ═══════════════════════════════════════════════════════════════════════
+#
+# Deux commits rouges ont été poussés les 17 et 18/08. Le hook local
+# `.githooks/pre-push` bloque désormais la poussée — mais un hook est
+# contournable (`--no-verify`) et dépend d'une config locale.
+#
+# Ce garde-ci tourne chez GitHub, sur chaque poussée, sur TOUTES les
+# branches. Il n'empêche pas la poussée : il rend l'état rouge visible et
+# bloquant pour toute fusion. Les deux étages sont complémentaires, et
+# aucun des deux ne suffit seul.
+#
+# Il ne demande AUCUN secret : `vitest`, la réconciliation des migrations
+# (qui compare le dépôt à un instantané versionné) et le contrôle de
+# surface lisent tous des fichiers. Un garde qui aurait besoin d'une clé
+# serait un garde qu'on désactive le jour où la clé manque.
+
+name: Garde
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+# Une poussée qui en remplace une autre annule la précédente : inutile de
+# faire tourner deux fois le même verdict.
+concurrency:
+  group: garde-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    name: tests · migrations · surface
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - run: npm ci
+
+      # Le même script que le hook local, au caractère près. Si les deux
+      # divergent, le garde ne garde plus rien.
+      - name: npm run verifier
+        run: npm run verifier
+
+      # ⚠ Ce contrôle n'atteste PAS le poste d'un développeur — il est
+      # hors de portée d'une CI. Il atteste exactement une chose, et elle
+      # compte : qu'un clone neuf suivi de `npm ci` ressort AVEC la
+      # protection locale branchée. C'est `prepare` qui la branche ; si
+      # quelqu'un le retire ou le casse, cette étape tombe.
+      - name: un clone neuf ressort protégé
+        run: |
+          chemin="$(git config --get core.hooksPath || true)"
+          if [ "$chemin" != ".githooks" ]; then
+            echo "::error::core.hooksPath vaut « ${chemin:-rien} » au lieu de « .githooks »."
+            echo "Le script npm « prepare » ne l'a pas branché : la protection locale est absente."
+            exit 1
+          fi
+          test -x .githooks/pre-push || { echo "::error::.githooks/pre-push n'est pas exécutable"; exit 1; }
+          echo "hook branché et exécutable"
