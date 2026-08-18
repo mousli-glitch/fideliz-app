@@ -8,41 +8,67 @@ si une information manque pour cette raison, elle est signalée comme
 
 ---
 
-## ⚡ Où reprendre MAINTENANT (18/08, soirée)
+## ⚡ Où reprendre MAINTENANT (18/08, soirée, deuxième passe)
 
-**Les six demandes de l'audit indépendant (rapport 018 → réponse de Samy)
-sont traitées.** Commit `7cbd08a` sur `candidat/baseline-acl`. Détail complet,
-preuves et empreintes : `docs/preuve-sentinelle-et-fonctions.md`.
+**Deux tours d'audit indépendant traités.** Commits `7cbd08a` puis `689b193`
+sur `candidat/baseline-acl`. Détail et preuves :
+`docs/preuve-sentinelle-et-fonctions.md`.
 
-1. ✅ Libellé « quel que soit l'état de départ » corrigé dans la baseline —
-   garantie reformulée : bornée à la portée schéma, rôle créateur normalisé.
-2. ✅ `supabase/verifications/sentinelle-privileges-anon.sql` durcie : droits
-   **effectifs** (`has_table_privilege`), tout propriétaire, portée globale
-   ET schéma, `PUBLIC`, héritage de rôle (`pg_has_role`).
-3. ✅ Les 4 scénarios prouvés empiriquement (ancien texte = faux vert sur les
-   4, nouveau = détecte les 4) — dont un **cas réel, pas simulé** : la
-   production porte encore aujourd'hui un excès chez `supabase_admin`,
-   6 privilèges, jamais neutralisé par le durcissement déployé. Voir §6.
-4. ✅ Rejoué avant tout `drop schema public cascade` : `has_schema_privilege
-   ('supabase_admin','public','CREATE') = true`, 0/20 relations lui
-   appartiennent aujourd'hui. Qualifié : inerte dans le chemin que ce projet
-   contrôle, PAS neutralisé structurellement — le rôle garde la capacité.
-5. ✅ `supabase/verifications/preuve-acl-avis.sql` créée et versionnée.
-6. ✅ **Les 22 fonctions closes**, pas 9 (le compte du rapport 018 était
-   lui-même dépassé — 11 divergences réelles trouvées par empreinte `prosrc`
-   exacte, pas 9). Verdict individuel par lecture brute intégrale, aucune
-   heuristique : 11 identiques exactement, 9 cosmétiques démontrées
-   (espaces/mise en forme), 2 réelles mais **entièrement attribuées** à des
-   migrations déjà écrites (`20260818011000`, `20260818012000`) et vérifiées
-   caractère pour caractère contre la production. Zéro divergence ouverte.
+**Premier tour (rapport 018 → réponse) — traité, commit `7cbd08a`** :
+libellé de garantie corrigé · sentinelle durcie (droits effectifs, tout
+propriétaire, portée globale, PUBLIC, héritage) · 4 scénarios prouvés dont
+un réel (`supabase_admin` en production porte encore 6 privilèges excessifs,
+jamais neutralisés par le durcissement déployé) · preuve ACL de `avis`
+versionnée · les 22 fonctions closes (11 identiques, 9 cosmétiques, 2
+attribuées à des migrations déjà écrites, vérifiées caractère pour
+caractère contre la production).
 
-Suite : 156 tests toujours verts. **Prochaine tâche : déposer le rapport 019
-dans le relais** (voir §3 pour le protocole — le fichier relais est resté
-bloqué à l'ID `017`, vérifier s'il a bougé avant d'écrire). Une fois 019
-acquitté (ou si Samy tranche directement) : reprendre la tâche 1 de la
-section §9 — appliquer les quatre couches séparément sur la branche
-synthétique, en commençant par décider si `supabase_admin` (§6) appelle une
-remédiation séparée ou reste un risque assumé et documenté.
+**Deuxième tour (audit du rapport 019) — traité, commit `689b193`** :
+
+1. ✅ **`supabase_admin` classé `NEEDS_VENDOR_CONFIRMATION`**, pas accepté
+   ni modifié. Brouillon de dossier Supabase Support préparé
+   (`docs/dossier-support-supabase-admin.md`), **non soumis** — attend une
+   revue de Samy avant tout envoi.
+2. ✅ Les 4 scénarios sont désormais **rejouables automatiquement** :
+   `supabase/verifications/harnais-scenarios-sentinelle.sql` (seed →
+   détection → nettoyage, exécuté et vérifié de bout en bout sur la branche
+   synthétique) + `supabase/verifications/sentinelle.test.ts` (garde
+   anti-dérive : le harnais ne peut plus diverger silencieusement de la
+   sentinelle réelle, comparaison caractère pour caractère par ancres
+   partagées ; tests de non-régression sur les clauses de détection).
+3. ✅ `preuve-acl-avis.sql` mesure maintenant des **droits effectifs**
+   (`has_table_privilege`, matrice 4 rôles × 8 privilèges), plus l'ancienne
+   version aclexplode. Prouvé en live qu'un TRUNCATE via PUBLIC sur `avis`
+   lui échappait, détecté par la nouvelle.
+4. ✅ `empreintes.sql` : la dimension `fonctions` compare `prosrc` par
+   **empreinte exacte** (`md5` brut), plus par normalisation. Manifeste
+   individuel des 22 fonctions ajouté (identité, langage, volatilité,
+   strict, parallélisme, DEFINER/INVOKER, `proconfig`, propriétaire, ACL,
+   empreinte exacte + empreinte normalisée étiquetée « aide seulement »).
+   Même correction de portée (INNER→LEFT JOIN, entrées globales incluses)
+   appliquée à sa dimension `default_privileges`.
+5. ✅ Sentinelle : la condition PUBLIC (`grantee = 0`) utilise un `CASE`
+   explicite — ne dépend plus de l'ordre d'évaluation d'un OR SQL, non
+   garanti. Re-testé contre production (lève toujours) et contre la branche
+   synthétique (aucune erreur, détection correcte).
+6. ✅ Références de projet Supabase retirées des documents suivis
+   (`kzeuplszcqjqaqohfbzk`, `rxdbotnuwfakukcbgeqo`, `vrbnbmiokzhmhbghhduh`,
+   `bngtokpnuebvvxbtnayn` → « production » / « branche synthétique »).
+
+**171 tests verts** (156 + 15 nouveaux). **Prochaine tâche : déposer le
+rapport 020 dans le relais** (voir §3 — le fichier relais est resté bloqué
+à l'ID `017` au dernier contrôle ; vérifier s'il a bougé avant d'écrire).
+
+**Ensuite, décision de Samy attendue avant de continuer** : la demande
+initiale incluait une « poursuite autonome » — appliquer les 4 couches
+séparément, la matrice de concurrence du gel à deux sessions, puis les
+réserves UUID-root — sans réclamer de nouvelle confirmation. Ce chantier
+n'a **pas** été entamé dans cette séance : son ampleur (chacune des 4
+couches a historiquement représenté plusieurs heures de travail à part
+entière, cf. §9) justifie un point de passage explicite plutôt qu'un
+enchaînement silencieux, dans un contexte où Samy surveille activement les
+coûts. Reprendre à la tâche 1 de §9 dès que Samy confirme vouloir continuer
+sur cette lancée — ou pas.
 
 ---
 
@@ -112,24 +138,21 @@ intégralement, ré-analyser contre le code réel, continuer automatiquement
 **sans redemander confirmation à Samy**, sauf si `STATUS: NEEDS_USER` —
 alors s'arrêter et attendre.
 
-**État constaté à la reprise (18/08, ~19h09)** :
-- `CLAUDE_TO_CHATGPT.md` : ID `20260818-claude-018`, `STATUS: READY` (texte
-  intégral ci-dessous, §4).
-- `CHATGPT_TO_CLAUDE.md` : toujours ID `20260818-claude-017`,
-  `STATUS: RESPONSE_READY` — **pas de réponse automatisée à 018**.
-- `LAST_PROCESSED.txt` = `20260818-claude-017`.
-- Aucun veilleur de fond en vie (vérifié par `ps aux`, rien trouvé).
+**⚠ Le fichier relais ne fonctionne plus comme canal de réponse — constaté deux
+fois de suite.** `CHATGPT_TO_CLAUDE.md` et `LAST_PROCESSED.txt` sont restés
+bloqués à l'ID `20260818-claude-017` pendant tout le reste de la séance,
+alors que Claude a déposé successivement les rapports `018` et `019` dans
+`CLAUDE_TO_CHATGPT.md`. **Les deux réponses correspondantes sont arrivées
+directement collées dans le chat par Samy**, jamais via le fichier. Ce
+n'est plus un incident isolé : traiter ce canal comme probablement inactif
+côté automatisation, tout en continuant à y déposer chaque rapport (trace
+de dépôt, et il pourrait reprendre).
 
-**⚠ Une réponse à 018 a été transmise directement dans le chat par Samy**
-(collée après la commande `/compact`), **pas par le fichier relais**. Elle
-n'est donc récupérable nulle part ailleurs. Texte intégral reproduit au
-§5. C'est la tâche à exécuter maintenant (voir § « Où reprendre »).
-
-**Pour la suite** : soit continuer à surveiller `CHATGPT_TO_CLAUDE.md` pour
-une future réponse automatisée, soit accepter que Samy relaie manuellement
-— dans les deux cas, toujours écrire le rapport suivant dans
-`CLAUDE_TO_CHATGPT.md` avec un ID neuf avant de le communiquer, pour garder
-une trace de dépôt même si la lecture se fait autrement.
+- Rapport `018` déposé → réponse reçue en chat (reproduite §5).
+- Rapport `019` déposé → réponse reçue en chat (traitée, commit `689b193`).
+- Rapport `020` : à déposer avec le résumé du deuxième tour (voir § « Où
+  reprendre »). Vérifier l'état du fichier avant, au cas où l'automatisation
+  aurait repris.
 
 ### §4 — Rapport 018 envoyé (texte intégral, pour référence)
 
@@ -325,24 +348,26 @@ modifiés, tests, preuves catalogue anonymisées et réserves restantes.
 
 ---
 
-## 4. État Git (18/08, ~19h09, vérifié)
+## 4. État Git (18/08, soirée, vérifié)
 
 | Dépôt | Branche | Commit | État |
 |---|---|---|---|
 | `fideliz-app` | `main` (production) | `5094af3` | déployé — durcissement, fingerprint `2d2e463f…` |
-| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `7cbd08a` | arbre propre, 156 tests verts |
+| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `689b193` | arbre propre, 171 tests verts |
 | `fideliz-app` | `feat/fusion-fideliz` | — | base de référence pour les diffs cumulés |
 | `cartiz` | `feat/fusion-fideliz` | `49206fe` | — |
 
-**Diff cumulé `feat/fusion-fideliz..candidat/baseline-acl`** : 5 fichiers,
-+458/−0 — baseline, `migrations.test.ts`, sentinelle durcie,
-`preuve-acl-avis.sql`, `docs/preuve-sentinelle-et-fonctions.md`.
+**Diff cumulé `feat/fusion-fideliz..candidat/baseline-acl`** : 16 fichiers,
++1685/−266.
 
-**Commits du candidat** (3, sur `baseline-acl`) :
+**Commits du candidat** (4, sur `baseline-acl`) :
 - `f70ccb3` — retirer avant d'accorder, 114 privilèges de trop dont TRUNCATE à anon
 - `9edefbc` — test permanent de l'ordre revoke-puis-grant
 - `7cbd08a` — sentinelle droits effectifs/tout propriétaire/global/PUBLIC,
   22 fonctions closes, découverte `supabase_admin` en production
+- `689b193` — harnais rejouable + garde anti-dérive, preuve-acl-avis en
+  droits effectifs, empreintes.sql exact + manifeste, CASE explicite PUBLIC,
+  dossier fournisseur `supabase_admin`, refs de projet retirées des docs
 
 **Worktree de reconstruction** `/Users/samy/.fideliz-recon` : SHA épinglé
 `facb20c`, 0 modification (propre).
@@ -375,11 +400,11 @@ depuis les définitions live de production, LOT 2 inclus après correction).
 Rollback durcissement : `supabase/rollback/20260818150000_rollback_durcissement.sql`
 (refuse si le gel est actif).
 
-**Fideliz** (réf. projet `kzeuplszcqjqaqohfbzk`) — trois modifications de
-base antérieures, toujours actives : `role_jamais_depuis_les_metadonnees`,
+**Fideliz** (production) — trois modifications de base antérieures, toujours
+actives : `role_jamais_depuis_les_metadonnees`,
 `rpc_destructives_hors_de_portee`, `disable_signup: true` (config Auth).
 
-**Cartiz** (réf. projet `rxdbotnuwfakukcbgeqo`) — intacte, rien modifié.
+**Cartiz** (projet indépendant) — intacte, rien modifié.
 
 ---
 
@@ -479,12 +504,14 @@ minute) — signalé, pas corrigé.
 
 ## 9. Tâches en attente, dans l'ordre
 
-1. ~~Exécuter la réponse au rapport 018~~ **fait** (commit `7cbd08a`,
-   `docs/preuve-sentinelle-et-fonctions.md`). Reste seulement : décider
-   d'une remédiation `supabase_admin` (§6 du rapport) ou l'assumer
-   explicitement comme risque documenté — décision de Samy, pas technique.
-   Déposer le rapport 019 dans le relais (§3), ou attendre l'arbitrage
-   direct de Samy sur ce point avant.
+1. ~~Exécuter la réponse au rapport 018~~ **fait** (commit `7cbd08a`).
+   ~~Exécuter l'audit du rapport 019~~ **fait** (commit `689b193`) : harnais
+   rejouable, droits effectifs partout, empreinte exacte + manifeste,
+   CASE explicite, refs de projet retirées, dossier fournisseur
+   `supabase_admin` en brouillon non soumis. Reste seulement : la décision
+   de Samy sur `supabase_admin` (remédiation séparée, autorisée
+   explicitement, ou risque assumé tel quel — pas une décision technique).
+   Déposer le rapport 020 dans le relais (§3).
 2. Appliquer les quatre couches **séparément** sur la branche synthétique :
    durcissement, RLS, identité root, gel inactif — chacune avec fingerprint
    avant, delta attendu seul, sentinelles, vrai rollback, fingerprint
