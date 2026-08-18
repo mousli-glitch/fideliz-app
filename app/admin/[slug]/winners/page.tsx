@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { AdminWinnersTable } from "@/components/admin/winners-table"
 import { notFound } from "next/navigation"
+import { autoriserRestaurant } from "@/lib/securite/garde-page-restaurant"
 
 export const dynamic = "force-dynamic"
 
@@ -21,6 +22,22 @@ export default async function AdminWinnersPage({
   searchParams?: Promise<{ page?: string; q?: string }>
 }) {
   const { slug } = await params
+
+  /*
+   * AUTORISATION AVANT TOUTE LECTURE — la clé de service contourne la RLS.
+   * On repart de l'identifiant rendu par la garde, jamais du slug de l'URL :
+   * une page qui résout elle-même le slug peut oublier de le vérifier, une
+   * page qui reçoit un identifiant déjà autorisé ne le peut pas.
+   */
+  const acces = await autoriserRestaurant(slug, "gagnants.consultation")
+  if (!acces.autorise) {
+    return (
+      <div className="p-8 text-center">
+        <p className="font-bold text-slate-500">Ce restaurant n&apos;est pas accessible avec ce compte.</p>
+      </div>
+    )
+  }
+
   const sp = (await searchParams) || {}
 
   // ✅ EXACTEMENT comme CRM, mais 50 lignes / page
@@ -38,7 +55,7 @@ export default async function AdminWinnersPage({
 
   // 1) Restaurant
   let restaurantQuery = supabase.from("restaurants").select("id, name")
-  restaurantQuery = isUUID(slug) ? restaurantQuery.eq("id", slug) : restaurantQuery.eq("slug", slug)
+  restaurantQuery = restaurantQuery.eq("id", acces.restaurantId)
 
   const { data: rawRestaurant, error: restoError } = await restaurantQuery.single()
   if (restoError || !rawRestaurant) return notFound()
