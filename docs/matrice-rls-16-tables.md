@@ -99,3 +99,102 @@ la vacuité de la table. Une matrice sur des tables vides dit oui à tout.
 Le semis d'une ligne par tenant a été ajouté, et c'est lui qui a fait
 apparaître l'accès transversal du commercial sur `crm_notes`. Sans lui, la
 matrice serait passée au vert en ne prouvant rien.
+
+---
+
+# Deuxième passe — 18/08, après retrait de l'UUID et correction de `crm_notes`
+
+## Ce qui a changé
+
+| Cible | Rôle | Avant | Après |
+|---|---|---|---|
+| `crm_notes` | commercial | `2/E23502/2/2` | **`1/DENY/1/1`** |
+| `restaurants` | root synthétique | `2/E23502/0/0` | **`2/E23502/2/2`** |
+
+Le commercial ne voit plus que la note du tenant **A**, auquel il est
+rattaché. Celle de B est invisible et immuable. A et B n'y accèdent pas.
+
+Le root **synthétique** administre les deux restaurants — sans le moindre
+UUID réel. Le parcours administratif est enfin prouvable ailleurs qu'en
+production. Aucune régression sur les autres tables.
+
+## L'UUID codé en dur
+
+Vérifié en lecture seule sur la production avant de le retirer : ce compte
+est le **seul** à porter `role = 'root'`, il est actif, et il ne possède
+**aucun** restaurant. Ce dernier point est décisif — `owner_id = auth.uid()`
+ne joue jamais pour lui, donc la branche UUID était son unique accès. La
+retirer sans remplacement l'aurait enfermé dehors.
+
+`public.current_role() = 'root'` est strictement équivalent aujourd'hui, et
+correct demain.
+
+**Deux policies le portent encore** : `games/ADMIN_GAMES_FULL_ACCESS` et
+`system_logs/Root Full Access`. Elles sont hors du lot de production défini,
+et volontairement non touchées. Inscrites en dette.
+
+Les autres UUID trouvés dans le dépôt sont des **noms de fichiers d'images**
+de fond de jeu — sans objet.
+
+## API directe — l'interface n'est pas le garde
+
+Sondes PostgREST anonymes contre la branche, jamais contre la production.
+
+| Appel | Code | Verdict |
+|---|---|---|
+| `GET` sur 10 tables | `200 []` | RLS filtre tout |
+| `GET winners` | `401` `42501` | aucun grant |
+| `GET` les 4 sauvegardes | `200 []` | RLS sans policy |
+| `POST restaurants` | `401` | fermé |
+| `POST profiles` / `crm_notes` | `401` RLS | fermé |
+| `PATCH restaurants` · `DELETE` | `401` | fermé |
+| `PATCH profiles` | **`204`** ⚠ | **voir plus bas** |
+| `rpc auditer_privileges_publics` | `401` | fermée |
+| `rpc play_game`, `register_win`, `_log_event` | `404` | non exposées |
+| `rpc archive_redeemed_winners`, `anonymize_expired_data`, `get_sales_stats` | `401` | fermées |
+| `rpc current_role` / `is_root` | `200` `"anon"` / `false` | sans effet |
+
+### ⚠ Le `204` qui ne prouve rien
+
+`PATCH profiles` a répondu **204 No Content** — un code de succès. Rien n'a
+été modifié : le rôle de B est resté `restaurant`, les cinq profils intacts.
+
+PostgREST rend `204` pour un UPDATE qui touche **zéro ligne**, et la RLS les
+avait toutes filtrées. Une sonde de sécurité qui ne lirait que le code HTTP
+conclurait à une écriture réussie — ou, dans l'autre sens, ne distinguerait
+pas une vraie brèche d'un refus. **Seul le compteur tranche.**
+
+## Les quatre tables `_backup_20260606`
+
+| | |
+|---|---|
+| Contenu | `auth_ghosts` 16 · `auth_orphan` 1 · `contacts` 52 · `winners` 64 |
+| Données réelles en production | **oui — 133 lignes de données personnelles** |
+| RLS | **activée** sur les quatre, `force` non |
+| Policies | **aucune** → refus pour tout rôle non privilégié |
+| Grants `anon` / `authenticated` | `SELECT, INSERT, UPDATE, DELETE` — présents |
+| Visibilité mesurée | `anon`, restaurateur, commercial, root : **rien** |
+| Dépendances SQL ou applicatives | **aucune** — zéro occurrence dans le code |
+| Raison de conservation | filet d'un nettoyage du 06/06/2026 |
+
+**Aucune fuite historique.** Mais la protection tient à la RLS seule, les
+droits DML étant bien accordés — même configuration que `profiles`. Une
+policy ajoutée sans clause restrictive ouvrirait 133 lignes de données
+personnelles.
+
+**Non supprimées** : leur suppression appartient à l'assainissement final,
+après sauvegarde et preuve d'inutilité.
+
+## Registre de dette ouvert par cette passe
+
+1. `games/ADMIN_GAMES_FULL_ACCESS` et `system_logs/Root Full Access` portent
+   encore l'UUID root.
+2. Les quatre tables de sauvegarde : 133 lignes personnelles, protégées par
+   la RLS seule.
+3. `v2_owner_all_contacts` sur `contacts` teste un `restaurant_id` codé en
+   dur qui **n'existe plus** — prédicat mort.
+4. `mon_projet_sain.txt`, suivi par git : vidage de 15 000 lignes de code
+   source. **Aucune valeur de secret** (vérifié : ni JWT, ni clé `sk-`,
+   uniquement des `process.env.X`), mais une copie périmée du code qui
+   contient l'ancien `ROOT_ID`.
+5. `avis` n'est lisible par personne via la RLS, root compris.

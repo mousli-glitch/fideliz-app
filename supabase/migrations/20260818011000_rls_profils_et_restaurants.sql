@@ -179,38 +179,92 @@ drop policy if exists root_read_all_profiles  on public.profiles;
 drop policy if exists "Sales can create restaurants" on public.restaurants;
 
 /*
- * `Super Admin Restaurants Access` est scindée. Le prédicat est repris MOT
- * POUR MOT sur les trois verbes conservés — lecture, modification,
- * suppression — pour que le dashboard d'un restaurateur continue de
- * fonctionner à l'identique. Seul INSERT disparaît, et c'est tout l'objet.
+ * `Super Admin Restaurants Access` est scindée ET débarrassée de son UUID.
  *
- * L'UUID en dur est celui de la production. Il est conservé tel quel : le
- * remplacer par un test de rôle serait une amélioration, mais ce fichier
- * ferme une fuite et n'a pas à en profiter pour changer autre chose.
+ * L'ancienne portait `auth.uid() = '04eb7091-…'` : le droit d'administrer
+ * les restaurants était attaché à UNE PERSONNE, pas à un rôle. Deux
+ * conséquences. Le jour où ce compte change, l'administration s'arrête. Et
+ * un root synthétique — celui des tests — n'y a jamais accès, donc le
+ * parcours root n'était pas testable ailleurs qu'en production.
+ *
+ * Vérifié avant de la retirer, en lecture seule sur la production :
+ *   · ce compte est le SEUL à porter `role = 'root'` ;
+ *   · il est actif ;
+ *   · il ne possède AUCUN restaurant, et n'est rattaché à aucun.
+ *
+ * Ce dernier point est décisif : `owner_id = auth.uid()` ne joue jamais pour
+ * lui. La branche UUID était donc son seul accès. La retirer sans
+ * remplacement l'aurait enfermé dehors.
+ *
+ * `public.current_role() = 'root'` est donc strictement équivalent
+ * aujourd'hui — un seul compte, la même identité — et correct demain.
+ *
+ * Le prédicat des restaurateurs (`owner_id = auth.uid()`) est repris mot
+ * pour mot. Seul INSERT disparaît, et c'était l'objet.
  */
 drop policy if exists "Super Admin Restaurants Access" on public.restaurants;
 
 create policy "Super Admin Restaurants Read" on public.restaurants
   as permissive for select to authenticated
-  using (((auth.uid() = '04eb7091-6876-41e0-84c6-5891658a5768'::uuid) or (owner_id = auth.uid())));
+  using ((public."current_role"() = 'root') or (owner_id = auth.uid()));
 
 create policy "Super Admin Restaurants Update" on public.restaurants
   as permissive for update to authenticated
-  using (((auth.uid() = '04eb7091-6876-41e0-84c6-5891658a5768'::uuid) or (owner_id = auth.uid())))
-  with check (((auth.uid() = '04eb7091-6876-41e0-84c6-5891658a5768'::uuid) or (owner_id = auth.uid())));
+  using ((public."current_role"() = 'root') or (owner_id = auth.uid()))
+  with check ((public."current_role"() = 'root') or (owner_id = auth.uid()));
 
 create policy "Super Admin Restaurants Delete" on public.restaurants
   as permissive for delete to authenticated
-  using (((auth.uid() = '04eb7091-6876-41e0-84c6-5891658a5768'::uuid) or (owner_id = auth.uid())));
+  using ((public."current_role"() = 'root') or (owner_id = auth.uid()));
 
 /*
- * `Enable insert for root users only` est conservée telle quelle : c'est la
- * seule voie d'INSERT qui reste, et elle vérifie réellement le rôle. Le
- * parcours réel n'en a pas besoin — `create-restaurant.ts` emploie la clé de
- * service — mais la retirer fermerait une porte légitime sans nécessité.
+ * ────────────────────────────────────────────────────────── crm_notes
+ *
+ * J'avais classé ce défaut « hors périmètre ». C'était une erreur : la
+ * matrice montre qu'un commercial lit, modifie et supprimerait les notes
+ * d'un restaurant auquel il n'est PAS rattaché. C'est une violation
+ * inter-tenant, donc exactement l'objet de ce fichier.
+ *
+ * La policy unique `sales_manage_notes` porte `for all to public using
+ * (is_sales() or is_root())` — aucun filtre de rattachement, et `to public`
+ * inclut `anon`.
+ *
+ * Relevé en production avant correction : la table contient **0 ligne**,
+ * `sales_restaurants` en contient **0** aussi, et `crm_notes` n'apparaît
+ * **nulle part** dans le code applicatif. Aucune donnée n'est donc exposée
+ * aujourd'hui, et aucun parcours ne peut casser. C'est le moment de la
+ * fermer : quand la fusion y écrira, il sera trop tard pour le faire sans
+ * risque.
+ *
+ * Le restaurateur n'y a pas accès : ce sont des notes commerciales SUR son
+ * établissement, pas des notes qui lui appartiennent.
  */
+drop policy if exists sales_manage_notes on public.crm_notes;
 
-/*
+create policy crm_notes_root on public.crm_notes
+  as permissive for all to authenticated
+  using (public."current_role"() = 'root')
+  with check (public."current_role"() = 'root');
+
+create policy crm_notes_commercial_rattache on public.crm_notes
+  as permissive for all to authenticated
+  using (
+    public."current_role"() = 'sales'
+    and exists (
+      select 1 from public.sales_restaurants sr
+      where sr.restaurant_id = crm_notes.restaurant_id
+        and sr.sales_user_id = auth.uid()
+    )
+  )
+  with check (
+    public."current_role"() = 'sales'
+    and exists (
+      select 1 from public.sales_restaurants sr
+      where sr.restaurant_id = crm_notes.restaurant_id
+        and sr.sales_user_id = auth.uid()
+    )
+  );
+
  * ─────────────────────────────────────────────────────────────────────
  *  RETOUR ARRIÈRE — à coller tel quel, aucune donnée concernée
  * ─────────────────────────────────────────────────────────────────────
@@ -231,4 +285,13 @@ create policy "Super Admin Restaurants Delete" on public.restaurants
  * create policy "Super Admin Restaurants Access" on public.restaurants
  *   as permissive for all to authenticated
  *   using (((auth.uid() = '04eb7091-6876-41e0-84c6-5891658a5768'::uuid) or (owner_id = auth.uid())));
+ * drop policy crm_notes_root on public.crm_notes;
+ * drop policy crm_notes_commercial_rattache on public.crm_notes;
+ * create policy sales_manage_notes on public.crm_notes
+ *   as permissive for all to public using ((is_sales() OR is_root()));
+ * create or replace function public."current_role"()
+ *   returns text language sql stable set search_path to 'public'
+ *   as $r$ select coalesce((select role from public.profiles where id = auth.uid()), 'anon'); $r$;
+ * revoke all on function public."current_role"() from public;
+ * grant execute on function public."current_role"() to anon, authenticated, service_role;
  */
