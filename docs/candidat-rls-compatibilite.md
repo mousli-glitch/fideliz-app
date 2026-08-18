@@ -144,3 +144,82 @@ ait aucune fenêtre où ses écrans sont vides.
 `get_sales_stats()` appelle `get_my_role()`, qui **n'existe pas** : tout appel
 lève une erreur. C'est un défaut antérieur, indépendant de ce hotfix, mais il
 concerne le même parcours commercial — à traiter avec la même décision.
+
+---
+
+# `sales_restaurants` — décision tranchée, script éprouvé (18/08)
+
+## Les faits correspondent à la décision
+
+Relevé en lecture seule sur la production, avant toute préparation :
+
+| Slug | Actif | Bloqué | Propriétaire | Jeux | Contacts |
+|---|---|---|---|---|---|
+| `best-pizza` | oui | non | oui | 1 | 100 |
+| `la-ruche` | oui | non | oui | 1 | 253 |
+| `soukara` | oui | non | oui | 1 | 104 |
+| `test78` | oui | non | oui | 6 | 14 |
+
+Exactement les trois clients et le compte de test. **La décision s'applique
+telle quelle.**
+
+## Correction de ce que j'avais écrit
+
+J'avais annoncé que le commercial « verrait des écrans vides après le
+hotfix ». **C'est faux, et la nuance compte.**
+
+`app/api/sales/dashboard/route.ts` lit `sales_restaurants` et `restaurants`
+avec la **clé de service**, qui contourne la RLS par construction. Le hotfix
+ne touche pas ce parcours du tout.
+
+Son périmètre vient de `sales_restaurants` **ou** de `created_by = son id`.
+Avec zéro rattachement et zéro restaurant créé par lui, **son dashboard est
+déjà vide aujourd'hui**. Et il n'existe **aucun repli « voir tout »** : la
+branche `else` filtre sur `created_by`, ce qui rend zéro.
+
+Le rattachement n'est donc pas une compensation du hotfix : c'est une
+**amélioration indépendante**. Elle peut se faire avant, pendant ou après.
+
+## `get_sales_stats()` — dead code
+
+**Zéro appelant** dans `app/`, `lib/` et `components/`. La fonction appelle
+`get_my_role()`, qui n'existe pas, donc tout appel lèverait une erreur — mais
+personne ne l'appelle.
+
+Conséquences : le défaut est **indépendant** du hotfix RLS ; l'écran
+commercial ne l'invoque pas, donc il n'échoue ni ne masque rien ; et le
+rattachement suffit **sans** la corriger.
+
+Elle reste en dette. Aucun correctif n'est mêlé au hotfix.
+
+## Le script, et ses cinq épreuves
+
+`supabase/operations/rattacher-commercial.sql`. Le commercial est résolu par
+son **rôle**, jamais par son adresse : le dépôt est public.
+
+| Épreuve | Verdict | Lignes |
+|---|---|---|
+| application nominale | ACCEPTÉ | **3** |
+| rejeu à l'identique | ACCEPTÉ | **3** — idempotent |
+| deux comptes `sales` | **REFUS** — « 2 comptes sales » | 3 inchangé |
+| un restaurant attendu absent | **REFUS** — « 2 sur 3 attendus » | 3 inchangé |
+| rollback | exécuté | **0** |
+
+Résultat du cas nominal, vérifié slug par slug : `best-pizza`, `la-ruche` et
+`soukara` rattachés ; `test78` et les deux tenants synthétiques **non**.
+
+`test78` est exclu par une **exception nommée**, pas seulement par omission de
+la liste. Une exclusion qui se relit vaut mieux qu'une omission qu'un
+copier-coller rattrape.
+
+Le rollback filtre à la fois sur les trois slugs **et** sur le compte
+commercial : aucune autre ligne ne peut être touchée.
+
+## Ce qui reste avant production
+
+Non faits, et je ne les présente pas autrement :
+
+- parcours d'**écriture** depuis l'interface ;
+- parcours `/super-admin` ;
+- `supabase migration list` et dry-run contre la production ;
+- candidat applicatif exécuté contre la base historique.
