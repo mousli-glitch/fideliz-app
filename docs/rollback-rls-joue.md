@@ -77,3 +77,127 @@ produit une base où plus personne ne lit son profil.
 Aucune donnée modifiée : chaque sonde annule son sous-bloc. Compteurs
 identiques avant et après le cycle complet — 2 restaurants, 5 profils,
 4 notes, 0 ligne intruse.
+
+---
+
+# Qualification : rollback de CONTINUITÉ, pas de sécurité
+
+Le cycle ci-dessus prouve une chose et une seule : le rollback ramène l'état
+historique **au caractère près**. Il ne prouve pas que cet état soit
+souhaitable — et il ne l'est pas.
+
+## Ce que le rollback restaure, littéralement
+
+Mesuré à l'état restauré, pas déduit :
+
+| Ce qui revient | Mesure |
+|---|---|
+| Lecture de tous les profils par tout compte connecté | 4 rôles sur 4 voient les **5** profils |
+| Création de restaurants par des rôles non autorisés | 4 rôles sur 4 réussissent |
+| Accès transversal du commercial à `crm_notes` | **4** notes, dont celles d'un tenant non rattaché |
+| Dépendance des policies à l'UUID root | **3** policies |
+| Perte d'accès du root synthétique | `system_logs` : **0** ligne |
+
+La dernière ligne mérite d'être lue deux fois : après rollback,
+l'administration ne fonctionne plus que pour **une personne précise**. Un
+second root, ou un root de secours, n'aurait aucun accès.
+
+## Comment l'employer, et comment ne pas l'employer
+
+**C'est un rollback de continuité.** Il sert à rendre le service quand la
+migration coupe un parcours essentiel — pas à revenir à un état sûr.
+
+- Employable **uniquement en urgence**, si un parcours légitime est cassé.
+- La durée passée dans cet état est à **réduire au minimum** : chaque heure
+  est une heure où tout compte connecté lit tous les profils.
+- **La correction en avant est préférable** dès qu'elle est possible. Les
+  défauts probables sont tous réparables par une policy ajoutée, ce qui prend
+  moins de temps que le cycle rollback + analyse + réapplication.
+- Il n'est **jamais** un état de repos. Si on y revient, on en repart.
+
+## Correction en avant — les cinq pannes probables
+
+Ordre de probabilité décroissante, d'après ce que la matrice et la traversée
+ont réellement montré.
+
+### 1. Un rôle légitime refusé sur une table
+
+*Symptôme* : une liste vide là où elle était pleine ; aucune erreur.
+
+*Cause probable* : une policy `SELECT` retirée sans équivalent, ou un
+prédicat plus étroit que le besoin réel.
+
+```sql
+-- Diagnostic : ce que le rôle voit vraiment, sans deviner.
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"<uuid>","role":"authenticated"}', true);
+select count(*) from public.<table>;
+reset role;
+select policyname, cmd, qual from pg_policies
+ where schemaname='public' and tablename='<table>';
+```
+
+*Correction* : ajouter la policy manquante, ciblée sur le rattachement. Ne
+jamais élargir avec `using (true)` « en attendant » — c'est exactement
+l'origine de la fuite qu'on vient de fermer.
+
+### 2. `current_role()` en récursion — `54001`
+
+*Symptôme* : `stack depth limit exceeded` sur toute lecture de `profiles`.
+
+*Cause* : la fonction est repassée en `SECURITY INVOKER`, ou une nouvelle
+policy sur `profiles` l'appelle alors qu'elle lit `profiles`.
+
+*Correction immédiate*, sans rollback :
+
+```sql
+create or replace function public."current_role"()
+returns text language sql stable security definer set search_path = ''
+as $$ select coalesce((select p.role from public.profiles p where p.id = auth.uid()), 'anon'); $$;
+grant execute on function public."current_role"() to anon, authenticated, service_role;
+```
+
+⚠ `anon` doit conserver `EXECUTE` : deux policies visant `{public}` passent
+par `is_root()` / `is_sales()`, qui l'appellent en cascade.
+
+### 3. Rattachement commercial incomplet
+
+*Symptôme* : un commercial ne voit plus « ses » restaurants ou ses notes.
+
+*Cause* : `sales_restaurants` est **vide en production** (0 ligne, mesuré).
+Les policies qui s'y adossent ne rendent donc rien.
+
+*Correction* : peupler `sales_restaurants`, pas élargir la policy. C'est une
+donnée manquante, pas une règle trop stricte — et c'est une **décision
+métier** : quel commercial pour quel restaurant. À arbitrer, jamais à deviner.
+
+### 4. Un dashboard cassé par la garde par slug
+
+*Symptôme* : « Ce restaurant n'est pas accessible avec ce compte » pour un
+restaurateur légitime.
+
+*Cause probable* : `profiles.restaurant_id` absent ou faux pour ce compte.
+
+```sql
+select p.id, p.role, p.restaurant_id, r.slug
+from public.profiles p left join public.restaurants r on r.id = p.restaurant_id
+where p.id = '<uuid>';
+```
+
+*Correction* : réparer le rattachement du profil. La garde a raison — c'est
+la donnée qui est fausse.
+
+### 5. Root sans accès administratif
+
+*Symptôme* : root ne voit plus les restaurants ou les logs.
+
+*Cause* : `profiles.role` du compte n'est pas `'root'`.
+
+*Correction* : corriger le rôle. Ne **jamais** remettre un UUID en dur : ce
+serait défaire la correction qui rend le parcours testable hors production.
+
+## Ce qui vaut pour les cinq
+
+Aucune ne demande un rollback. Toutes se corrigent en avant, par une policy
+ou une donnée, en moins de temps que le cycle complet. Le rollback reste le
+dernier recours — et un recours dont on ressort vite.
