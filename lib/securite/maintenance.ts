@@ -17,6 +17,15 @@
  * est précisément ce qu'on cherche à fermer. On écrit, et on lit l'erreur.
  */
 
+/**
+ * L'état public se lit par la RPC `en_maintenance()`, jamais par la table.
+ *
+ * `public.maintenance` porte l'empreinte du jeton migrateur : elle est fermée
+ * à `anon` comme à `authenticated`, RLS activée sans aucune policy de
+ * lecture. La RPC ne rend qu'un booléen et un message.
+ */
+export const RPC_ETAT = "en_maintenance";
+
 /** Code SQLSTATE levé par `refuser_pendant_maintenance()`. */
 export const CODE_MAINTENANCE = "P0100";
 

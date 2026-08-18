@@ -55,16 +55,38 @@ on conflict (id) do nothing;
 
 alter table public.maintenance enable row level security;
 
--- Tout le monde peut LIRE l'état : l'application doit pouvoir afficher un
--- message honnête sans être authentifiée.
-drop policy if exists maintenance_lecture_publique on public.maintenance;
-create policy maintenance_lecture_publique on public.maintenance
-  for select using (true);
-
--- Personne ne l'écrit par la RLS : le basculement passe par la clé de
--- service, depuis le runbook, et par rien d'autre.
+/*
+ * ─── AUCUNE LECTURE DIRECTE ───
+ *
+ * La première version posait une policy `for select using (true)` : tout le
+ * monde lisait la table entière, empreinte du jeton comprise.
+ *
+ * Une empreinte SHA-256 ne rend pas un secret de 32 octets retrouvable. Mais
+ * elle n'a aucune raison d'être publiée, et la publier invite à chercher.
+ *
+ * Aucune policy de lecture n'est donc créée. RLS activée sans policy = refus
+ * pour tous les rôles non privilégiés. L'application lit l'état par la
+ * fonction étroite `public.en_maintenance()`, qui ne rend qu'un booléen et
+ * un message — jamais l'empreinte.
 
 -- ───────────────────────────────────────────────────── la garde elle-même
+
+/*
+ * L'état PUBLIC : un booléen et un message, rien d'autre.
+ *
+ * C'est la seule porte laissée aux rôles applicatifs. Elle ne lit pas
+ * l'empreinte, ne l'expose pas, et ne peut rien modifier.
+ */
+create or replace function public.en_maintenance()
+returns table(actif boolean, message text)
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$ select m.actif, m.message from public.maintenance m where m.id $$;
+
+revoke all on function public.en_maintenance() from public;
+grant execute on function public.en_maintenance() to anon, authenticated, service_role;
 
 create or replace function public.maintenance_actif()
 returns boolean
@@ -194,8 +216,26 @@ comment on table public.maintenance is
  * Supabase sur les nouvelles tables — et n'importe quel compte connecté
  * pourrait lever le gel ou se donner le laissez-passer.
  */
+/*
+ * La table : rien pour personne hors propriétaire et service_role. Sans ce
+ * revoke, les DEFAULT PRIVILEGES de `postgres` accorderaient automatiquement
+ * INSERT, SELECT, UPDATE, DELETE et MAINTAIN à `anon` et `authenticated` —
+ * n'importe quel visiteur pourrait lever le gel.
+ */
 revoke all on public.maintenance from anon, authenticated;
-grant select on public.maintenance to anon, authenticated;
+
+/*
+ * Les deux fonctions internes non plus. Les DEFAULT PRIVILEGES accordent
+ * EXECUTE à tout nouvel objet ; `refuser_pendant_maintenance()` est une
+ * fonction de trigger, que PostgreSQL refuse d'appeler directement — mais un
+ * droit inutile ne se garde pas pour autant.
+ *
+ * Elles restent utilisables : `refuser_pendant_maintenance()` s'exécute comme
+ * trigger avec les droits de son propriétaire, et `maintenance_actif()` est
+ * appelée depuis elle, donc dans le même contexte.
+ */
+revoke all on function public.maintenance_actif() from public, anon, authenticated;
+revoke all on function public.refuser_pendant_maintenance() from public, anon, authenticated;
 
 /*
  * ═══════════════════════════════════════════════════════════════════════
