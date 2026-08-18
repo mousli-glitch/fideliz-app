@@ -40,6 +40,15 @@
  *  appartient (0/20, mesuré) — inerte dans l'historique, pas structurellement
  *  neutralisé : le rôle garde la capacité. Cette version couvre les trois.
  *
+ *  ─── Version 3 (18/08/2026, plus tard) : PUBLIC ne dépend plus de l'ordre du OR ───
+ *
+ *  La condition `a.grantee = 0 or pg_get_userbyid(...) or pg_has_role(...)`
+ *  comptait implicitement sur le fait qu'un moteur SQL évalue un OR de
+ *  gauche à droite — non garanti par la norme. Un plan différent aurait pu
+ *  évaluer `pg_has_role('anon', 0, 'USAGE')` avant le test `grantee = 0`.
+ *  Remplacé par un `CASE` explicite : PUBLIC se traite dans sa propre
+ *  branche, `pg_has_role()` n'est jamais appelée avec l'oid 0.
+ *
  *  ─── Deux contrôles, pas un ───
  *
  *  Les privilèges DÉJÀ posés sur les relations existantes — droits EFFECTIFS :
@@ -65,12 +74,14 @@ begin
   select count(*),
          string_agg(distinct c.relname || ':' || r.rolename || ':' || p.priv, ', ')
     into v_relations, v_detail
+  -- ANCRE_REQUETE_RELATIONS_DEBUT (ce bloc doit rester identique dans harnais-scenarios-sentinelle.sql)
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   cross join (values ('anon'), ('authenticated')) as r(rolename)
   cross join (values ('TRUNCATE'), ('TRIGGER'), ('REFERENCES')) as p(priv)
   where n.nspname = 'public'
     and has_table_privilege(r.rolename, c.oid, p.priv);
+  -- ANCRE_REQUETE_RELATIONS_FIN
 
   if v_relations > 0 then
     raise exception 'SENTINELLE : % privilege(s) effectif(s) excessif(s) sur des relations existantes. %',
@@ -89,6 +100,7 @@ begin
            a.privilege_type,
          ', ')
     into v_defauts, v_detail
+  -- ANCRE_REQUETE_DEFAUTS_DEBUT (ce bloc doit rester identique dans harnais-scenarios-sentinelle.sql)
   from pg_default_acl d
   left join pg_namespace ns on ns.oid = d.defaclnamespace
   cross join lateral aclexplode(d.defaclacl) a
@@ -96,11 +108,19 @@ begin
     and (ns.nspname = 'public' or d.defaclnamespace = 0)
     and a.privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES')
     and (
-      a.grantee = 0                                             -- accordé à PUBLIC
-      or pg_get_userbyid(a.grantee) in ('anon', 'authenticated') -- direct
-      or pg_has_role('anon', a.grantee, 'USAGE')                 -- hérité par anon
-      or pg_has_role('authenticated', a.grantee, 'USAGE')        -- hérité par authenticated
+      -- CASE explicite : ne JAMAIS appeler pg_has_role() avec l'oid 0 en
+      -- comptant sur l'ordre d'évaluation d'un OR SQL, qui n'est pas
+      -- garanti. PUBLIC (grantee = 0) se traite dans sa propre branche,
+      -- jamais dans celle qui appelle pg_has_role().
+      case
+        when a.grantee = 0 then true                                 -- accordé à PUBLIC
+        else
+          pg_get_userbyid(a.grantee) in ('anon', 'authenticated')     -- direct
+          or pg_has_role('anon', a.grantee, 'USAGE')                  -- hérité par anon
+          or pg_has_role('authenticated', a.grantee, 'USAGE')         -- hérité par authenticated
+      end
     );
+  -- ANCRE_REQUETE_DEFAUTS_FIN
 
   if v_defauts > 0 then
     raise exception 'SENTINELLE : % privilege(s) excessif(s) dans les DEFAUTS (tout propriétaire, toute portée). '

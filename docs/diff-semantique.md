@@ -1,8 +1,8 @@
 # Diff sémantique — baseline + 8 contre la production
 
-Mesuré le **18/08/2026**. Production `kzeuplszcqjqaqohfbzk` contre branche
-`bngtokpnuebvvxbtnayn`, reconstruite depuis une base **réellement vierge** par
-le vrai runner (`supabase db push --include-all`), sans le gel.
+Mesuré le **18/08/2026**. Production contre branche synthétique,
+reconstruite depuis une base **réellement vierge** par le vrai runner
+(`supabase db push --include-all`), sans le gel.
 
 Rejouable : `supabase/verifications/empreintes.sql`, à exécuter tel quel sur
 les deux bases.

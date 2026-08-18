@@ -2,10 +2,9 @@
 
 Mesuré le **18/08/2026 en soirée**, en réponse à l'audit indépendant du
 rapport `20260818-claude-018`. Aucune donnée réelle modifiée, aucun secret.
-Trois sources : production `kzeuplszcqjqaqohfbzk` (lecture seule uniquement),
-branche synthétique déjà active `fusion-tests-2` (`vrbnbmiokzhmhbghhduh`,
-mutations temporaires et nettoyées, vérifiées à 0 résidu après coup), dépôt
-Git (lecture des migrations).
+Trois sources : production (lecture seule uniquement), branche synthétique
+déjà active (mutations temporaires et nettoyées, vérifiées à 0 résidu après
+coup), dépôt Git (lecture des migrations).
 
 ## 1. La sentinelle v1 rendait un faux vert — trois angles morts confirmés
 
@@ -58,7 +57,7 @@ pour `postgres`/`service_role`. Rejouable, lève sur tout écart.
 
 ## 4. Les 22 fonctions — verdict individuel, empreinte `prosrc` puis lecture brute
 
-Comparaison production (`kzeuplszcqjqaqohfbzk`) contre `fusion-tests-2`
+Comparaison production contre la branche synthétique
 (reconstruction socle : baseline + migrations historiques jusqu'à
 `20260817235046` incluse — **avant** durcissement/RLS/identité-root/gel,
 volontairement, puisque ces couches se prouvent séparément). Empreinte

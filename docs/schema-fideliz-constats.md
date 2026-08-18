@@ -1,6 +1,6 @@
 # Schéma Fideliz — ce que l'extraction a trouvé
 
-Relevé du **18/08/2026** sur le projet de production `kzeuplszcqjqaqohfbzk`.
+Relevé du **18/08/2026** sur le projet de production.
 
 Fideliz n'a **aucun dossier de migrations** : son schéma a été construit à la
 main dans le tableau de bord Supabase, et il n'existe nulle part sous forme

@@ -1,6 +1,6 @@
 # Matrice RLS — 16 tables, 7 rôles, 4 opérations
 
-Mesurée le **18/08/2026** sur la branche `bngtokpnuebvvxbtnayn`, après les
+Mesurée le **18/08/2026** sur une branche synthétique, après les
 migrations `20260818010000` (durcissement) et `20260818011000` (RLS).
 Rejouable : `supabase/verifications/matrice-rls-complete.sql`.
 

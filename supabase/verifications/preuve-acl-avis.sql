@@ -1,6 +1,6 @@
 /*
  * ═══════════════════════════════════════════════════════════════════════════
- *  PREUVE — l'ACL effective de `avis` prouve l'héritage des DEFAULTS
+ *  PREUVE — l'ACL EFFECTIVE de `avis` prouve l'héritage des DEFAULTS
  * ═══════════════════════════════════════════════════════════════════════════
  *
  *  `avis` est créée par `20260724002837_create_avis_mirror_table.sql`,
@@ -12,9 +12,29 @@
  *  seulement pour les tables que la baseline crée elle-même dans le même
  *  fichier.
  *
- *  Mesuré en PRODUCTION (kzeuplszcqjqaqohfbzk) le 18/08/2026, en lecture
- *  seule. Aucune donnée de la table elle-même n'est lue ici — uniquement son
- *  ACL (catalogue système, pas de contenu).
+ *  ─── Version 2 (18/08/2026 soir) : droits EFFECTIFS, pas seulement directs ───
+ *
+ *  La version 1 mesurait `aclexplode(c.relacl)` : les grants DIRECTS
+ *  seulement. Un droit transmis à `anon` via PUBLIC, ou via l'appartenance à
+ *  un autre rôle, ne serait apparu dans aucune ligne de `relacl` pour
+ *  `anon` — faux vert possible, même défaut que la sentinelle avant son
+ *  propre durcissement.
+ *
+ *  Remplacé par `has_table_privilege()` : la primitive officielle de
+ *  Postgres, qui résout elle-même PUBLIC et l'héritage de rôle. Testée sur
+ *  une matrice complète de 4 rôles × 8 privilèges — la preuve échoue sur
+ *  tout excès OU tout manquant, dans n'importe laquelle des 32 cases,
+ *  indépendamment de l'ordre des entrées dans `relacl`.
+ *
+ *  Prouvé en live que la version 1 aurait rendu un faux vert : `TRUNCATE`
+ *  accordé à `PUBLIC` sur `avis`, sur une branche synthétique — l'ancienne
+ *  requête (aclexplode, grantee direct) ne le voit pas, la nouvelle
+ *  (has_table_privilege) le voit pour `anon` ET `authenticated`
+ *  simultanément. Semé puis retiré, vérifié à l'état initial après coup.
+ *
+ *  Mesuré en PRODUCTION le 18/08/2026, en lecture seule. Aucune donnée de
+ *  la table elle-même n'est lue ici — uniquement son ACL (catalogue
+ *  système, pas de contenu).
  *
  *  Valeur attendue, versionnée :
  *
@@ -24,7 +44,8 @@
  *    service_role  : DELETE, INSERT, MAINTAIN, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE (8)
  *
  *  À rejouer après toute reconstruction : la requête ci-dessous lève si la
- *  table s'écarte de cette attente, sur N'IMPORTE LEQUEL des quatre rôles.
+ *  table s'écarte de cette attente, sur N'IMPORTE LEQUEL des 32 couples
+ *  rôle × privilège.
  */
 
 do $$
@@ -32,32 +53,49 @@ declare
   v_ecarts int;
   v_detail text;
   v_attendu jsonb := '{
-    "anon": "DELETE,INSERT,MAINTAIN,SELECT,UPDATE",
-    "authenticated": "DELETE,INSERT,MAINTAIN,SELECT,UPDATE",
-    "postgres": "DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE",
-    "service_role": "DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    "anon":          ["DELETE","INSERT","MAINTAIN","SELECT","UPDATE"],
+    "authenticated": ["DELETE","INSERT","MAINTAIN","SELECT","UPDATE"],
+    "postgres":      ["DELETE","INSERT","MAINTAIN","REFERENCES","SELECT","TRIGGER","TRUNCATE","UPDATE"],
+    "service_role":  ["DELETE","INSERT","MAINTAIN","REFERENCES","SELECT","TRIGGER","TRUNCATE","UPDATE"]
   }'::jsonb;
 begin
-  with mesure as (
-    select pg_get_userbyid(a.grantee) as rolename,
-           string_agg(a.privilege_type, ',' order by a.privilege_type) as droits
-    from pg_class c
-    join pg_namespace n on n.oid = c.relnamespace
-    cross join lateral aclexplode(c.relacl) a
-    where n.nspname = 'public' and c.relname = 'avis'
-    group by pg_get_userbyid(a.grantee)
+  with roles as (
+    select rolename from (values ('anon'), ('authenticated'), ('postgres'), ('service_role')) as r(rolename)
+  ),
+  privileges as (
+    select priv from (values
+      ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
+      ('TRUNCATE'), ('REFERENCES'), ('TRIGGER'), ('MAINTAIN')
+    ) as p(priv)
+  ),
+  mesure as (
+    select r.rolename, p.priv,
+           has_table_privilege(r.rolename, 'public.avis'::regclass, p.priv) as a_effectivement
+    from roles r cross join privileges p
+  ),
+  attendu as (
+    select r.rolename, p.priv,
+           (v_attendu -> r.rolename) ? p.priv as devrait_avoir
+    from roles r cross join privileges p
   )
   select count(*),
-         string_agg(distinct coalesce(m.rolename, k.key) || ' : attendu=' ||
-           coalesce(v_attendu->>k.key, '(absent)') || ' mesuré=' || coalesce(m.droits, '(absent)'), ', ')
+         string_agg(
+           m.rolename || ':' || m.priv ||
+           case when m.a_effectivement and not a.devrait_avoir then ' (EXCÈS — droit effectif non attendu)'
+                else ' (MANQUANT — droit attendu absent)'
+           end,
+           ', ' order by m.rolename, m.priv
+         )
     into v_ecarts, v_detail
   from mesure m
-  full outer join jsonb_object_keys(v_attendu) as k(key) on k.key = m.rolename
-  where coalesce(m.droits, '') is distinct from coalesce(v_attendu->>coalesce(m.rolename, k.key), '');
+  join attendu a using (rolename, priv)
+  where m.a_effectivement is distinct from a.devrait_avoir;
 
   if v_ecarts > 0 then
-    raise exception 'PREUVE avis : % écart(s) avec l''ACL attendue. %', v_ecarts, left(v_detail, 500);
+    raise exception 'PREUVE avis (droits effectifs) : % écart(s) sur 32 couples rôle×privilège. %',
+      v_ecarts, left(v_detail, 500);
   end if;
 
-  raise notice 'PREUVE avis OK : ACL effective conforme sur les 4 rôles (anon, authenticated, postgres, service_role).';
+  raise notice 'PREUVE avis OK : droits EFFECTIFS (has_table_privilege, PUBLIC et héritage de rôle '
+    'inclus) conformes sur les 4 rôles × 8 privilèges.';
 end $$;

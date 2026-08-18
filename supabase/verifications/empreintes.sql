@@ -28,12 +28,28 @@
  * plateforme Supabase, qui les pose et les met à jour elle-même. Les
  * comparer produirait du bruit à chaque mise à jour de Supabase.
  *
- * ─── Normalisation de `prosrc` ───
+ * ─── `prosrc` : empreinte EXACTE, pas normalisée (corrigé le 18/08/2026 soir) ───
  *
- * Comparer `prosrc` brut fait diverger deux fonctions strictement
- * équivalentes pour un espace ou un saut de ligne. Les blancs consécutifs
- * sont donc réduits à un seul. Rien d'autre n'est touché : ni la casse, ni la
- * ponctuation — un littéral de chaîne qui change EST une différence.
+ * Cette section affirmait que réduire les blancs consécutifs à un seul ne
+ * touchait « ni la casse, ni la ponctuation — un littéral de chaîne qui
+ * change EST une différence ». C'est faux : la normalisation par
+ * `regexp_replace('\s+',' ')` s'applique aussi À L'INTÉRIEUR des littéraux
+ * SQL, et peut donc rendre identiques deux corps dont un littéral de chaîne
+ * diffère par ses espaces. Trouvé par audit indépendant, vérifié contre le
+ * code réel.
+ *
+ * La dimension `fonctions` ci-dessous compare désormais `prosrc` BRUT, sans
+ * normalisation : deux fonctions strictement identiques dans leur
+ * comportement mais reformatées (indentation, retours à la ligne) DIVERGENT
+ * ici — c'est voulu, c'est un déclencheur d'investigation volontairement
+ * paranoïaque. Le verdict fin (cosmétique ou fonctionnel) se lit dans
+ * `manifeste_fonctions`, plus bas, qui publie l'identité complète de chacune
+ * des fonctions plutôt qu'un hachage agrégé.
+ *
+ * Une empreinte normalisée peut rester une AIDE de triage rapide (« c'est
+ * peut-être juste des espaces ») mais n'est plus jamais présentée comme une
+ * preuve d'équivalence : elle apparaît, étiquetée comme telle, dans le
+ * manifeste — jamais dans les dimensions agrégées ci-dessus.
  */
 
 with
@@ -73,7 +89,7 @@ fonctions as (
            ||' sec='||case when p.prosecdef then 'definer' else 'invoker' end
            ||' vol='||p.provolatile::text
            ||' cfg='||coalesce(array_to_string(p.proconfig,','),'-')
-           ||' src='||regexp_replace(p.prosrc, '\s+', ' ', 'g') as t
+           ||' src_md5='||md5(p.prosrc) as t
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
@@ -173,32 +189,32 @@ acl_fonctions as (
  *
  * SEULE DIMENSION QUI NE PEUT PAS DEVENIR VERTE, et c'est mesuré, pas subi.
  *
- * La production porte six entrées : trois pour `postgres`, trois pour
- * `supabase_admin`. Une baseline rejouée n'en produit que trois.
+ * Corrigé le 18/08/2026 soir : la version précédente faisait un INNER JOIN
+ * sur `pg_namespace`, qui exclut silencieusement les entrées GLOBALES
+ * (`defaclnamespace = 0`) — exactement le même angle mort que celui trouvé
+ * dans la sentinelle. LEFT JOIN désormais, entrées globales incluses.
  *
- *   · les trois de `supabase_admin` sont hors d'atteinte : `postgres` n'est
- *     pas membre de ce rôle, donc `ALTER DEFAULT PRIVILEGES FOR ROLE
- *     supabase_admin` échouerait. Elles sont par ailleurs INERTES : zéro
- *     relation et zéro fonction de `public` ne lui appartiennent, et les
- *     migrations s'exécutent en tant que `postgres`.
- *   · `postgres` porte en production une entrée explicite pour lui-même
- *     (`postgres=arwdDxtm/postgres`) que le rejeu ne recrée pas. Sans effet :
- *     il est propriétaire des objets et détient tout à ce titre.
- *
- * Preuve que l'écart ne porte à conséquence sur rien : l'ACL EFFECTIF des
- * 20 relations, tous rôles confondus — `postgres` inclus — donne la même
- * empreinte des deux côtés (`e16eae01…`, 78 lignes, le 18/08/2026).
- * Les défauts diffèrent ; ce qu'ils ont produit, non.
+ * Sur ce qui reste hors d'atteinte : `postgres` (le rôle qui exécute les
+ * migrations) n'est pas membre de `supabase_admin`, donc
+ * `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` échouerait — un rejeu
+ * ne peut matériellement pas reproduire son entrée. Cette entrée est
+ * INACTIVE dans le chemin que ce projet contrôle (0 relation de `public` ne
+ * lui appartient aujourd'hui, mesuré) mais PAS neutralisée structurellement
+ * — `supabase_admin` est superutilisateur et garde la capacité de créer
+ * dans `public`. Voir `docs/preuve-sentinelle-et-fonctions.md` §5-6 et le
+ * dossier fournisseur en préparation. Ne pas relire cette ligne comme
+ * « inerte » sans réserve : c'est une capacité dormante, pas une
+ * impossibilité.
  */
 defaut as (
   select 'default_privileges' as dimension, count(*) as objets,
          md5(string_agg(t, E'\n' order by t)) as empreinte
   from (
-    select pg_get_userbyid(d.defaclrole)||' '||d.defaclobjtype::text||' '
-           ||array_to_string(d.defaclacl::text[], ' ') as t
+    select pg_get_userbyid(d.defaclrole)||' '||coalesce(n.nspname,'(global)')||' '
+           ||d.defaclobjtype::text||' '||array_to_string(d.defaclacl::text[], ' ') as t
     from pg_default_acl d
-    join pg_namespace n on n.oid = d.defaclnamespace
-    where n.nspname = 'public'
+    left join pg_namespace n on n.oid = d.defaclnamespace
+    where n.nspname = 'public' or d.defaclnamespace = 0
   ) s
 )
 select * from colonnes
@@ -213,3 +229,45 @@ union all select * from acl_relations
 union all select * from acl_fonctions
 union all select * from defaut
 order by dimension;
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ *  MANIFESTE — une ligne par fonction, l'identité complète, pas un hachage
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * À exécuter séparément (deuxième requête du fichier), sur chaque base à
+ * comparer. C'est ICI que se lit le verdict individuel d'une fonction
+ * signalée par la dimension `fonctions` ci-dessus — jamais en devinant
+ * depuis un hachage agrégé.
+ *
+ * `empreinte_exacte` = `md5(prosrc)` du corps BRUT : la preuve. Deux valeurs
+ * identiques garantissent des corps caractère pour caractère identiques.
+ *
+ * `empreinte_normalisee_aide_seulement` = `md5` du corps après réduction des
+ * blancs consécutifs. NE PROUVE RIEN par elle-même — un littéral de chaîne
+ * différent par ses espaces internes donnerait la même valeur des deux
+ * côtés. Sert uniquement à orienter une lecture manuelle rapide quand
+ * `empreinte_exacte` diffère : si la normalisée concorde aussi, c'est un
+ * signal (pas une preuve) que l'écart est probablement de présentation —
+ * à confirmer par lecture brute des deux corps, toujours.
+ */
+select
+  p.proname,
+  pg_get_function_identity_arguments(p.oid) as arguments,
+  l.lanname as langage,
+  pg_get_function_result(p.oid) as type_retour,
+  p.provolatile as volatilite,
+  p.proisstrict as strict,
+  p.proparallel as parallelisme,
+  case when p.prosecdef then 'definer' else 'invoker' end as securite,
+  coalesce(array_to_string(p.proconfig, ','), '-') as proconfig,
+  pg_get_userbyid(p.proowner) as proprietaire,
+  coalesce(array_to_string(p.proacl::text[], ' '), 'DEFAUT') as acl,
+  length(p.prosrc) as longueur_corps,
+  md5(p.prosrc) as empreinte_exacte,
+  md5(regexp_replace(p.prosrc, '\s+', ' ', 'g')) as empreinte_normalisee_aide_seulement
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+join pg_language l on l.oid = p.prolang
+where n.nspname = 'public'
+order by p.proname, arguments;

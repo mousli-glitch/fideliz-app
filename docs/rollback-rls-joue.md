@@ -1,6 +1,6 @@
 # Rollback RLS — joué pour de vrai, pas décrit
 
-Exécuté le **18/08/2026** sur la branche `bngtokpnuebvvxbtnayn`.
+Exécuté le **18/08/2026** sur une branche synthétique.
 **Production non touchée.**
 
 ## Le cycle complet

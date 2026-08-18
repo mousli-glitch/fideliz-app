@@ -1,6 +1,6 @@
 # Matrice A/B — les droits DML des vues, mesurés
 
-Établi le **18/08/2026** sur la branche `bngtokpnuebvvxbtnayn`, état historique
+Établi le **18/08/2026** sur une branche synthétique, état historique
 reconstruit (baseline + 8 migrations), deux tenants synthétiques, aucune
 donnée réelle.
 

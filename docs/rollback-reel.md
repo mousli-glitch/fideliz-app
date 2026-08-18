@@ -130,10 +130,9 @@ Dernière exécution : **2 980 lignes · 20 fichiers · 9 comptes · 88 objets
 | | |
 |---|---|
 | **Créée le** | 18/08/2026 à **01 h 59** (Paris) — `2026-08-17T23:59:19Z` |
-| **Identifiant** | `5aeec608-4c2b-49c6-9cc6-ea4e0d00d300` |
-| **Référence projet** | `bngtokpnuebvvxbtnayn` |
+| **Identifiant** | branche synthétique, depuis supprimée |
 | **Nom** | `fusion-tests` |
-| **Parent** | `kzeuplszcqjqaqohfbzk` (production Fideliz) |
+| **Parent** | production Fideliz |
 | **Taille Compute** | Micro |
 | **Coût** | 0,013 44 $/heure |
 | **Échéance des 72 h** | **21/08/2026 à 01 h 59** |
