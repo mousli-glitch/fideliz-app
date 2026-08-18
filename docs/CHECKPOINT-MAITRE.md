@@ -8,67 +8,92 @@ si une information manque pour cette raison, elle est signalée comme
 
 ---
 
-## ⚡ Où reprendre MAINTENANT (18/08, soirée, deuxième passe)
+## ⚡ Où reprendre MAINTENANT (18/08, nuit, troisième passe)
 
-**Deux tours d'audit indépendant traités.** Commits `7cbd08a` puis `689b193`
+**Trois tours traités.** Commits `7cbd08a`, `689b193`, `d814ebe`, `f6a6403`
 sur `candidat/baseline-acl`. Détail et preuves :
 `docs/preuve-sentinelle-et-fonctions.md`.
 
-**Premier tour (rapport 018 → réponse) — traité, commit `7cbd08a`** :
-libellé de garantie corrigé · sentinelle durcie (droits effectifs, tout
-propriétaire, portée globale, PUBLIC, héritage) · 4 scénarios prouvés dont
-un réel (`supabase_admin` en production porte encore 6 privilèges excessifs,
-jamais neutralisés par le durcissement déployé) · preuve ACL de `avis`
-versionnée · les 22 fonctions closes (11 identiques, 9 cosmétiques, 2
-attribuées à des migrations déjà écrites, vérifiées caractère pour
-caractère contre la production).
+**Tours 1 et 2** (rapports 018/019 → réponses) : voir historique ci-dessous
+(§ archivé) — sentinelle durcie, harnais rejouable, `preuve-acl-avis.sql`
+et `empreintes.sql` corrigés, refs de projet retirées, dossier
+`supabase_admin` préparé (`NEEDS_VENDOR_CONFIRMATION`, non soumis).
 
-**Deuxième tour (audit du rapport 019) — traité, commit `689b193`** :
+**Tour 3 (incident GRANT/REVOKE + deux modes + couches 1-2-3) — traité** :
 
-1. ✅ **`supabase_admin` classé `NEEDS_VENDOR_CONFIRMATION`**, pas accepté
-   ni modifié. Brouillon de dossier Supabase Support préparé
-   (`docs/dossier-support-supabase-admin.md`), **non soumis** — attend une
-   revue de Samy avant tout envoi.
-2. ✅ Les 4 scénarios sont désormais **rejouables automatiquement** :
-   `supabase/verifications/harnais-scenarios-sentinelle.sql` (seed →
-   détection → nettoyage, exécuté et vérifié de bout en bout sur la branche
-   synthétique) + `supabase/verifications/sentinelle.test.ts` (garde
-   anti-dérive : le harnais ne peut plus diverger silencieusement de la
-   sentinelle réelle, comparaison caractère pour caractère par ancres
-   partagées ; tests de non-régression sur les clauses de détection).
-3. ✅ `preuve-acl-avis.sql` mesure maintenant des **droits effectifs**
-   (`has_table_privilege`, matrice 4 rôles × 8 privilèges), plus l'ancienne
-   version aclexplode. Prouvé en live qu'un TRUNCATE via PUBLIC sur `avis`
-   lui échappait, détecté par la nouvelle.
-4. ✅ `empreintes.sql` : la dimension `fonctions` compare `prosrc` par
-   **empreinte exacte** (`md5` brut), plus par normalisation. Manifeste
-   individuel des 22 fonctions ajouté (identité, langage, volatilité,
-   strict, parallélisme, DEFINER/INVOKER, `proconfig`, propriétaire, ACL,
-   empreinte exacte + empreinte normalisée étiquetée « aide seulement »).
-   Même correction de portée (INNER→LEFT JOIN, entrées globales incluses)
-   appliquée à sa dimension `default_privileges`.
-5. ✅ Sentinelle : la condition PUBLIC (`grantee = 0`) utilise un `CASE`
-   explicite — ne dépend plus de l'ordre d'évaluation d'un OR SQL, non
-   garanti. Re-testé contre production (lève toujours) et contre la branche
-   synthétique (aucune erreur, détection correcte).
-6. ✅ Références de projet Supabase retirées des documents suivis
-   (`kzeuplszcqjqaqohfbzk`, `rxdbotnuwfakukcbgeqo`, `vrbnbmiokzhmhbghhduh`,
-   `bngtokpnuebvvxbtnayn` → « production » / « branche synthétique »).
+1. ✅ **Le « cycle GRANT/REVOKE en production » du rapport 020 était une
+   erreur de rédaction, pas une action réelle.** Vérifié : toutes les
+   mutations de `preuve-acl-avis` ont eu lieu sur `fusion-tests-2`, jamais
+   sur `kzeuplszcqjqaqohfbzk`. Empreintes des 11 dimensions re-mesurées en
+   production : identiques, octet pour octet, à toutes les mesures
+   précédentes. Une seule phrase ambiguë du rapport 020 mélangeait les deux
+   environnements — corrigé, pas de `NEEDS_USER` puisque rien ne divergeait.
+2. ✅ **Deux modes de sentinelle**, commit `d814ebe` :
+   `sentinelle-privileges-anon.sql` = mode STRICT (tout propriétaire,
+   lève sur `supabase_admin`) ; `sentinelle-mode-operationnel.sql` = sépare
+   FAIL PROJECT (bloquant) de PLATFORM WARNING (non bloquant, scopé au seul
+   nom littéral `supabase_admin`, jamais une heuristique). Testé en live :
+   le mode opérationnel réussit contre la production (le vrai cas
+   `supabase_admin` ne bloque pas) ; un excès `postgres` et un rôle inconnu
+   synthétique lèvent bien FAIL PROJECT.
+3. ⚠️ **Découverte majeure, commit `f6a6403`** : les migrations
+   durcissement/RLS/identité-root de `candidat/baseline-acl` étaient un
+   **brouillon jamais déployé**, différent du candidat réel (`5094af3`) —
+   fonction d'audit en trop, RLS et identité-root en deux fichiers séparés
+   au lieu d'un seul, durcissement positionné AVANT la RLS au lieu
+   d'après. Réconcilié avec le contenu exact de `main` (récupéré depuis
+   `candidat/gel-matrice`, qui portait déjà cette réconciliation) :
+   `20260818011000_rls_isolation_inter_tenant.sql` (455 lignes, fusion
+   RLS+identité-root) et `20260818150000_durcir_les_privileges_par_defaut.sql`
+   (sans fonction d'audit), rollbacks inclus. Le contenu fonctionnel
+   (GRANT/REVOKE, corps de `current_role()`/`handle_deleted_commercial()`)
+   était déjà vérifié caractère pour caractère contre la production plus tôt
+   dans la séance — seule l'organisation des fichiers changeait. Gel
+   renuméroté `20260818160000` pour rester après le durcissement, sans
+   changement de contenu (sa propre réconciliation reste à faire, couche 4).
+   `durcissement.test.ts` et `identite-root.test.ts` mis à jour en
+   conséquence. **Sans cette correction, qualifier les couches contre le
+   brouillon n'aurait rien prouvé.**
+4. ✅ **Couches 2+3 (RLS + identité-root) qualifiées sur `fusion-tests-2`** :
+   empreinte avant (`policies` 43/`5b6dd5bc…`) → application → empreinte
+   après (`policies` 41/`124e7014…`, **identique à la production en
+   direct**) → rollback exact (retour à `5b6dd5bc…`, vérifié) →
+   réapplication → empreinte finale identique à la première application.
+   Migration durablement appliquée et enregistrée sur la branche.
+5. ✅ **Couche 1 (durcissement) qualifiée sur `fusion-tests-2`**, appliquée
+   après les couches 2+3 (ordre réel de production, pas l'ordre demandé
+   1-2-3-4 — la production a fusionné 2+3 et placé 1 après). Empreinte
+   avant/après/rollback/réapplication bouclée. Écart résiduel avec
+   production : une entrée `postgres=…` explicite et redondante dans les
+   défauts (le propriétaire a tous les droits par construction, donc sans
+   effet) — déjà documentée comme telle avant cette séance, reconfirmée
+   fonctionnellement neutre par test direct (`has_table_privilege` sur une
+   table jetable créée puis détruite : `anon`/`authenticated` = rien,
+   `service_role` = exactement les 4 verbes attendus, avant ET après
+   réapplication).
 
-**171 tests verts** (156 + 15 nouveaux). **Prochaine tâche : déposer le
-rapport 020 dans le relais** (voir §3 — le fichier relais est resté bloqué
-à l'ID `017` au dernier contrôle ; vérifier s'il a bougé avant d'écrire).
+**175 tests verts.** **Pas encore fait, dans l'ordre** : couche 4 (gel,
+matrice de concurrence à 2 sessions — jamais tentée, c'est le morceau le
+plus long) · réserves du candidat UUID-root · migrateur/dry-run/UI/
+compatibilité. Voir le rapport complet donné directement dans le chat (le
+relais reste considéré inactif — bloqué à l'ID `017` depuis deux tours).
 
-**Ensuite, décision de Samy attendue avant de continuer** : la demande
-initiale incluait une « poursuite autonome » — appliquer les 4 couches
-séparément, la matrice de concurrence du gel à deux sessions, puis les
-réserves UUID-root — sans réclamer de nouvelle confirmation. Ce chantier
-n'a **pas** été entamé dans cette séance : son ampleur (chacune des 4
-couches a historiquement représenté plusieurs heures de travail à part
-entière, cf. §9) justifie un point de passage explicite plutôt qu'un
-enchaînement silencieux, dans un contexte où Samy surveille activement les
-coûts. Reprendre à la tâche 1 de §9 dès que Samy confirme vouloir continuer
-sur cette lancée — ou pas.
+---
+
+<details>
+<summary>Archivé — tours 1 et 2 (rapports 018/019), avant la découverte du tour 3</summary>
+
+**Tour 1** (commit `7cbd08a`) : libellé de garantie corrigé · sentinelle
+durcie (droits effectifs, tout propriétaire, portée globale, PUBLIC,
+héritage) · 4 scénarios prouvés dont un réel (`supabase_admin`) · preuve
+ACL de `avis` versionnée · les 22 fonctions closes.
+
+**Tour 2** (commit `689b193`) : harnais SQL rejouable + garde anti-dérive ·
+`preuve-acl-avis.sql` en droits effectifs · `empreintes.sql` en empreinte
+exacte + manifeste · CASE explicite PUBLIC · refs de projet retirées ·
+dossier `supabase_admin` préparé.
+
+</details>
 
 ---
 
