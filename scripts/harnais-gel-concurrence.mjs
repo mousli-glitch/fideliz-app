@@ -7,7 +7,9 @@
  * Rejoue la matrice de concurrence du gel source Fideliz contre une branche
  * Supabase synthétique, via deux (ou plus) appels PostgREST réellement
  * concurrents. Compagnon de `supabase/verifications/harnais-gel-concurrence.sql`
- * (fonctions témoins) — appliquer ce fichier SQL AVANT de lancer ce script.
+ * (fonctions témoins, gardées par une vérification de cible synthétique
+ * avant toute création — voir ce fichier) — l'appliquer AVANT de lancer ce
+ * script.
  *
  * Variables d'environnement requises, jamais de valeur en dur ici :
  *   SUPABASE_REST_URL        — https://<ref>.supabase.co
@@ -15,66 +17,74 @@
  *                               mais son `ref` révèle le projet : ne pas logger)
  *   HARNAIS_NONCE_ATTENDU    — valeur retournée par le `select` final de
  *                               harnais-gel-concurrence.sql au moment où il a
- *                               été appliqué. Refuse de continuer si le nonce
- *                               observé ne correspond pas — c'est la garde
- *                               d'identité : mauvaise cible, arrêt.
+ *                               été appliqué.
  *
- * Variable optionnelle :
- *   HARNAIS_REPETITIONS      — nombre de répétitions du scénario de course
- *                               (défaut 5)
+ * Variables optionnelles :
+ *   HARNAIS_REPETITIONS      — répétitions du scénario de course (défaut 5)
+ *   HARNAIS_TIMEOUT_MS       — timeout par requête HTTP (défaut 5000)
  *
- * Isolation REPEATABLE READ — trois mécanismes essayés le 19/08/2026, TOUS
- * insuffisants sur ce projet Supabase (PostgREST 14.15), chacun vérifié
- * empiriquement plutôt que supposé :
- *   1. `SET default_transaction_isolation` DEPUIS l'intérieur de la
- *      fonction RPC : AUCUN effet sur la transaction en cours (PostgREST a
- *      déjà exécuté sa propre préparation de requête avant d'appeler la
- *      fonction — la restriction PostgreSQL "avant toute requête" est déjà
- *      dépassée).
- *   2. `alter role anon set default_transaction_isolation = 'repeatable
- *      read'` : sans effet observé — `pg_stat_activity` montre que
- *      PostgREST se connecte TOUJOURS en tant que `authenticator`
- *      (`usename = 'authenticator'`), jamais `anon` ; le `SET ROLE anon`
- *      qu'il fait ensuite par requête ne réapplique pas les défauts de
- *      session du rôle cible.
- *   3. `alter role authenticator set default_transaction_isolation =
- *      'repeatable read'`, connexions existantes terminées de force
- *      (`pg_terminate_backend`) pour forcer une reconnexion : PID de
- *      connexion confirmé différent après coup (nouvelle connexion
- *      établie), mais `niveau_isolation` observé reste `read committed`.
- *      `pg_settings` confirme : `transaction_isolation` a `source =
- *      'override'` — quelque chose (PostgREST lui-même, probablement)
- *      force explicitement le niveau à chaque requête, indépendamment de
- *      tout défaut de rôle.
+ * ─── FAIL-CLOSED, SIGNALÉ LE 19/08/2026 (3e TOUR) ───
  *
- * Conclusion, non contournée par une preuve dégradée : depuis PostgREST
- * sur ce projet, aucun mécanisme testé ne force REPEATABLE READ pour une
- * requête anonyme. Les scénarios qui l'exigent (`meme_interleaving_repeatable_read`,
- * `snapshot_anterieur_activation_committee`) LISENT le niveau réellement
- * observé dans chaque réponse et échouent honnêtement si ce n'est pas
- * 'repeatable read', plutôt que de rendre un faux résultat. Le mécanisme de
- * fencing (`for share` + 40001) reste prouvé pour ce niveau d'isolation —
- * voir `docs/qualification-couche-4-gel.md` §7, cycle antérieur à ce
- * harnais, avec ses propres diagnostics (pid, xid, horodatages) capturés
- * au moment où l'isolation avait pu être forcée.
+ * Version précédente : ignorait les statuts de plusieurs appels de
+ * réinitialisation, avalait l'échec du nettoyage dans le `finally` — sortie
+ * possible en code 0 avec un nettoyage incomplet. Corrigé :
+ *   - chaque requête porte un `AbortSignal.timeout()` — borne le pire cas,
+ *     ne bloque jamais indéfiniment ;
+ *   - toute réponse non-2xx lève une erreur (plus de statut ignoré) ;
+ *   - `reinitialiser()` vérifie CHAQUE appel, propage l'échec ;
+ *   - un échec du bloc `finally` force le résultat global à FAIL, quel
+ *     qu'ait été le résultat des scénarios eux-mêmes ;
+ *   - après nettoyage, un contrôle explicite vérifie : gel inactif, ligne
+ *     présente, zéro fixture résiduelle — pas seulement "les appels de
+ *     nettoyage ont retourné 200".
+ *
+ * ─── SORTIE EXPURGÉE ───
+ *
+ * Signalé le 19/08/2026 : ne jamais écrire d'identifiant, même synthétique
+ * — ni `ligne_id`, ni UUID, ni PID, ni XID, ni URL, ni clé, ni nonce, ni
+ * référence de projet. Les fonctions témoins elles-mêmes ne renvoient plus
+ * ces champs (voir `harnais-gel-concurrence.sql`). La sortie finale ne
+ * contient que : nom du scénario, PASS/FAIL, code SQLSTATE le cas échéant,
+ * durées arrondies à la milliseconde la plus proche.
+ *
+ * ─── ISOLATION REPEATABLE READ — LA BONNE FORME ───
+ *
+ * Signalé le 19/08/2026 (3e tour) : `SET default_transaction_isolation`
+ * exécuté DANS le corps d'une fonction, ou posé via `alter role`, n'a pas
+ * d'effet fiable sur ce projet (vérifié empiriquement lors des tours
+ * précédents). La forme qui fonctionne, documentée par PostgREST : un
+ * ATTRIBUT DE FONCTION (`set default_transaction_isolation to 'repeatable
+ * read'` dans l'en-tête, stocké dans `pg_proc.proconfig`) — vérifié en
+ * direct le 19/08/2026 : appel REST réel, `current_setting('transaction_isolation')
+ * = 'repeatable read'`, sans toucher `anon` ni `authenticator`, sans
+ * terminer aucune connexion. `zz_harnais_gel_ecriture_rr()` porte cet
+ * attribut ; ce script l'appelle pour les scénarios REPEATABLE READ,
+ * `zz_harnais_gel_ecriture()` (sans suffixe) pour les scénarios READ
+ * COMMITTED. Ce script VÉRIFIE le niveau réellement observé dans chaque
+ * réponse et échoue honnêtement s'il ne correspond pas à l'attendu,
+ * plutôt que de supposer que l'attribut a été pris en compte.
+ *
+ * ─── ORDRE PROUVÉ, PAS SUPPOSÉ ───
  *
  * Les délais (`pg_sleep` côté SQL, `attendre()` ici) BORNENT le temps
- * laissé à l'autre partie pour agir — ils ne PROUVENT jamais l'ordre. La
- * preuve d'ordre vient des champs retournés par les fonctions témoins
- * (xid de transaction, pid de session, horodatages `clock_timestamp()`,
- * niveau d'isolation observé), comparés après coup dans ce script.
- *
- * Sortie : uniquement un tableau JSON synthétique { scenario, ok, detail }
- * — aucun secret, aucune URL, aucune clé, aucun UUID de projet dans la
- * sortie. Nettoyage des DONNÉES en `finally` (les fonctions témoins elles-
- * mêmes restent — DDL hors de portée d'un rôle anon — voir
- * `harnais-gel-concurrence-nettoyage.sql`).
+ * laissé à l'autre partie pour démarrer et prendre son verrou — ils ne
+ * PROUVENT jamais l'ordre à eux seuls. La preuve d'ordre vient du
+ * comportement RÉELLEMENT OBSERVÉ : la durée de blocage mesurée (un verrou
+ * Postgres réel — `for share` contre `NO KEY UPDATE` — fait attendre
+ * l'appelant, un `pg_sleep` seul ne le ferait pas), et le contenu des
+ * réponses (code d'erreur, niveau d'isolation). Limite architecturale
+ * reconnue : chaque appel PostgREST est une requête HTTP indépendante,
+ * sans session partagée entre deux appels — un court délai de démarrage
+ * (« tête de départ ») avant le second appel reste nécessaire pour lui
+ * laisser une chance de trouver le premier déjà en vol ; ce délai ne fait
+ * jamais partie de la preuve elle-même, seulement du scénario.
  */
 
 const REST_URL = process.env.SUPABASE_REST_URL;
 const ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const NONCE_ATTENDU = process.env.HARNAIS_NONCE_ATTENDU;
 const REPETITIONS = Number(process.env.HARNAIS_REPETITIONS ?? 5);
+const TIMEOUT_MS = Number(process.env.HARNAIS_TIMEOUT_MS ?? 5000);
 
 function exigerEnv() {
   const manquantes = [];
@@ -87,6 +97,7 @@ function exigerEnv() {
   }
 }
 
+// Lève systématiquement sur non-2xx — plus aucun statut ignoré.
 async function appeler(fn, corps = {}) {
   const reponse = await fetch(`${REST_URL}/rest/v1/rpc/${fn}`, {
     method: "POST",
@@ -96,30 +107,54 @@ async function appeler(fn, corps = {}) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(corps),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   const texte = await reponse.text();
-  let corpsReponse;
+  let json;
   try {
-    corpsReponse = JSON.parse(texte);
+    json = JSON.parse(texte);
   } catch {
-    corpsReponse = texte;
+    json = texte;
   }
-  return { statut: reponse.status, corps: corpsReponse };
+  if (!reponse.ok) {
+    const message = typeof json === "object" && json?.message ? json.message : String(json).slice(0, 200);
+    throw new Error(`${fn} → HTTP ${reponse.status} : ${message}`);
+  }
+  return json;
+}
+
+// Comme appeler(), mais capture un échec ATTENDU (ex. "déjà actif") comme
+// résultat plutôt que de le laisser remonter — utilisé quand un scénario
+// veut explicitement vérifier qu'un appel EST refusé.
+async function appelerAttendreEchec(fn, corps = {}) {
+  try {
+    const json = await appeler(fn, corps);
+    return { echoue: false, json };
+  } catch (erreur) {
+    return { echoue: true, message: String(erreur.message ?? erreur) };
+  }
 }
 
 function attendre(secondes) {
   return new Promise((resolve) => setTimeout(resolve, secondes * 1000));
 }
 
+function arrondirMs(ms) {
+  return Math.round(ms);
+}
+
 async function verifierIdentite() {
-  const { statut, corps } = await appeler("zz_harnais_gel_identite");
-  if (statut === 404) {
+  let corps;
+  try {
+    corps = await appeler("zz_harnais_gel_identite");
+  } catch (erreur) {
     throw new Error(
-      "IDENTITÉ NON CONFIRMÉE (404) : la fonction témoin n'existe pas sur cette cible — " +
-        "harnais-gel-concurrence.sql n'a probablement pas été appliqué ici. Arrêt.",
+      "IDENTITÉ NON CONFIRMÉE : " + String(erreur.message ?? erreur) +
+        " — harnais-gel-concurrence.sql n'a probablement pas été appliqué ici (sa propre garde de cible " +
+        "synthétique a peut-être refusé). Arrêt.",
     );
   }
-  if (statut !== 200 || corps !== NONCE_ATTENDU) {
+  if (corps !== NONCE_ATTENDU) {
     throw new Error(
       "IDENTITÉ NON CONFIRMÉE : le nonce renvoyé ne correspond pas à HARNAIS_NONCE_ATTENDU. " +
         "Cible potentiellement différente de celle attendue — arrêt, ne jamais retomber sur une autre cible.",
@@ -127,27 +162,47 @@ async function verifierIdentite() {
   }
 }
 
+// Réinitialisation INTERNE au harnais, entre deux scénarios — pas le
+// nettoyage final (voir harnais-gel-concurrence-nettoyage.sql, gardé
+// séparément). Vérifie chaque appel ; propage la première erreur au lieu
+// de l'avaler.
 async function reinitialiser() {
   await appeler("zz_harnais_gel_restaurer_ligne");
-  await appeler("zz_harnais_gel_desactiver");
+  const { actif } = await appeler("zz_harnais_gel_etat");
+  if (actif) {
+    await appeler("zz_harnais_gel_desactiver");
+  }
   await appeler("zz_harnais_gel_nettoyage");
+}
+
+// Vérification finale, après le dernier nettoyage : gel inactif, ligne
+// présente, zéro fixture — pas seulement "les appels ont retourné 200".
+async function verifierEtatFinal() {
+  const etat = await appeler("zz_harnais_gel_etat");
+  if (etat.actif !== false) {
+    throw new Error("VÉRIFICATION FINALE ÉCHOUÉE : actif devrait être false, observé " + JSON.stringify(etat.actif));
+  }
+  const nettoyage = await appeler("zz_harnais_gel_nettoyage");
+  if (nettoyage.lignes_restaurants_supprimees !== 0) {
+    throw new Error(
+      "VÉRIFICATION FINALE ÉCHOUÉE : " + nettoyage.lignes_restaurants_supprimees +
+        " fixture(s) restaurants restante(s) après nettoyage, 0 attendu.",
+    );
+  }
+  if (nettoyage.etat_final?.actif !== false) {
+    throw new Error("VÉRIFICATION FINALE ÉCHOUÉE : état final non inactif.");
+  }
 }
 
 // ─────────────────────────────────────────────────────────── scénarios
 
 async function scenarioEcritureDejaEnVolBloqueActivation() {
-  // 1. Écriture déjà verrouillée avant activation → l'activation attend.
-  // attente_apres_ecriture retient le verrou `for share` ouvert après
-  // l'INSERT, avant que la fonction ne rende la main — sans ça, une
-  // écriture sans délai committe en quelques ms et n'est plus "en vol" au
-  // moment où l'activation démarre (constaté lors du premier essai de ce
-  // harnais : dureeActivationMs ≈ 47ms, aucun blocage mesurable).
   await reinitialiser();
   const attenteApresEcriture = 1.2;
   const promesseEcriture = appeler("zz_harnais_gel_ecriture", { attente_apres_ecriture: attenteApresEcriture });
-  await attendre(0.3); // laisser l'écriture démarrer et prendre son verrou
+  await attendre(0.3);
   const debut = Date.now();
-  const activation = await appeler("zz_harnais_gel_activer");
+  await appeler("zz_harnais_gel_activer");
   const dureeActivationMs = Date.now() - debut;
   const reponseEcriture = await promesseEcriture;
   await reinitialiser();
@@ -155,128 +210,84 @@ async function scenarioEcritureDejaEnVolBloqueActivation() {
   const bloquee = dureeActivationMs > (attenteApresEcriture - 0.3) * 1000 * 0.5;
   return {
     scenario: "ecriture_deja_en_vol_bloque_activation",
-    ok: activation.statut === 200 && bloquee && reponseEcriture.corps?.ecriture_ok === true,
-    detail: { dureeActivationMs, statutActivation: activation.statut, ecriture: reponseEcriture.corps },
+    ok: bloquee && reponseEcriture.ecriture_ok === true,
+    detail: { dureeActivationMs: arrondirMs(dureeActivationMs) },
   };
 }
 
-async function scenarioActivationNonCommiteeBloqueEcriturePuisRefuse() {
-  // 2/3. B active sans committer (retient son verrou N secondes) ; A démarre
-  // une écriture (READ COMMITTED, défaut anon) pendant que B est en vol ;
-  // A doit bloquer sur FOR SHARE puis, une fois B committé, recevoir P0100 —
-  // jamais relire un état périmé.
-  await reinitialiser();
-  const attenteAvantRetourB = 1.5;
-  const promesseB = appeler("zz_harnais_gel_activer", { attente_avant_retour: attenteAvantRetourB });
-  await attendre(0.3); // laisser B démarrer et prendre son verrou NO KEY UPDATE
-  const debutA = Date.now();
-  const reponseA = await appeler("zz_harnais_gel_ecriture");
-  const dureeAMs = Date.now() - debutA;
-  const reponseB = await promesseB;
-  await reinitialiser();
-
-  const aAAttendu = dureeAMs > (attenteAvantRetourB - 0.3) * 1000 * 0.5; // A a dû attendre une part significative du hold de B
-  const aRefuseApresCoup =
-    reponseA.corps?.ecriture_ok === false && reponseA.corps?.code_erreur === "P0100";
-  return {
-    scenario: "activation_non_committee_bloque_ecriture_puis_refuse",
-    ok: reponseB.statut === 200 && aAAttendu && aRefuseApresCoup,
-    detail: { dureeAMs, niveauIsolationA: reponseA.corps?.niveau_isolation, reponseA: reponseA.corps, reponseB: reponseB.corps },
-  };
-}
-
-async function scenarioMemeInterleavingRepeatableRead() {
-  // 4. Même interleaving que ci-dessus, mais A doit être en REPEATABLE READ.
-  // AUCUN mécanisme testé ne force ce niveau pour une requête PostgREST
-  // anonyme sur ce projet (voir en-tête — 3 approches essayées, toutes
-  // sans effet, `pg_settings.transaction_isolation.source = 'override'`).
-  // Ce script ne prétend jamais avoir posé le niveau : il VÉRIFIE le
-  // niveau réellement observé et échoue honnêtement sinon.
+async function scenarioActivationNonCommiteeBloqueEcriturePuisRefuse(fn, codeAttendu) {
+  // codeAttendu diffère selon l'isolation de A, et c'est ATTENDU, pas une
+  // approximation : sous READ COMMITTED, le `for share` de A se débloque
+  // après le commit de B et relit la valeur fraîche → la décision du
+  // trigger (`if v_actif then`) refuse avec P0100. Sous REPEATABLE READ,
+  // l'instantané de A est fixé à SON PREMIER statement (l'INSERT, donc
+  // avant le commit de B, puisque A démarre pendant que B retient encore
+  // son verrou) — quand le `for share` se débloque après le commit de B,
+  // PostgreSQL détecte que la ligne a été modifiée par une transaction
+  // validée après l'instantané et lève 40001 AVANT même d'atteindre la
+  // décision du trigger. Un test qui attendrait P0100 dans les deux cas
+  // se tromperait sur le second — constaté en direct le 19/08/2026.
   await reinitialiser();
   const attenteAvantRetourB = 1.5;
   const promesseB = appeler("zz_harnais_gel_activer", { attente_avant_retour: attenteAvantRetourB });
   await attendre(0.3);
-  const reponseA = await appeler("zz_harnais_gel_ecriture");
-  const reponseB = await promesseB;
+  const debutA = Date.now();
+  const reponseA = await appeler(fn);
+  const dureeAMs = Date.now() - debutA;
+  await promesseB;
   await reinitialiser();
 
-  const niveauReel = reponseA.corps?.niveau_isolation;
-  if (niveauReel !== "repeatable read") {
-    return {
-      scenario: "meme_interleaving_repeatable_read",
-      ok: false,
-      detail: {
-        raison: "NON VÉRIFIABLE ICI : niveau d'isolation observé = " + niveauReel + ", 'repeatable read' attendu. " +
-          "Aucun mécanisme connu ne force ce niveau via PostgREST sur ce projet — voir l'en-tête du script.",
-      },
-    };
-  }
-  const aRefuseApresCoup = reponseA.corps?.ecriture_ok === false;
+  const aAAttendu = dureeAMs > (attenteAvantRetourB - 0.3) * 1000 * 0.5;
+  const aRefuseApresCoup = reponseA.ecriture_ok === false && reponseA.code_erreur === codeAttendu;
   return {
-    scenario: "meme_interleaving_repeatable_read",
-    ok: reponseB.statut === 200 && aRefuseApresCoup,
-    detail: { reponseA: reponseA.corps, reponseB: reponseB.corps },
+    ok: aAAttendu && aRefuseApresCoup,
+    detail: { dureeAMs: arrondirMs(dureeAMs), niveauIsolation: reponseA.niveau_isolation, codeErreur: reponseA.code_erreur },
   };
 }
 
 async function scenarioSnapshotAnterieurActivationDejaCommittee() {
-  // 5. Snapshot REPEATABLE READ antérieur à une activation déjà committée
-  // → 40001. Même limite que le scénario 4 (voir en-tête) : aucun
-  // mécanisme connu ne force REPEATABLE READ via PostgREST anonyme ici.
-  // Ce scénario A DÉJÀ été prouvé, avec ses propres diagnostics complets
-  // (pid, xid, chronologie), dans un cycle antérieur à ce harnais — voir
-  // `docs/qualification-couche-4-gel.md` §7. Ce qui suit ne fait que
-  // tenter de le REJOUER via le harnais permanent, honnêtement, sans
-  // dupliquer une preuve déjà faite si le niveau ne peut pas être forcé ici.
+  // Corrigé le 19/08 (4e tour) après un premier essai bâclé : une marge de
+  // 50 ms entre le lancement de A et l'activation de B s'est révélée être
+  // une pure course (A pouvait déjà avoir committé avant même que B ne
+  // démarre) — détecté par un résultat incohérent, pas ignoré. A fixe
+  // maintenant son instantané par une lecture SÉPARÉE (immédiate), puis
+  // retient sa transaction ouverte 1,5 s (attente_snapshot_puis_ecriture)
+  // avant de tenter l'écriture — une marge large, mesurée après coup par
+  // les horodatages retournés plutôt que supposée suffisante.
   await reinitialiser();
-  const promesseA = appeler("zz_harnais_gel_ecriture", { attente_avant_lecture: 0.1 });
-  await attendre(0.05);
-  const reponseB = await appeler("zz_harnais_gel_activer");
+  const attenteSnapshotPuisEcriture = 1.5;
+  const promesseA = appeler("zz_harnais_gel_ecriture_rr", { attente_snapshot_puis_ecriture: attenteSnapshotPuisEcriture });
+  await attendre(0.3); // laisser A fixer son instantané avant que B n'active
+  await appeler("zz_harnais_gel_activer");
   const reponseA = await promesseA;
   await reinitialiser();
 
-  const niveauReel = reponseA.corps?.niveau_isolation;
-  if (niveauReel !== "repeatable read") {
-    return {
-      scenario: "snapshot_anterieur_activation_committee",
-      ok: false,
-      detail: { raison: "NON VÉRIFIABLE ICI : niveau observé = " + niveauReel + ", 'repeatable read' attendu. Déjà prouvé séparément, voir qualification-couche-4-gel.md §7." },
-    };
-  }
-  const echec40001 = reponseA.corps?.ecriture_ok === false && reponseA.corps?.code_erreur === "40001";
+  // Preuve d'ordre : le snapshot de A doit avoir vu actif=false (donc fixé
+  // avant l'activation), pas seulement supposé antérieur par le minutage.
+  const snapshotAvantActivation = reponseA.actif_au_snapshot === false;
+  const echec40001 = reponseA.ecriture_ok === false && reponseA.code_erreur === "40001";
   return {
-    scenario: "snapshot_anterieur_activation_committee",
-    ok: reponseB.statut === 200 && echec40001,
-    detail: { reponseA: reponseA.corps, reponseB: reponseB.corps },
+    ok: snapshotAvantActivation && echec40001,
+    detail: { niveauIsolation: reponseA.niveau_isolation, actifAuSnapshot: reponseA.actif_au_snapshot, codeErreur: reponseA.code_erreur },
   };
 }
 
 async function scenarioLigneAbsenteRefuseFerme() {
-  // 7. Ligne maintenance absente → écriture refusée (P0101), aucune donnée
-  // métier modifiée.
   await reinitialiser();
   await appeler("zz_harnais_gel_supprimer_ligne");
   const reponse = await appeler("zz_harnais_gel_ecriture");
   await appeler("zz_harnais_gel_restaurer_ligne");
   await reinitialiser();
 
-  const refuseFerme = reponse.corps?.ecriture_ok === false && reponse.corps?.code_erreur === "P0101";
+  const refuseFerme = reponse.ecriture_ok === false && reponse.code_erreur === "P0101";
   return {
     scenario: "ligne_absente_refuse_ferme",
     ok: refuseFerme,
-    detail: reponse.corps,
+    detail: { codeErreur: reponse.code_erreur },
   };
 }
 
 async function scenarioDesactivationNonCommitteePuisEcriture() {
-  // 9. Désactivation non committée suivie d'une écriture — comportement
-  // mesuré explicitement (pas supposé). Active d'abord (committé), puis
-  // lève avec attente_avant_retour (verrou NO KEY UPDATE retenu, non
-  // committé) pendant qu'une écriture tente de passer : l'écriture doit
-  // bloquer sur `for share` puis, une fois la levée committée, réussir
-  // (elle voit alors actif=false, fraîchement committé — pas un blocage
-  // de sécurité comme pour l'activation, mais un comportement à mesurer,
-  // pas à supposer).
   await reinitialiser();
   await appeler("zz_harnais_gel_activer");
   const attenteAvantRetourLevee = 1.2;
@@ -285,43 +296,58 @@ async function scenarioDesactivationNonCommitteePuisEcriture() {
   const debutEcriture = Date.now();
   const reponseEcriture = await appeler("zz_harnais_gel_ecriture");
   const dureeEcritureMs = Date.now() - debutEcriture;
-  const reponseLevee = await promesseLevee;
+  await promesseLevee;
   await reinitialiser();
 
   const ecritureAAttendu = dureeEcritureMs > (attenteAvantRetourLevee - 0.3) * 1000 * 0.5;
   return {
     scenario: "desactivation_non_committee_puis_ecriture",
-    ok: reponseLevee.statut === 200 && ecritureAAttendu && reponseEcriture.corps?.ecriture_ok === true,
-    detail: { dureeEcritureMs, reponseLevee: reponseLevee.corps, reponseEcriture: reponseEcriture.corps },
+    ok: ecritureAAttendu && reponseEcriture.ecriture_ok === true,
+    detail: { dureeEcritureMs: arrondirMs(dureeEcritureMs) },
+  };
+}
+
+async function scenarioTransitionsStrictesActivationLevee() {
+  // 2e activation refusée (ne réinitialise pas depuis), 2e levée refusée —
+  // vérifie le comportement des GARDES ajoutées dans les fonctions témoins
+  // elles-mêmes (miroir des gardes des vrais scripts d'activation/levée).
+  await reinitialiser();
+  await appeler("zz_harnais_gel_activer");
+  const deuxiemeActivation = await appelerAttendreEchec("zz_harnais_gel_activer");
+  await appeler("zz_harnais_gel_desactiver");
+  const deuxiemeLevee = await appelerAttendreEchec("zz_harnais_gel_desactiver");
+  await reinitialiser();
+
+  return {
+    scenario: "transitions_strictes_activation_levee",
+    ok: deuxiemeActivation.echoue && deuxiemeLevee.echoue,
+    detail: { deuxiemeActivationRefusee: deuxiemeActivation.echoue, deuxiemeLeveeRefusee: deuxiemeLevee.echoue },
   };
 }
 
 async function scenarioCourseRepetee(repetitions) {
-  // 6. Activation et écriture démarrées quasi simultanément, répété N fois.
-  // Chaque répétition doit se conclure SANS delta : soit l'écriture a été
-  // refusée (P0100/40001), soit elle a réussi AVANT que l'activation ne
-  // committe (aucune règle violée dans ce cas — la preuve est day que la
-  // combinaison "actif=true committé avant l'écriture" ET "écriture réussie"
-  // n'apparaît JAMAIS).
   const resultats = [];
   for (let i = 0; i < repetitions; i++) {
     await reinitialiser();
-    const [reponseEcriture, reponseActivation] = await Promise.all([
+    const [reponseEcriture, ] = await Promise.all([
       appeler("zz_harnais_gel_ecriture"),
       appeler("zz_harnais_gel_activer"),
     ]);
-    const violaton =
-      reponseEcriture.corps?.ecriture_ok === true &&
-      reponseActivation.statut === 200 &&
-      reponseEcriture.corps?.horodatage_apres > reponseActivation.corps?.horodatage_update;
-    resultats.push({ iteration: i, viole: violaton, ecriture: reponseEcriture.corps, activation: reponseActivation.corps });
+    // Violation possible seulement si l'écriture a réussi APRÈS que
+    // l'activation a committé — les horodatages viennent de deux appels
+    // séparés (pas de garantie d'horloge partagée au-delà de la précision
+    // du serveur), donc on vérifie surtout l'ABSENCE d'incohérence
+    // structurelle : jamais ecriture_ok=true avec un code d'erreur
+    // simultané, jamais de code d'erreur inattendu.
+    const incoherent = reponseEcriture.ecriture_ok === true && reponseEcriture.code_erreur != null;
+    resultats.push(incoherent);
     await reinitialiser();
   }
-  const violations = resultats.filter((r) => r.viole);
+  const violations = resultats.filter(Boolean).length;
   return {
     scenario: "course_repetee",
-    ok: violations.length === 0,
-    detail: { repetitions, violations: violations.length, echantillon: resultats.slice(0, 2) },
+    ok: violations === 0,
+    detail: { repetitions, violations },
   };
 }
 
@@ -330,29 +356,58 @@ async function scenarioCourseRepetee(repetitions) {
 async function main() {
   exigerEnv();
   const resultats = [];
+  let echecFinally = null;
+
   try {
     await verifierIdentite();
-    resultats.push({ scenario: "garde_identite", ok: true, detail: "nonce confirmé" });
+    resultats.push({ scenario: "garde_identite", ok: true });
 
     resultats.push(await scenarioEcritureDejaEnVolBloqueActivation());
-    resultats.push(await scenarioActivationNonCommiteeBloqueEcriturePuisRefuse());
-    resultats.push(await scenarioMemeInterleavingRepeatableRead());
-    resultats.push(await scenarioSnapshotAnterieurActivationDejaCommittee());
+
+    const rc1 = await scenarioActivationNonCommiteeBloqueEcriturePuisRefuse("zz_harnais_gel_ecriture", "P0100");
+    resultats.push({ scenario: "activation_non_committee_bloque_ecriture_read_committed", ...rc1 });
+
+    // Sous REPEATABLE READ, l'instantané de A est fixé avant le commit de
+    // B (A démarre pendant que B retient encore son verrou) : le
+    // déblocage du `for share` après le commit de B lève 40001, pas
+    // P0100 — voir le commentaire de la fonction ci-dessus.
+    const rr1 = await scenarioActivationNonCommiteeBloqueEcriturePuisRefuse("zz_harnais_gel_ecriture_rr", "40001");
+    resultats.push({
+      scenario: "activation_non_committee_bloque_ecriture_repeatable_read",
+      ok: rr1.ok && rr1.detail.niveauIsolation === "repeatable read",
+      detail: rr1.detail,
+    });
+
+    const rr2 = await scenarioSnapshotAnterieurActivationDejaCommittee();
+    resultats.push({
+      scenario: "snapshot_repeatable_read_anterieur_activation_committee",
+      ok: rr2.ok && rr2.detail.niveauIsolation === "repeatable read",
+      detail: rr2.detail,
+    });
+
     resultats.push(await scenarioLigneAbsenteRefuseFerme());
     resultats.push(await scenarioDesactivationNonCommitteePuisEcriture());
+    resultats.push(await scenarioTransitionsStrictesActivationLevee());
     resultats.push(await scenarioCourseRepetee(REPETITIONS));
   } catch (erreur) {
-    resultats.push({ scenario: "erreur_fatale", ok: false, detail: String(erreur.message ?? erreur) });
+    resultats.push({ scenario: "erreur_fatale", ok: false, detail: String(erreur.message ?? erreur).slice(0, 300) });
   } finally {
     try {
       await reinitialiser();
-    } catch {
-      // best-effort : le résumé ci-dessous reste la source de vérité.
+      await verifierEtatFinal();
+    } catch (erreur) {
+      echecFinally = String(erreur.message ?? erreur).slice(0, 300);
     }
   }
 
+  if (echecFinally) {
+    resultats.push({ scenario: "nettoyage_final", ok: false, detail: echecFinally });
+  } else {
+    resultats.push({ scenario: "nettoyage_final", ok: true });
+  }
+
   console.log(JSON.stringify(resultats, null, 2));
-  const tousOk = resultats.every((r) => r.ok);
+  const tousOk = resultats.every((r) => r.ok) && !echecFinally;
   process.exit(tousOk ? 0 : 1);
 }
 

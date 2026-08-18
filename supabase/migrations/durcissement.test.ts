@@ -447,27 +447,84 @@ describe("gel source Fideliz — inventaire exhaustif des tables, aucun angle mo
 });
 
 describe("gel source Fideliz — activation/levée fail-closed, jamais service_role", () => {
-  // Signalé le 19/08 : un update nu sans contrôle du nombre de lignes peut
-  // échouer silencieusement — l'opérateur croit avoir gelé la source, elle
-  // ne l'est pas. Ces scripts vérifient GET DIAGNOSTICS ... row_count et
-  // lèvent si le résultat n'est pas exactement 1.
+  // Signalé le 19/08 (2e et 3e tours) : un update nu sans contrôle du
+  // nombre de lignes peut échouer silencieusement ; un simple count(*) = 10
+  // triggers ne détecte pas un trigger sur la mauvaise table, en AFTER, sur
+  // deux événements sur trois, pointant vers la mauvaise fonction, ou
+  // désactivé ; une deuxième activation/levée ne doit pas être un no-op
+  // silencieux.
   const VERIFICATIONS = join(ICI, "..", "verifications");
 
-  it("activer-gel-source-fideliz.sql existe, contrôle les triggers et le row_count, jamais service_role", () => {
+  it("activer-gel-source-fideliz.sql existe, compare les triggers table par table (pas un simple compte), contrôle le row_count, transition stricte, jamais service_role", () => {
     const sql = readFileSync(join(VERIFICATIONS, "activer-gel-source-fideliz.sql"), "utf8");
     const sansCom = sansCommentaires(sql);
     expect(sansCom).toMatch(/get diagnostics\s+\w+\s*=\s*row_count/i);
     expect(sansCom).toMatch(/if\s+\w+\s*<>\s*1\s+then\s+raise exception/i);
     expect(sansCom).toMatch(/tgname\s*=\s*'gel_de_bascule'/i);
-    expect(sansCom).toMatch(/<>\s*10\s+then\s+raise exception/i);
+    // Comparaison exhaustive : présence, BEFORE, les 3 événements, la
+    // fonction exacte, l'état activé — pas seulement un compte.
+    expect(sansCom).toMatch(/action_timing\s*=\s*'BEFORE'/i);
+    expect(sansCom).toMatch(/'DELETE,INSERT,UPDATE'/i);
+    expect(sansCom).toMatch(/refuser_pendant_maintenance/i);
+    expect(sansCom).toMatch(/tgenabled\s*=\s*'O'/i);
+    // Aucun trigger gel_de_bascule sur une table hors de la liste attendue.
+    expect(sansCom).toMatch(/event_object_table\s*<>\s*all\s*\(/i);
+    // Transition stricte : refuse si déjà actif.
+    expect(sansCom).toMatch(/if\s+v_actif_avant\s+then\s+raise exception/i);
     expect(sansCom).not.toMatch(/service_role/i);
   });
 
-  it("lever-gel-source-fideliz.sql existe, contrôle le row_count, jamais service_role", () => {
+  it("lever-gel-source-fideliz.sql existe, contrôle le row_count, transition stricte, jamais service_role", () => {
     const sql = readFileSync(join(VERIFICATIONS, "lever-gel-source-fideliz.sql"), "utf8");
     const sansCom = sansCommentaires(sql);
     expect(sansCom).toMatch(/get diagnostics\s+\w+\s*=\s*row_count/i);
     expect(sansCom).toMatch(/if\s+\w+\s*<>\s*1\s+then\s+raise exception/i);
+    // Transition stricte : refuse si déjà inactif.
+    expect(sansCom).toMatch(/if\s+not\s+v_actif_avant\s+then\s+raise exception/i);
     expect(sansCom).not.toMatch(/service_role/i);
+  });
+});
+
+describe("gel source Fideliz — harnais de concurrence gardé (cible synthétique, nettoyage protégé)", () => {
+  // Signalé le 19/08 (3e tour) : la garde d'identité par nonce n'intervenait
+  // qu'après la création des fonctions témoins SECURITY DEFINER — trop
+  // tard si la cible n'était pas la bonne. Et le nettoyage DDL forçait
+  // actif=false sans condition, ce qui aurait levé un gel réellement actif.
+  const VERIFICATIONS = join(ICI, "..", "verifications");
+
+  it("harnais-gel-concurrence.sql garde la cible AVANT toute création (auth.users, transaction unique)", () => {
+    const sql = readFileSync(join(VERIFICATIONS, "harnais-gel-concurrence.sql"), "utf8");
+    const sansCom = sansCommentaires(sql);
+    // Une seule transaction enveloppant tout le fichier.
+    expect(sansCom.trim()).toMatch(/^begin;/i);
+    expect(sansCom).toMatch(/commit;/i);
+    // La garde (vérification auth.users) doit précéder la première création.
+    const indexGarde = sansCom.search(/from auth\.users/i);
+    const indexPremiereCreation = sansCom.search(/create (or replace )?function/i);
+    expect(indexGarde, "vérification auth.users introuvable").toBeGreaterThan(-1);
+    expect(indexPremiereCreation, "aucune création de fonction trouvée").toBeGreaterThan(-1);
+    expect(indexGarde, "la garde doit précéder toute création de fonction").toBeLessThan(indexPremiereCreation);
+    expect(sansCom).toMatch(/v_utilisateurs_auth\s*>\s*0\s+then\s+raise exception/i);
+    // Variante REPEATABLE READ via attribut de fonction (proconfig), pas SET dans le corps.
+    expect(sansCom).toMatch(/set default_transaction_isolation to 'repeatable read'/i);
+    expect(sansCom).toMatch(/notify pgrst, 'reload schema'/i);
+  });
+
+  it("harnais-gel-concurrence-nettoyage.sql refuse si l'état n'est pas exactement ligne présente/actif=false", () => {
+    const sql = readFileSync(join(VERIFICATIONS, "harnais-gel-concurrence-nettoyage.sql"), "utf8");
+    const sansCom = sansCommentaires(sql);
+    expect(sansCom.trim()).toMatch(/^begin;/i);
+    // Garde le nombre de lignes ET la valeur d'actif AVANT toute suppression.
+    const indexGardeLignes = sansCom.search(/v_lignes\s*<>\s*1\s+then\s+raise exception/i);
+    const indexGardeActif = sansCom.search(/v_actif\s+is\s+distinct\s+from\s+false\s+then\s+raise exception/i);
+    const indexPremierDrop = sansCom.search(/drop function/i);
+    expect(indexGardeLignes, "garde sur le nombre de lignes introuvable").toBeGreaterThan(-1);
+    expect(indexGardeActif, "garde sur actif=false introuvable").toBeGreaterThan(-1);
+    expect(indexPremierDrop, "aucun drop function trouvé").toBeGreaterThan(-1);
+    expect(indexGardeLignes).toBeLessThan(indexPremierDrop);
+    expect(indexGardeActif).toBeLessThan(indexPremierDrop);
+    // Ne force jamais actif=false sans condition — pas de simple
+    // "on conflict ... do update set actif = false" en dehors de la garde.
+    expect(sansCom).not.toMatch(/on conflict[^;]*do update set actif\s*=\s*false/i);
   });
 });

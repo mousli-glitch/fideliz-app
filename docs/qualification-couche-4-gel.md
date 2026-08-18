@@ -568,10 +568,12 @@ d'une course activation/écriture quasi simultanée, 0 violation (jamais
 une écriture réussie avec un horodatage postérieur à un commit
 d'activation).
 
-**Limite honnête, pas contournée par une preuve dégradée** : les
-scénarios exigeant REPEATABLE READ pour la session `A` (transaction
-fraîche testée via ce harnais permanent) n'ont pas pu être forcés. Trois
-mécanismes essayés, tous vérifiés empiriquement :
+**Limite honnête à CE moment du chantier — résolue depuis, voir §9 :**
+les scénarios exigeant REPEATABLE READ pour la session `A` (transaction
+fraîche testée via ce harnais permanent) n'ont pas pu être forcés avec
+les mécanismes essayés à ce stade. Trois mécanismes essayés, tous
+vérifiés empiriquement — aucun n'était encore l'attribut de fonction
+`pg_proc.proconfig` (§9), qui s'est révélé être la forme qui fonctionne :
 1. `SET default_transaction_isolation` depuis l'intérieur de la fonction
    RPC — sans effet sur la transaction en cours (confirmé : `avant` et
    `apres_set_default` identiques dans un test direct).
@@ -624,3 +626,114 @@ Fonctions `zz_harnais_gel_*` supprimées (confirmé : 0 restante), rôles
 des identifiants supprimé (`rm -rf`, confirmé absent), aucune donnée de
 test résiduelle (`restaurants` filtré sur `zz-harnais-gel` : 0 ligne).
 État final de `fusion-tests-2` : gel installé, `actif = false`.
+
+## 9. REPEATABLE READ rejouable, harnais gardé, transitions strictes
+
+Signalé le 19/08/2026 (4e tour) : quatre angles distincts, tous vérifiés
+indépendamment avant correction plutôt qu'acceptés sur la foi du
+signalement.
+
+### La bonne forme pour REPEATABLE READ
+
+`SET default_transaction_isolation` exécuté dans le corps d'une fonction,
+ou posé via `alter role` (essayé aux tours précédents), n'a pas d'effet
+fiable sur ce projet. La forme documentée par PostgREST — un **attribut
+de fonction** (`set default_transaction_isolation to 'repeatable read'`
+dans l'en-tête, stocké dans `pg_proc.proconfig`) — a été testée
+isolément avant tout le reste : `pg_proc.proconfig` confirmé porter la
+valeur, `notify pgrst, 'reload schema'` puis un appel REST réel
+renvoient `current_setting('transaction_isolation') = 'repeatable
+read'` — **sans toucher `anon` ni `authenticator`, sans terminer aucune
+connexion**. `zz_harnais_gel_ecriture_rr()` porte cet attribut.
+
+### Harnais gardé avant toute création
+
+`harnais-gel-concurrence.sql` est désormais une seule transaction dont
+la toute première action vérifie `auth.users` (0 utilisateur réel exigé),
+`profiles`, et des bornes de volume sur `restaurants`/`contacts`/`winners`
+— si l'une de ces conditions échoue, **aucune fonction n'est créée, aucun
+grant n'est accordé**. Aucune valeur de projet codée en dur : la garde
+s'appuie sur des faits observables.
+
+### Nettoyage DDL gardé — jamais lever un vrai gel
+
+`harnais-gel-concurrence-nettoyage.sql` vérifie maintenant l'état exact
+de `maintenance` (une ligne, `actif = false`) AVANT toute suppression, et
+s'arrête sans rien modifier si ce n'est pas le cas — il ne force plus
+jamais `actif = false` inconditionnellement.
+
+### Un vrai bug de course, trouvé et corrigé — pas dans le candidat
+
+Premier essai du scénario « instantané REPEATABLE READ antérieur à une
+activation déjà committée » : marge de 50 ms entre le lancement de A et
+l'activation de B. Résultat incohérent observé (`ecriture_ok = true` avec
+un instantané censé être périmé) — **détecté, pas ignoré**. Diagnostic :
+la fonction témoin n'avait pas d'étape séparée pour fixer l'instantané
+avant de tenter l'écriture ; le premier vrai statement ÉTAIT la tentative
+d'écriture elle-même. Corrigé : une lecture ordinaire fixe l'instantané en
+premier, une marge large (1,5 s) retient la transaction ouverte, puis
+seulement la tentative d'écriture. Rejoué 3 fois de suite : 10/10
+scénarios verts, code de sortie 0, à chaque fois — plus une course.
+
+**Distinction confirmée, correcte, entre les deux niveaux d'isolation**
+pour le scénario « activation non committée bloque une écriture » : sous
+READ COMMITTED, le `for share` débloqué après le commit de B relit la
+valeur fraîche → `P0100`. Sous REPEATABLE READ, l'instantané de A est
+fixé pendant que B retient encore son verrou (donc avant son commit) → le
+déblocage du `for share` après le commit de B lève `40001` **avant même
+d'atteindre la décision du trigger**. Un premier test attendait `P0100`
+dans les deux cas — erreur détectée et corrigée, pas dans le candidat.
+
+### Matrice finale — 10 scénarios, harnais fail-closed
+
+| Scénario | Résultat |
+|---|---|
+| Garde d'identité (nonce) | ✅ |
+| Écriture déjà en vol bloque l'activation | ✅ |
+| Activation non committée bloque l'écriture puis refuse — READ COMMITTED (`P0100`) | ✅ |
+| Activation non committée bloque l'écriture puis refuse — REPEATABLE READ (`40001`) | ✅ |
+| Instantané REPEATABLE READ antérieur à une activation déjà committée (`40001`) | ✅ |
+| Ligne `maintenance` absente → refus fermé (`P0101`) | ✅ |
+| Désactivation non committée puis écriture | ✅ |
+| Transitions strictes : 2e activation et 2e levée refusées | ✅ |
+| Course répétée × 5, 0 violation | ✅ |
+| Nettoyage final (gel inactif, ligne présente, 0 fixture) | ✅ |
+
+Rejoué 3 fois de suite, 10/10 à chaque fois. `anon`/`authenticator`
+revérifiés sans réglage résiduel après coup.
+
+### Sortie expurgée, harnais fail-closed
+
+Le script Node ne renvoie plus `ligne_id`, PID, ni XID (retirés des
+fonctions témoins elles-mêmes, pas seulement filtrés en sortie) — la
+sortie ne contient que le nom du scénario, PASS/FAIL, le code SQLSTATE le
+cas échéant, et des durées arrondies à la milliseconde. Chaque requête
+porte un `AbortSignal.timeout()` ; toute réponse non-2xx lève une erreur ;
+`reinitialiser()` propage le premier échec au lieu de l'avaler ; un échec
+du bloc `finally` force le résultat global à FAIL et le code de sortie à
+1 ; une vérification finale explicite (gel inactif, ligne présente, 0
+fixture) suit chaque nettoyage plutôt que de faire confiance aux seuls
+statuts HTTP des appels de nettoyage.
+
+### Activation/levée : vérification exhaustive, transitions strictes
+
+`activer-gel-source-fideliz.sql` ne compte plus seulement 10 triggers —
+il compare table par table : présence, `BEFORE`, portée ligne, les trois
+événements INSERT/UPDATE/DELETE ensemble, la fonction exacte
+`refuser_pendant_maintenance`, l'état activé (`tgenabled = 'O'`), et
+l'absence de tout trigger `gel_de_bascule` sur une table imprévue. Les
+deux scripts refusent maintenant une deuxième activation/levée (au lieu
+de committer un `update` silencieux qui réinitialiserait `depuis`) —
+prouvé en direct sur `fusion-tests-2` : première activation acceptée,
+seconde refusée (`ACTIVATION REFUSÉE : déjà actif`) ; première levée
+acceptée, seconde refusée (`LEVÉE REFUSÉE : déjà inactif`).
+
+### Cycle complet rejoué avec le fichier final inchangé
+
+`20260818160000_gel_source_fideliz.sql` n'a pas changé ce tour — seuls
+les scripts autour (harnais, activation, levée, nettoyage) ont été
+corrigés. Cycle complet rejoué pour boucler la qualification :
+application brute → activation (script corrigé) → levée (script corrigé)
+→ rollback → empreinte exacte (24 fonctions `fd1b8684…`, identique à
+avant) → réapplication (24 fonctions `fd1b8684…` ✅, `actif = false`).
+**213 tests verts.**
