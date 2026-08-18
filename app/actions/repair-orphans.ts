@@ -3,7 +3,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
 import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
-import { idDuCompteRoot } from "@/lib/securite/compte-root"
 
 // GARDE INTERNE (18/08/2026) : root uniquement.
 // L'action réattribue en masse tous les restaurants sans propriétaire au
@@ -19,14 +18,8 @@ export async function repairOrphansAction() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  /*
-   * L'identifiant venait de `ROOT_ADMIN_ID`. C'était déjà mieux qu'un UUID
-   * écrit dans le fichier, mais ça reste un couplage à une identité : la
-   * variable pointe vers le root de production, donc ce chemin ne peut pas
-   * s'exercer avec un compte synthétique — il n'était testable qu'en
-   * production. On cherche le root par son rôle, comme ailleurs.
-   */
-  const ROOT_ID = await idDuCompteRoot(supabase);
+  // ✅ SÉCURISÉ : On ne met plus l'ID en dur dans le code
+  const ROOT_ID = process.env.ROOT_ADMIN_ID;
 
   // On ne met à jour QUE owner_id et user_id pour ne pas casser le lien commercial
   const { error } = await supabase

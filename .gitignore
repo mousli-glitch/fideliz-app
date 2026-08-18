@@ -51,3 +51,6 @@ node_modules/
 # Sauvegardes logiques : donnees reelles de clients, jamais dans le depot.
 # 470 contacts, 468 tickets, les comptes Auth. Le depot est PUBLIC.
 sauvegardes/
+
+# Artefacts du CLI Supabase : etat local, jamais versionne.
+supabase/.temp/
