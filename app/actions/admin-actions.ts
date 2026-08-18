@@ -8,8 +8,12 @@ const createAdminClient = () => createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// TON ID ROOT (Pour l'héritage des restaurants)
-const ROOT_ID = '04eb7091-6876-41e0-84c6-5891658a5768'
+/*
+ * L'identifiant du root n'est plus écrit ici. Deux usages s'y mélangeaient :
+ * la PROTECTION du compte, qui relève du rôle, et l'HÉRITAGE des restaurants,
+ * qui relève d'une recherche. Voir `lib/securite/compte-root.ts`.
+ */
+import { idDuCompteRoot, estCompteProtege } from "@/lib/securite/compte-root"
 
 /*
  * GARDES INTERNES (18/08/2026) — root uniquement, sur les trois actions.
@@ -112,23 +116,38 @@ export async function masterDeleteUser(userId: string) {
   const supabase = createAdminClient()
 
   try {
-    // 🔒 Sécurité : ne jamais supprimer le super-admin
-    if (userId === ROOT_ID) {
+    /*
+     * 🔒 Protection du super-admin. Elle interrogeait un UUID écrit en dur ;
+     * elle interroge maintenant le RÔLE. Un second root créé demain sera
+     * protégé sans qu'on ait à y penser, et un root synthétique l'est aussi —
+     * donc le garde se teste hors production.
+     */
+    const { data: cible } = await supabase
+      .from('profiles').select('role').eq('id', userId).maybeSingle()
+    if (estCompteProtege(cible?.role)) {
       return { success: false, error: "Ce compte super-admin est protégé." }
     }
+
+    /*
+     * L'héritage, lui, a besoin d'un IDENTIFIANT et non d'un test de rôle :
+     * on désigne un destinataire, on n'accorde aucun droit. D'où la
+     * recherche. `null` laisse les lignes orphelines — ce que faisait déjà
+     * l'UUID en dur le jour où il pointait vers un compte supprimé.
+     */
+    const rootId = await idDuCompteRoot(supabase)
 
     // 1. RÉATTRIBUTION AU ROOT (sans voler le restaurant au vrai propriétaire)
     //    a) Restaurants APPORTÉS par cet utilisateur (created_by) -> créateur = root,
     //       on CONSERVE owner_id (le restaurateur réel garde son restaurant).
     await supabase
       .from('restaurants')
-      .update({ created_by: ROOT_ID })
+      .update({ created_by: rootId })
       .eq('created_by', userId)
 
     //    b) Restaurants POSSÉDÉS par cet utilisateur (owner_id) -> propriété au root.
     await supabase
       .from('restaurants')
-      .update({ owner_id: ROOT_ID })
+      .update({ owner_id: rootId })
       .eq('owner_id', userId)
 
     //    c) Nettoyer les liens de portefeuille commercial (pas de FK côté commercial).

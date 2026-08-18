@@ -3,8 +3,9 @@
 import { createClient } from "@supabase/supabase-js"
 import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
 
-// Ton compte super-admin (root) : il hérite des restaurants des commerciaux supprimés.
-const ROOT_ID = '04eb7091-6876-41e0-84c6-5891658a5768'
+// Le root hérite des restaurants des commerciaux supprimés — mais on le
+// CHERCHE, on ne l'écrit plus. Voir `lib/securite/compte-root.ts`.
+import { idDuCompteRoot, estCompteProtege } from "@/lib/securite/compte-root"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,12 +31,14 @@ export async function deleteSalesUserAction(userId: string) {
   try {
     if (!userId) return { success: false, error: "ID utilisateur manquant." }
 
-    // 🔒 Sécurité : ne jamais supprimer le super-admin
-    if (userId === ROOT_ID) {
-      return { success: false, error: "Ce compte super-admin est protégé." }
-    }
     const { data: prof } = await supabaseAdmin
       .from('profiles').select('role').eq('id', userId).single()
+
+    // 🔒 Protection du super-admin, par le RÔLE et non par un UUID en dur.
+    if (estCompteProtege(prof?.role)) {
+      return { success: false, error: "Ce compte super-admin est protégé." }
+    }
+    const rootId = await idDuCompteRoot(supabaseAdmin)
     if ((prof as any)?.role === 'root') {
       return { success: false, error: "Ce compte super-admin est protégé." }
     }
@@ -43,14 +46,14 @@ export async function deleteSalesUserAction(userId: string) {
     // 1. Restaurants APPORTÉS par le commercial -> attribués au root (on garde le propriétaire réel)
     const { error: e1 } = await supabaseAdmin
       .from('restaurants')
-      .update({ created_by: ROOT_ID })
+      .update({ created_by: rootId })
       .eq('created_by', userId)
     if (e1) throw new Error("Réattribution (créateur) échouée : " + e1.message)
 
     // 2. Restaurants éventuellement POSSÉDÉS par le commercial -> propriété au root
     const { error: e2 } = await supabaseAdmin
       .from('restaurants')
-      .update({ owner_id: ROOT_ID })
+      .update({ owner_id: rootId })
       .eq('owner_id', userId)
     if (e2) throw new Error("Réattribution (propriétaire) échouée : " + e2.message)
 

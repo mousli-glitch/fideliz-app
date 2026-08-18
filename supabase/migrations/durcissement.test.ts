@@ -231,3 +231,51 @@ describe("règle permanente — toute fonction porte son propre revoke", () => {
     });
   }
 });
+
+describe("tables de sauvegarde — 133 lignes personnelles, fermées par la RLS seule", () => {
+  /*
+   * Leur protection ne tient pas à une absence de droits : `anon` et
+   * `authenticated` détiennent SELECT, INSERT, UPDATE et DELETE dessus.
+   * Elle tient à la RLS activée SANS AUCUNE POLICY.
+   *
+   * Ce test-ci ne peut pas interroger la base — le garde tourne hors ligne.
+   * Il vérifie donc ce qu'il peut vraiment vérifier : qu'aucune migration
+   * versionnée ne désactive leur RLS ni ne leur ajoute de policy. Le contrôle
+   * de l'état RÉEL est `supabase/verifications/tables-de-sauvegarde.sql`, à
+   * passer sur la production avant toute bascule.
+   */
+  const SAUVEGARDES = [
+    "auth_ghosts_backup_20260606",
+    "auth_orphan_backup_20260606",
+    "contacts_backup_20260606",
+    "winners_backup_20260606",
+  ];
+
+  for (const t of SAUVEGARDES) {
+    it(`${t} — aucune migration ne désactive sa RLS`, () => {
+      for (const m of migrations) {
+        const sql = sansCommentaires(m.sql);
+        const motif = new RegExp(`alter table[^;]*\\b${t}\\b[^;]*disable row level security`, "i");
+        expect(sql, `${m.nom} désactive la RLS de ${t}`).not.toMatch(motif);
+      }
+    });
+
+    it(`${t} — aucune migration ne lui ajoute de policy`, () => {
+      for (const m of migrations) {
+        const sql = sansCommentaires(m.sql);
+        const motif = new RegExp(`create policy[^;]*\\bon public\\.${t}\\b`, "i");
+        expect(sql, `${m.nom} ajoute une policy sur ${t}`).not.toMatch(motif);
+      }
+    });
+  }
+
+  it("la baseline active bien leur RLS", () => {
+    const baseline = migrations.find((m) => m.version === "00000000000000")!;
+    const sql = sansCommentaires(baseline.sql);
+    for (const t of SAUVEGARDES) {
+      expect(sql, `${t} sans « enable row level security » dans la baseline`).toMatch(
+        new RegExp(`alter table[^;]*\\b${t}\\b[^;]*enable row level security`, "i"),
+      );
+    }
+  });
+});

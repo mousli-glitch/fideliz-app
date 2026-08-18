@@ -35,10 +35,15 @@ export default async function VerifyPage({
       // ✅ AJOUT restaurant
       const authorizedRoles = ['admin','owner','staff','root','restaurant']
 
-      if (
-        authorizedRoles.includes(profile.role) ||
-        user.id === '04eb7091-6876-41e0-84c6-5891658a5768'
-      ) {
+      /*
+       * Le test « user.id === '04eb7091-…' » a été retiré le 18/08 : il était
+       * STRICTEMENT redondant, puisque ce compte porte role = 'root' et que
+       * 'root' figure déjà ci-dessus. Il ne donnait aucun droit de plus au
+       * root réel, et il en refusait un à tout root synthétique — donc au
+       * banc d'essai. Un droit qui ne se teste que sur la production n'est
+       * pas un droit vérifié.
+       */
+      if (authorizedRoles.includes(profile.role)) {
         isStaff = true
       }
     }
