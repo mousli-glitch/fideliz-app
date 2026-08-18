@@ -50,3 +50,6 @@ node_modules/
 
 # Sauvegardes logiques : donnees reelles de clients, jamais dans le depot.
 sauvegardes/
+
+# Etat de liaison du CLI Supabase : contient des URL de connexion.
+supabase/.temp/
