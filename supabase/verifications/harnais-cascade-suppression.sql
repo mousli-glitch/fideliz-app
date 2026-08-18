@@ -113,7 +113,7 @@ order by con.confdeltype, src.relname;
 
 create temp table _cascade (ordre int, etape text, valeur text) on commit drop;
 
-insert into _cascade values (1, 'manifeste_avant', (
+insert into _cascade values (1, 'empreinte_donnees_avant', (
   select md5(concat_ws('|', (select count(*) from auth.users), (select count(*) from public.profiles),
     (select count(*) from public.restaurants), (select count(*) from public.games),
     (select count(*) from public.prizes), (select count(*) from public.winners),
@@ -158,9 +158,13 @@ begin
     select count(*) into nc from public.contacts where restaurant_id = v_resto;
     select count(*) into nv from public.avis where restaurant_id = v_resto;
     v_sans := format('resto=%s jeux=%s lots=%s gagnants=%s contacts=%s avis=%s', nr, ng, np, nw, nc, nv);
-    raise exception 'annuler_sans';
-  exception when others then
-    if sqlerrm <> 'annuler_sans' then v_sans := 'ERREUR : ' || left(sqlerrm, 130); end if;
+    if (nr, ng, np, nw, nc, nv) is distinct from (0, 0, 0, 0, 0, 0) then
+      raise exception 'ASSERTION SANS : attendu 0/0/0/0/0/0 (la cascade doit tout emporter), observe %', v_sans;
+    end if;
+    raise exception using errcode = 'P9001', message = 'rollback delibere SANS';
+  exception
+    when sqlstate 'P9001' then null;          -- rollback voulu, rien d'autre
+    when others then raise;                   -- toute autre erreur se propage
   end;
   insert into _cascade values (2, 'SANS_reattribution_user_id', coalesce(v_sans, '(vide)'));
 
@@ -198,14 +202,25 @@ begin
       nr, ng, np, nw, nc, nv,
       (select count(*) from public.profiles where id = v_com),
       (select count(*) from public.restaurants where id = v_resto and owner_id = v_root and user_id = v_root and created_by = v_root));
-    raise exception 'annuler_avec';
-  exception when others then
-    if sqlerrm <> 'annuler_avec' then v_avec := 'ERREUR : ' || left(sqlerrm, 130); end if;
+    if (nr, ng, np, nw, nc, nv) is distinct from (1, 1, 1, 1, 1, 1) then
+      raise exception 'ASSERTION AVEC : attendu 1/1/1/1/1/1 (rien ne doit etre emporte), observe %', v_avec;
+    end if;
+    if (select count(*) from public.profiles where id = v_com) <> 0 then
+      raise exception 'ASSERTION AVEC : le profil de la cible aurait du partir par cascade.';
+    end if;
+    if (select count(*) from public.restaurants
+          where id = v_resto and created_by = v_root and owner_id = v_root and user_id = v_root) <> 1 then
+      raise exception 'ASSERTION AVEC : les TROIS rattachements doivent pointer vers le root heritier.';
+    end if;
+    raise exception using errcode = 'P9002', message = 'rollback delibere AVEC';
+  exception
+    when sqlstate 'P9002' then null;
+    when others then raise;
   end;
   insert into _cascade values (3, 'AVEC_reattribution_user_id', coalesce(v_avec, '(vide)'));
 end $$;
 
-insert into _cascade values (4, 'manifeste_apres', (
+insert into _cascade values (4, 'empreinte_donnees_apres', (
   select md5(concat_ws('|', (select count(*) from auth.users), (select count(*) from public.profiles),
     (select count(*) from public.restaurants), (select count(*) from public.games),
     (select count(*) from public.prizes), (select count(*) from public.winners),
@@ -213,6 +228,40 @@ insert into _cascade values (4, 'manifeste_apres', (
 insert into _cascade values (5, 'auth_users_final', (select count(*)::text from auth.users));
 insert into _cascade values (6, 'temoins_residuels',
   (select count(*)::text from public.restaurants where name = 'harnais-cascade'));
+
+-- ── Manifeste de SCHEMA (FK), distinct de l'empreinte de DONNEES ────────
+-- Recalcule apres l'experience et compare : une experience qui modifierait
+-- une contrainte serait une regression, pas un test.
+insert into _cascade values (7, 'manifeste_schema_fk', (
+  select md5(string_agg(con.conname || ':' || con.confdeltype::text, '|' order by con.conname))
+  from pg_constraint con
+  join pg_class tgt on tgt.oid = con.confrelid
+  join pg_namespace tgt_ns on tgt_ns.oid = tgt.relnamespace
+  where con.contype = 'f'
+    and ((tgt_ns.nspname = 'auth' and tgt.relname = 'users')
+      or (tgt_ns.nspname = 'public' and tgt.relname in ('profiles','restaurants')))));
+
+-- ── VERDICT FAIL-CLOSED : une regression leve, elle ne s'affiche pas ────
+do $$
+declare
+  v_avant text; v_apres text; v_users text; v_temoins text;
+begin
+  select valeur into v_avant   from _cascade where etape = 'empreinte_donnees_avant';
+  select valeur into v_apres   from _cascade where etape = 'empreinte_donnees_apres';
+  select valeur into v_users   from _cascade where etape = 'auth_users_final';
+  select valeur into v_temoins from _cascade where etape = 'temoins_residuels';
+
+  if v_avant is distinct from v_apres then
+    raise exception 'ASSERTION FINALE : empreinte de donnees differente avant/apres — l''experience a laisse une trace.';
+  end if;
+  if v_users <> '0' then
+    raise exception 'ASSERTION FINALE : % utilisateur(s) Auth residuel(s), 0 attendu.', v_users;
+  end if;
+  if v_temoins <> '0' then
+    raise exception 'ASSERTION FINALE : % temoin(s) residuel(s), 0 attendu.', v_temoins;
+  end if;
+  raise notice 'HARNAIS CASCADE : toutes les assertions passent.';
+end $$;
 
 /*
  * Attendu :

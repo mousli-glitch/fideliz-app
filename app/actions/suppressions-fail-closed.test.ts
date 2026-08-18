@@ -53,6 +53,8 @@ let operations: { cle: string; payload?: unknown; predicat?: [string, unknown] }
 let echecs: Record<string, { message: string }> = {};
 /* Réponse du résolveur d'héritier. */
 let heritier: unknown = { ok: true, rootId: "root-synthetique" };
+/* Ce que la relecture autoritative d'existence Auth doit répondre. */
+let relectureAuth: "present" | "absent" | "erreur" = "present";
 
 function reponsePour(cle: string, payload?: unknown, predicat?: [string, unknown]) {
   journal.push(cle);
@@ -91,6 +93,17 @@ function clientSimule() {
           const e = echecs["auth:deleteUser"];
           return { error: e ?? null };
         },
+        // Relecture autoritative apres un echec de deleteUser.
+        getUserById: async () => {
+          journal.push("auth:getUserById");
+          if (relectureAuth === "erreur") {
+            return { data: null, error: { message: "transport indisponible", status: 503 } };
+          }
+          if (relectureAuth === "absent") {
+            return { data: null, error: { message: "User not found", status: 404 } };
+          }
+          return { data: { user: { id: "cible" } }, error: null };
+        },
       },
     },
   };
@@ -112,6 +125,7 @@ beforeEach(() => {
   operations = [];
   echecs = {};
   heritier = { ok: true, rootId: "root-synthetique" };
+  relectureAuth = "present";
 });
 
 describe("repairOrphansAction — aucune écriture sans héritier positivement identifié", () => {
@@ -307,5 +321,57 @@ describe("rejeu après échec partiel — y compris le cas le plus tardif", () =
     echecs = {};
     expect((await masterDeleteUser("cible")).success).toBe(true);
     expect(journal).toEqual(SEQUENCE_NOMINALE);
+  });
+});
+
+describe("issue Auth ambiguë — l'erreur ne prouve pas l'absence de suppression", () => {
+  /*
+   * Une erreur rendue par `deleteUser` peut suivre une suppression RÉUSSIE
+   * côté serveur (coupure sur la réponse, délai dépassé). Conclure « erreur
+   * donc rien n'a été supprimé » serait une supposition : le profil aurait
+   * déjà disparu par cascade, et un rejeu refuserait (profil absent =
+   * protégé), laissant la suppression inachevée pour toujours.
+   */
+
+  it("erreur Auth + compte ENCORE PRÉSENT : échec franc, rejouable", async () => {
+    echecs["auth:deleteUser"] = { message: "panne" };
+    relectureAuth = "present";
+    const r = await deleteSalesUserAction("cible");
+    expect(r.success).toBe(false);
+    expect((r as { ambigu?: boolean }).ambigu).toBeFalsy();
+    expect(journal, "la relecture doit avoir eu lieu").toContain("auth:getUserById");
+  });
+
+  it("erreur Auth + compte CONFIRMÉ ABSENT : succès idempotent", async () => {
+    // Le serveur avait réussi ; l'erreur portait sur la réponse, pas sur
+    // l'effet. L'état final visé est atteint.
+    echecs["auth:deleteUser"] = { message: "coupure sur la réponse" };
+    relectureAuth = "absent";
+    const r = await deleteSalesUserAction("cible");
+    expect(r.success).toBe(true);
+  });
+
+  it("erreur Auth + relecture ELLE-MÊME en erreur : état AUTH_OUTCOME_AMBIGUOUS", async () => {
+    echecs["auth:deleteUser"] = { message: "panne" };
+    relectureAuth = "erreur";
+    const r = await deleteSalesUserAction("cible");
+    expect(r.success).toBe(false);
+    expect((r as { etat?: string }).etat).toBe("AUTH_OUTCOME_AMBIGUOUS");
+    // Aucune destruction supplémentaire n'est tentée après l'indéterminé.
+    expect(journal.filter((o) => o === "auth:deleteUser").length).toBe(1);
+  });
+
+  it("une erreur de transport n'est JAMAIS repliée sur « absent »", async () => {
+    // Replier un 503 sur « absent » ferait conclure au succès sur une panne.
+    echecs["auth:deleteUser"] = { message: "panne" };
+    relectureAuth = "erreur";
+    const r = await deleteSalesUserAction("cible");
+    expect(r.success, "une panne ne doit jamais devenir un succès").toBe(false);
+  });
+
+  it("masterDeleteUser applique la même règle — la primitive est partagée", async () => {
+    echecs["auth:deleteUser"] = { message: "coupure" };
+    relectureAuth = "absent";
+    expect((await masterDeleteUser("cible")).success).toBe(true);
   });
 });

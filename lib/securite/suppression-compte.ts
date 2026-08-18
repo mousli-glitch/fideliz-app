@@ -55,7 +55,17 @@ import { resoudreRootHeritier, cibleEstProtegee } from "./root";
  * suppression sans rien détruire. Fail-closed de bout en bout.
  */
 
-export type ResultatSuppression = { success: true } | { success: false; error: string };
+export type ResultatSuppression =
+  | { success: true }
+  | { success: false; error: string; ambigu?: false }
+  /*
+   * État distinct, et non un échec ordinaire : l'appel Auth a échoué ET la
+   * relecture d'existence n'a pas pu trancher. On ne sait donc pas si le
+   * compte a été supprimé. Aucune destruction supplémentaire n'est tentée,
+   * et l'appelant doit traiter ce cas comme « à reprendre », pas comme
+   * « rien ne s'est passé ».
+   */
+  | { success: false; error: string; ambigu: true; etat: "AUTH_OUTCOME_AMBIGUOUS" };
 
 /*
  * Le vrai type de la bibliotheque, pas une forme ecrite a la main : un type
@@ -115,15 +125,92 @@ export async function supprimerCompteEtReattribuer(
     .from("restaurants").update({ user_id: root }).eq("user_id", userId);
   if (eUserId) return { success: false, error: "Réattribution (user_id) échouée : " + eUserId.message };
 
-  // 4. Portefeuille commercial (pas de FK côté commercial).
+  /*
+   * 4. Portefeuille commercial.
+   *
+   * Le commentaire d'origine affirmait « pas de FK côté commercial ».
+   * C'est FAUX, mesuré sur la base le 19/08/2026 :
+   * `sales_restaurants.sales_user_id -> auth.users(id) ON DELETE CASCADE`.
+   * La suppression Auth emporterait donc ces lignes de toute façon. On les
+   * retire quand même explicitement, en amont : une étape vérifiable qui
+   * échoue AVANT l'irréversible vaut mieux qu'un effet de bord implicite —
+   * et si la cascade disparaissait un jour, ce nettoyage resterait juste.
+   */
   const { error: ePortefeuille } = await admin
     .from("sales_restaurants").delete().eq("sales_user_id", userId);
   if (ePortefeuille) return { success: false, error: "Nettoyage du portefeuille échoué : " + ePortefeuille.message };
 
-  // 5. Suppression Auth. Le profil part par cascade — volontairement, pour
-  //    que l'action reste rejouable si cet appel échoue.
+  /*
+   * 5. Suppression Auth. Le profil part par cascade — volontairement, pour
+   *    que l'action reste rejouable si cet appel échoue.
+   *
+   * ─── L'ERREUR NE PROUVE PAS L'ABSENCE DE SUPPRESSION ───
+   *
+   * Signalé le 19/08/2026, et c'est juste : une erreur rendue par
+   * `deleteUser` peut suivre une suppression RÉUSSIE côté serveur (coupure
+   * réseau sur la réponse, délai dépassé). Conclure « erreur donc rien
+   * n'a été supprimé » serait une supposition, pas une observation — et
+   * dans ce cas le profil a déjà disparu par cascade, donc un rejeu
+   * naïf refuserait (profil absent = protégé) et la suppression resterait
+   * inachevée pour toujours.
+   *
+   * On ne suppose donc rien : on RELIT l'existence du compte, de façon
+   * autoritative et bornée, et on distingue trois issues.
+   */
   const { error: eAuth } = await admin.auth.admin.deleteUser(userId);
-  if (eAuth) return { success: false, error: eAuth.message };
+  if (!eAuth) return { success: true };
 
-  return { success: true };
+  const verdict = await relireExistenceAuth(admin, userId);
+
+  if (verdict === "absent") {
+    // Le serveur avait réussi ; l'erreur portait sur la réponse, pas sur
+    // l'effet. L'état final visé est atteint : succès idempotent.
+    return { success: true };
+  }
+  if (verdict === "present") {
+    // Rien n'a été supprimé : échec franc, et l'action reste rejouable
+    // puisque le profil est intact.
+    return { success: false, error: eAuth.message };
+  }
+  return {
+    success: false,
+    ambigu: true,
+    etat: "AUTH_OUTCOME_AMBIGUOUS",
+    error:
+      "Suppression Auth au résultat indéterminé : la relecture d'existence a elle-même échoué. " +
+      "Aucune autre destruction n'a été tentée. Vérifier l'état du compte avant de rejouer.",
+  };
+}
+
+/*
+ * Relecture autoritative de l'existence d'un compte Auth.
+ *
+ * `getUserById` est la lecture officielle du SDK admin. Trois issues, et
+ * l'indéterminé n'est pas replié sur l'un des deux autres :
+ *
+ *   "absent"      — le compte n'existe plus (la suppression avait abouti) ;
+ *   "present"     — il existe encore (la suppression n'a rien fait) ;
+ *   "indetermine" — la lecture elle-même a échoué : on ne sait pas.
+ *
+ * Le SDK signale l'absence par une erreur, pas par un `data` vide : on
+ * distingue donc « erreur qui signifie absent » (statut 404, ou message
+ * explicite) de « erreur de transport ». Une erreur non reconnue tombe
+ * délibérément dans "indetermine" — jamais dans "absent", qui autoriserait
+ * à conclure au succès sur une panne.
+ */
+async function relireExistenceAuth(
+  admin: ClientAdmin,
+  userId: string,
+): Promise<"absent" | "present" | "indetermine"> {
+  try {
+    const { data, error } = await admin.auth.admin.getUserById(userId);
+    if (!error) return data?.user ? "present" : "absent";
+
+    const statut = (error as { status?: number }).status;
+    if (statut === 404) return "absent";
+    if (/not.?found/i.test(error.message ?? "")) return "absent";
+    return "indetermine";
+  } catch {
+    return "indetermine";
+  }
 }

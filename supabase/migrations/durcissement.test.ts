@@ -548,3 +548,75 @@ describe("gel source Fideliz — harnais de concurrence gardé (cible synthétiq
     expect(sansCom).not.toMatch(/on conflict[^;]*do update set actif\s*=\s*false/i);
   });
 });
+
+describe("harnais de cascade — fail-closed, pas un tableau à lire", () => {
+  // Signalé le 19/08 (relais 024) : la sortie attendue n'était qu'un
+  // commentaire et un tableau. Une valeur erronée, un `ERREUR : ...`, un
+  // manifeste différent ou un résidu pouvaient s'afficher pendant que le
+  // script terminait en succès. Ces gardes exigent que chaque assertion
+  // critique existe VRAIMENT dans le fichier versionné.
+  const VERIFICATIONS = join(ICI, "..", "verifications");
+  const harnais = readFileSync(join(VERIFICATIONS, "harnais-cascade-suppression.sql"), "utf8");
+  const sansCom = sansCommentaires(harnais);
+
+  it("une seule transaction, annulée à la fin", () => {
+    expect(sansCom.trim()).toMatch(/^begin;/i);
+    expect(sansCom.trim()).toMatch(/rollback;\s*$/i);
+  });
+
+  it("la garde de cible synthétique précède toute mutation", () => {
+    const indexGarde = sansCom.search(/from auth\.users/i);
+    const indexPremiereMutation = sansCom.search(/insert into auth\.users/i);
+    expect(indexGarde).toBeGreaterThan(-1);
+    expect(indexGarde).toBeLessThan(indexPremiereMutation);
+    expect(sansCom).toMatch(/v_users\s*>\s*0\s+then\s+raise exception/i);
+  });
+
+  it("garde anti-dérive sur les DEUX invariants dont le code dépend", () => {
+    expect(sansCom).toMatch(/restaurants_user_id_fkey/);
+    expect(sansCom).toMatch(/profiles_id_fkey/);
+    expect(sansCom.match(/DÉRIVE/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it("les deux rollbacks délibérés utilisent des SQLSTATE privés distincts", () => {
+    // Une comparaison de message se casse au premier reformulage, et
+    // avalerait alors une VRAIE erreur en la prenant pour le rollback voulu.
+    expect(sansCom).toMatch(/errcode\s*=\s*'P9001'/);
+    expect(sansCom).toMatch(/errcode\s*=\s*'P9002'/);
+    expect(sansCom).toMatch(/when sqlstate 'P9001' then null/i);
+    expect(sansCom).toMatch(/when sqlstate 'P9002' then null/i);
+    // Toute autre exception se repropage au lieu d'être convertie en texte.
+    expect(sansCom.match(/when others then raise;/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it("les valeurs attendues sont ASSERTÉES, pas seulement affichées", () => {
+    expect(sansCom, "la branche SANS doit exiger exactement 0/0/0/0/0/0").toMatch(
+      /\(nr,\s*ng,\s*np,\s*nw,\s*nc,\s*nv\)\s+is distinct from\s+\(0,\s*0,\s*0,\s*0,\s*0,\s*0\)/i,
+    );
+    expect(sansCom, "la branche AVEC doit exiger exactement 1/1/1/1/1/1").toMatch(
+      /\(nr,\s*ng,\s*np,\s*nw,\s*nc,\s*nv\)\s+is distinct from\s+\(1,\s*1,\s*1,\s*1,\s*1,\s*1\)/i,
+    );
+    // Profil parti par cascade, et les TROIS rattachements sur le root.
+    expect(sansCom).toMatch(/le profil .*aurait du partir par cascade/i);
+    expect(sansCom).toMatch(/TROIS rattachements/i);
+  });
+
+  it("empreinte de DONNÉES et manifeste de SCHÉMA sont distincts et tous deux vérifiés", () => {
+    expect(sansCom).toMatch(/empreinte_donnees_avant/);
+    expect(sansCom).toMatch(/empreinte_donnees_apres/);
+    expect(sansCom, "un hash de comptages n'est pas un manifeste de schéma").toMatch(/manifeste_schema_fk/);
+    expect(sansCom).toMatch(/confdeltype::text/);
+  });
+
+  it("verdict final : empreinte identique, 0 Auth résiduel, 0 témoin — chacun assertés", () => {
+    expect(sansCom).toMatch(/v_avant is distinct from v_apres then\s+raise exception/i);
+    expect(sansCom).toMatch(/v_users <> '0' then\s+raise exception/i);
+    expect(sansCom).toMatch(/v_temoins <> '0' then\s+raise exception/i);
+  });
+
+  it("aucune adresse réelle : les identités sont en .invalid (RFC 2606)", () => {
+    const adresses = harnais.match(/[\w.+-]+@[\w.-]+/g) ?? [];
+    expect(adresses.length).toBeGreaterThan(0);
+    for (const a of adresses) expect(a, `${a} n'est pas en .invalid`).toMatch(/\.invalid$/);
+  });
+});
