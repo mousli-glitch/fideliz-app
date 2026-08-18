@@ -8,12 +8,28 @@ si une information manque pour cette raison, elle est signalée comme
 
 ---
 
-## ⚡ Où reprendre MAINTENANT (19/08, cinquième passe)
+## ⚡ Où reprendre MAINTENANT (19/08, sixième passe)
 
-**Cinq tours traités.** Commits `7cbd08a`, `689b193`, `d814ebe`, `f6a6403`,
-`a961939`, puis `f735576`…`206adc4` sur `candidat/baseline-acl`. Détail et
-preuves couche 4 : `docs/qualification-couche-4-gel.md` ; sentinelle/
-fonctions : `docs/preuve-sentinelle-et-fonctions.md`.
+**Six tours traités.** Commits `7cbd08a`, `689b193`, `d814ebe`, `f6a6403`,
+`a961939`, `f735576`…`206adc4`, puis `214e0b3` sur `candidat/baseline-acl`.
+Détail et preuves couche 4 : `docs/qualification-couche-4-gel.md` ;
+sentinelle/fonctions : `docs/preuve-sentinelle-et-fonctions.md`.
+
+**Tour 6 (verrou+décision fondus, harnais permanent) — traité, commit
+`214e0b3`** : `maintenance_actif()` supprimée — verrou `for share` et
+lecture du drapeau fondus dans une seule requête verrouillante (signalé :
+deux lectures séparées ne garantissaient pas la même version de ligne).
+Fail-closed si la ligne `maintenance` manque (`P0101`, prouvé). Scripts
+d'activation/levée versionnés, fail-closed, jamais `service_role`. Harnais
+de concurrence rendu **permanent et versionné** (SQL + Node `fetch`
+natif, `scripts/harnais-gel-concurrence.mjs`) — l'ancien harnais n'existait
+qu'en documentation. Scénario clé jamais mesuré avant ce tour : activation
+non committée qui bloque une écriture en vol puis la refuse après son
+propre commit — mesuré, passe. Limite honnête : REPEATABLE READ non
+forçable via PostgREST sur ce projet (3 mécanismes essayés, tous sans
+effet, confirmé par `pg_settings`) — le harnais échoue proprement plutôt
+que de mentir ; la preuve REPEATABLE READ du tour précédent reste valide.
+211 tests verts.
 
 **Tours 1 et 2** (rapports 018/019 → réponses) : voir historique ci-dessous
 (§ archivé) — sentinelle durcie, harnais rejouable, `preuve-acl-avis.sql`
@@ -126,7 +142,7 @@ commit `a961939`** :
     transaction, ne touche que les objets du gel. Rejoué : retour exact à
     l'empreinte pré-gel, réapplication identique.
 
-**201 tests verts.** **Pas encore fait** : réserves du candidat UUID-root ·
+**211 tests verts.** **Pas encore fait** : réserves du candidat UUID-root ·
 migrateur/dry-run/UI/compatibilité · comparaison avec
 `FIDELIZ_MASTER_DOC`. Voir le rapport complet donné directement dans le
 chat (le relais reste considéré inactif — bloqué à l'ID `017` depuis
@@ -432,7 +448,7 @@ modifiés, tests, preuves catalogue anonymisées et réserves restantes.
 | Dépôt | Branche | Commit | État |
 |---|---|---|---|
 | `fideliz-app` | `main` (production) | `5094af3` | déployé — durcissement, fingerprint `2d2e463f…` |
-| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `206adc4` | arbre propre, 201 tests verts |
+| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `214e0b3` | arbre propre, 211 tests verts |
 | `fideliz-app` | `feat/fusion-fideliz` | — | base de référence pour les diffs cumulés |
 | `cartiz` | `feat/fusion-fideliz` | `49206fe` | — |
 
@@ -451,6 +467,12 @@ modifiés, tests, preuves catalogue anonymisées et réserves restantes.
 - `206adc4` — fencing MVCC (`for share`) prouvé en concurrence réelle
   (deux sessions PostgREST), `NO-GO` du candidat d'origine confirmé par
   la mesure puis corrigé — voir `docs/qualification-couche-4-gel.md` §7
+
+**Commit du candidat, tour 6** :
+- `214e0b3` — verrou et décision fondus en une seule lecture
+  (`maintenance_actif()` supprimée), fail-closed si la ligne `maintenance`
+  manque, scripts d'activation/levée versionnés, harnais de concurrence
+  rendu permanent (SQL + Node) — voir `docs/qualification-couche-4-gel.md` §8
 
 **Commits antérieurs** (tours 1-4, du plus ancien au plus récent) :
 - `f70ccb3` — retirer avant d'accorder, 114 privilèges de trop dont TRUNCATE à anon
@@ -614,7 +636,7 @@ actives : `role_jamais_depuis_les_metadonnees`,
   identité-root de cette branche étaient un brouillon jamais déployé,
   différent du candidat réel de production — réconcilié (commit `f6a6403`).
   Qualifier contre le brouillon n'aurait rien prouvé.
-- **201 tests verts** sur `candidat/baseline-acl`.
+- **211 tests verts** sur `candidat/baseline-acl`.
 
 **Dette assumée, non corrigée délibérément** : `updateGameAction` non
 transactionnel (test de caractérisation en place) ; 4 fichiers
