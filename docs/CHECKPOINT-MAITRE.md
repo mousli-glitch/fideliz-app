@@ -22,18 +22,29 @@ piège. 100 courses, 0 violation, les deux linéarisations réellement
 exercées. Cycle complet bouclé sur l'empreinte exacte. État : installé,
 **inactif**.
 
-**Tour 8 (fail-closed) — traité, commit `1ee2c0e`** : trois chemins
-destructifs fermés. `idDuCompteRoot()` **supprimé** — il ne lisait même pas
-son `error` et son `null` partait dans un `update` à la clé de service
-(`user_id = null` écrit, puis `success: true`). Il ne reste qu'un résolveur
-applicatif. `masterDeleteUser` et `deleteSalesUserAction` vérifient
-désormais chaque étape avant l'étape destructive suivante. Le filet SQL
-`handle_deleted_commercial()` refuse (`P0102`) au lieu d'écrire `null` —
-défaut prouvé en vivant AVANT correction, puis reprouvé corrigé, sur le
-vrai trigger avec identités Auth synthétiques en transaction annulée.
-Rollback rendu compatible par analyse des quatre fenêtres (les deux
-résolveurs ne décident jamais du même événement). **363 tests verts,
-typecheck code 0.**
+**Tour 8-9 (fail-closed puis cascade) — commits `1ee2c0e`, `e98a8a7`** :
+
+`idDuCompteRoot()` **supprimé** (ne lisait pas son `error` ; son `null`
+partait dans un `update` à la clé de service). Un seul résolveur applicatif
+subsiste.
+
+**P0 majeur trouvé au tour 9, prouvé en vivant** :
+`restaurants.user_id -> auth.users ON DELETE CASCADE`. Les deux actions
+réattribuaient `created_by` et `owner_id` mais jamais `user_id` — la
+suppression Auth détruisait donc le restaurant, ses jeux, lots, gagnants,
+contacts et avis. Mesuré sur `fusion-tests-2` : ancien comportement
+`resto=0 jeux=0 lots=0 gagnants=0`, nouveau `resto=1 jeux=1 lots=1
+gagnants=1`. Corrigé.
+
+**P0 second** : le rejeu après échec Auth était impossible (profil déjà
+supprimé => `cibleEstProtegee` refuse au rejeu). Le profil part désormais
+par cascade `profiles_id_fkey`, ce qui rend la séquence rejouable.
+
+Séquence unifiée dans `lib/securite/suppression-compte.ts` — un seul
+exemplaire pour les deux actions. Rollback séparé en deux couches : annule
+le départage, **conserve** le refus `P0102`.
+
+**367 tests verts, typecheck code 0.**
 
 **Tours 1 et 2** (rapports 018/019 → réponses) : voir historique ci-dessous
 (§ archivé) — sentinelle durcie, harnais rejouable, `preuve-acl-avis.sql`
@@ -452,7 +463,7 @@ modifiés, tests, preuves catalogue anonymisées et réserves restantes.
 | Dépôt | Branche | Commit | État |
 |---|---|---|---|
 | `fideliz-app` | `main` (production) | `5094af3` | déployé — durcissement, fingerprint `2d2e463f…` |
-| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `1ee2c0e` | arbre propre, 363 tests verts |
+| `fideliz-app` | `candidat/baseline-acl` **(courante)** | `e98a8a7` | arbre propre, 367 tests verts |
 | `fideliz-app` | `feat/fusion-fideliz` | — | base de référence pour les diffs cumulés |
 | `cartiz` | `feat/fusion-fideliz` | `49206fe` | — |
 
