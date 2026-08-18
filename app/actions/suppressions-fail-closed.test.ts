@@ -38,16 +38,28 @@ vi.mock("@/lib/securite/garde-action", () => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
-/* Journal des opérations réellement tentées, dans l'ordre. */
+/*
+ * Journal des opérations réellement tentées, dans l'ordre.
+ *
+ * Signalé le 19/08 : la version précédente ne retenait que `table:verbe`.
+ * Trois `restaurants:update` identiques passaient donc le test même si le
+ * code avait mis à jour TROIS FOIS LA MÊME COLONNE — c'est-à-dire même si
+ * `user_id`, le lien qui cascade, n'était jamais réattribué. On enregistre
+ * désormais la charge utile et le prédicat, et on les vérifie nommément.
+ */
 let journal: string[] = [];
+let operations: { cle: string; payload?: unknown; predicat?: [string, unknown] }[] = [];
 /* Erreur à renvoyer pour une opération donnée, sinon succès. */
 let echecs: Record<string, { message: string }> = {};
 /* Réponse du résolveur d'héritier. */
 let heritier: unknown = { ok: true, rootId: "root-synthetique" };
 
-function reponsePour(cle: string) {
+function reponsePour(cle: string, payload?: unknown, predicat?: [string, unknown]) {
   journal.push(cle);
-  const e = echecs[cle];
+  operations.push({ cle, payload, predicat });
+  // La clé d'échec peut viser une colonne précise : `restaurants:update:user_id`.
+  const colonne = payload && typeof payload === "object" ? Object.keys(payload as object)[0] : undefined;
+  const e = echecs[colonne ? `${cle}:${colonne}` : cle] ?? echecs[cle];
   return Promise.resolve({ data: e ? null : [], error: e ?? null });
 }
 
@@ -61,13 +73,15 @@ function clientSimule() {
     from: (table: string) => {
       const chaine: Record<string, unknown> = {};
       let verbe = "";
-      chaine.update = () => { verbe = "update"; return chaine; };
+      let payload: unknown;
+      let predicat: [string, unknown] | undefined;
+      chaine.update = (v: unknown) => { verbe = "update"; payload = v; return chaine; };
       chaine.delete = () => { verbe = "delete"; return chaine; };
       chaine.select = () => chaine;
-      chaine.eq = () => chaine;
-      chaine.is = () => chaine;
+      chaine.eq = (col: string, val: unknown) => { predicat = [col, val]; return chaine; };
+      chaine.is = (col: string, val: unknown) => { predicat = [col, val]; return chaine; };
       chaine.then = (r: (v: unknown) => unknown) =>
-        reponsePour(`${table}:${verbe}`).then(r);
+        reponsePour(`${table}:${verbe}`, payload, predicat).then(r);
       return chaine;
     },
     auth: {
@@ -95,6 +109,7 @@ const { masterDeleteUser } = await import("./admin-actions");
 
 beforeEach(() => {
   journal = [];
+  operations = [];
   echecs = {};
   heritier = { ok: true, rootId: "root-synthetique" };
 });
@@ -151,21 +166,43 @@ describe("deleteSalesUserAction — arrêt avant chaque étape destructive", () 
     expect(journal).not.toContain("auth:deleteUser");
   });
 
-  it("P0 : la réattribution de `user_id` a lieu AVANT la suppression Auth", async () => {
-    // restaurants.user_id -> auth.users ON DELETE CASCADE (relevé sur la
-    // base). Sans cette réattribution, supprimer le compte Auth détruirait
-    // le restaurant, puis ses jeux, contacts et avis en cascade.
+  it("P0 : les TROIS colonnes distinctes sont réattribuées, chacune sur son prédicat", async () => {
+    // Un simple compte de trois `restaurants:update` passerait même si le
+    // code mettait trois fois à jour la même colonne — donc même si
+    // `user_id`, le lien qui CASCADE, était oublié. On vérifie nommément.
     await deleteSalesUserAction("cible");
-    const misesAJour = journal.filter((o) => o === "restaurants:update").length;
-    expect(misesAJour, "created_by, owner_id ET user_id").toBe(3);
-    expect(journal.indexOf("auth:deleteUser")).toBeGreaterThan(journal.lastIndexOf("restaurants:update"));
+    const majRestaurants = operations.filter((o) => o.cle === "restaurants:update");
+    expect(majRestaurants.map((o) => o.payload)).toEqual([
+      { created_by: "root-synthetique" },
+      { owner_id: "root-synthetique" },
+      { user_id: "root-synthetique" },
+    ]);
+    expect(majRestaurants.map((o) => o.predicat)).toEqual([
+      ["created_by", "cible"],
+      ["owner_id", "cible"],
+      ["user_id", "cible"],
+    ]);
   });
 
-  it("P0 : réattribution de `user_id` échouée -> aucune suppression Auth", async () => {
-    echecs["restaurants:update"] = { message: "panne" };
+  for (const colonne of ["created_by", "owner_id", "user_id"] as const) {
+    it(`échec de la réattribution \`${colonne}\` -> aucune suppression Auth`, async () => {
+      echecs[`restaurants:update:${colonne}`] = { message: "panne" };
+      const r = await deleteSalesUserAction("cible");
+      expect(r.success).toBe(false);
+      expect(journal, "l'Auth aurait pu emporter le restaurant en cascade").not.toContain("auth:deleteUser");
+      expect(journal).not.toContain("profiles:delete");
+    });
+  }
+
+  it("P0 : `user_id` échoue APRÈS le succès des deux premières -> arrêt net", async () => {
+    // Le cas le plus tardif des trois : les deux premières réattributions
+    // ont abouti, la troisième échoue. Rien de destructif ne doit suivre.
+    echecs["restaurants:update:user_id"] = { message: "panne" };
     const r = await deleteSalesUserAction("cible");
     expect(r.success).toBe(false);
-    expect(journal, "l'Auth aurait emporté le restaurant en cascade").not.toContain("auth:deleteUser");
+    expect(operations.filter((o) => o.cle === "restaurants:update").length).toBe(3);
+    expect(journal).not.toContain("sales_restaurants:delete");
+    expect(journal).not.toContain("auth:deleteUser");
   });
 
   it("chemin nominal : l'ordre va du moins destructif au plus destructif", async () => {

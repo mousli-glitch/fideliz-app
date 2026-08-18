@@ -35,7 +35,7 @@ export async function deleteSalesUserAction(userId: string) {
      * `auth.users` — sans lui, la suppression Auth détruisait le restaurant),
      * puis laisse la cascade emporter le profil pour rester rejouable.
      */
-    const r = await supprimerCompteEtReattribuer(supabaseAdmin as any, userId)
+    const r = await supprimerCompteEtReattribuer(supabaseAdmin, userId)
     if (!r.success) return r
 
     await tracerAction(garde.appelant, 'commercial.suppression', 'Compte commercial supprimé', {

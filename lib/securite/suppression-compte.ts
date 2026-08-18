@@ -1,4 +1,5 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { resoudreRootHeritier, cibleEstProtegee } from "./root";
 
 /*
@@ -56,10 +57,13 @@ import { resoudreRootHeritier, cibleEstProtegee } from "./root";
 
 export type ResultatSuppression = { success: true } | { success: false; error: string };
 
-type ClientAdmin = {
-  from: (table: string) => any;
-  auth: { admin: { deleteUser: (id: string) => Promise<{ error: { message: string } | null }> } };
-};
+/*
+ * Le vrai type de la bibliotheque, pas une forme ecrite a la main : un type
+ * maison finit toujours par diverger du client, et c'est un `as any` au
+ * point d'appel qui masque alors la divergence. Les deux actions passent
+ * desormais leur client sans aucun cast.
+ */
+type ClientAdmin = SupabaseClient<any, any, any, any, any>;
 
 /**
  * Supprime un compte : réattribue tout ce qui pend, puis laisse la

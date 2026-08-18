@@ -113,7 +113,7 @@ export async function masterDeleteUser(userId: string) {
   try {
     /* Même primitive que `deleteSalesUserAction` — un seul exemplaire de la
      * séquence, pour qu'un correctif ne puisse pas n'en corriger qu'une. */
-    const r = await supprimerCompteEtReattribuer(supabase as any, userId)
+    const r = await supprimerCompteEtReattribuer(supabase, userId)
     if (!r.success) return r
 
     await tracerAction(garde.appelant, 'compte.suppression', 'Compte supprimé', { cible: userId })
