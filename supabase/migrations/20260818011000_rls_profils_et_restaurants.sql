@@ -102,12 +102,19 @@
  *   · aucun paramètre — on ne peut pas lui demander le rôle d'un AUTRE
  *     compte, elle ne sait répondre que sur `auth.uid()` de l'appelant ;
  *   · propriétaire `postgres`, celui qui crée déjà tout dans `public` ;
- *   · `pg_temp` placé EXPLICITEMENT en dernier. Sans ça il est cherché en
- *     premier, et une table temporaire nommée `profiles` détournerait une
- *     fonction DEFINER. La référence est déjà qualifiée (`public.profiles`),
- *     ce qui suffirait ; les deux ensemble ne coûtent rien ;
- *   · `pg_catalog` en tête : les opérateurs et `coalesce` ne peuvent pas être
- *     redéfinis sous elle ;
+ *   · `search_path` VIDE. C'est plus strict que `pg_catalog, public, pg_temp`
+ *     que j'avais d'abord posé : avec une chaîne vide, `pg_temp` n'est plus
+ *     dans le chemin du tout, et `pg_catalog` y reste implicitement en tête —
+ *     PostgreSQL l'y met toujours quand il n'est pas nommé. Toutes les
+ *     références étant qualifiées (`public.profiles`, `auth.uid()`), rien ne
+ *     dépend du chemin ;
+ *   · l'interposition a été TENTÉE, pas seulement écartée : le compte A a
+ *     créé une table temporaire `profiles` le déclarant `root`, puis appelé
+ *     la fonction. Elle a rendu `restaurant`. La table temporaire existait
+ *     bien au moment de l'appel ;
+ *   · ni `anon` ni `authenticated` ne possèdent `CREATE` sur `public`,
+ *     `extensions`, `auth` ou `pg_catalog` — seulement `USAGE`. Aucun schéma
+ *     du chemin n'est modifiable par un rôle non privilégié ;
  *   · `stable` — elle lit, elle n'écrit pas, aucun effet de bord ;
  *   · EXECUTE rendu à `anon`, `authenticated` et `service_role`, soit
  *     exactement ce que le GRANT à PUBLIC donnait déjà. Restreindre `anon`
@@ -128,10 +135,10 @@ returns text
 language sql
 stable
 security definer
-set search_path = pg_catalog, public, pg_temp
+set search_path = ''
 as $$
   select coalesce(
-    (select role from public.profiles where id = auth.uid()),
+    (select p.role from public.profiles p where p.id = auth.uid()),
     'anon'
   );
 $$;
