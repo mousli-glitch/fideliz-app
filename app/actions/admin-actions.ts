@@ -1,7 +1,7 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
-import { resoudreRootHeritier, cibleEstProtegee } from "@/lib/securite/root"
+import { supprimerCompteEtReattribuer } from "@/lib/securite/suppression-compte"
 import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
 
 const createAdminClient = () => createClient(
@@ -111,68 +111,10 @@ export async function masterDeleteUser(userId: string) {
   const supabase = createAdminClient()
 
   try {
-    /* 🔒 Ne jamais supprimer un super-admin — par RÔLE, pas par identifiant.
-     * Le test par UUID qui figurait ici ne protégeait qu'UN seul compte : un
-     * second root aurait été supprimable. */
-    if (await cibleEstProtegee(userId)) {
-      return { success: false, error: "Ce compte super-admin est protégé." }
-    }
-
-    const heritier = await resoudreRootHeritier()
-    if (!heritier.ok) {
-      return { success: false, error: heritier.cause === "aucun_root"
-        ? "Aucun compte root : réattribution impossible."
-        : "Lecture des profils impossible : réattribution annulée." }
-    }
-    const rootHeritier = heritier.rootId
-
-    /*
-     * ─── CHAQUE ÉTAPE SE VÉRIFIE AVANT LA SUIVANTE (19/08/2026) ───
-     *
-     * Les trois étapes ci-dessous ignoraient leur `error`. Une réattribution
-     * échouée n'empêchait donc PAS la suppression du profil ni celle du
-     * compte Auth : les restaurants restaient rattachés à un utilisateur
-     * qui n'existait plus. On s'arrête désormais avant chaque étape
-     * destructive, jamais après.
-     *
-     * Pas de transaction possible : `auth.admin.deleteUser` est un appel
-     * d'API, hors de la transaction SQL. D'où l'ordre du moins destructif
-     * au plus destructif, et l'arrêt à la première erreur. Rejeu sûr après
-     * échec partiel : chaque étape est idempotente.
-     */
-
-    // 1. RÉATTRIBUTION AU ROOT (sans voler le restaurant au vrai propriétaire)
-    //    a) Restaurants APPORTÉS par cet utilisateur (created_by) -> créateur = root,
-    //       on CONSERVE owner_id (le restaurateur réel garde son restaurant).
-    const { error: eA } = await supabase
-      .from('restaurants')
-      .update({ created_by: rootHeritier })
-      .eq('created_by', userId)
-    if (eA) throw new Error("Réattribution (créateur) échouée : " + eA.message)
-
-    //    b) Restaurants POSSÉDÉS par cet utilisateur (owner_id) -> propriété au root.
-    const { error: eB } = await supabase
-      .from('restaurants')
-      .update({ owner_id: rootHeritier })
-      .eq('owner_id', userId)
-    if (eB) throw new Error("Réattribution (propriétaire) échouée : " + eB.message)
-
-    //    c) Nettoyer les liens de portefeuille commercial (pas de FK côté commercial).
-    const { error: eC } = await supabase
-      .from('sales_restaurants').delete().eq('sales_user_id', userId)
-    if (eC) throw new Error("Nettoyage du portefeuille échoué : " + eC.message)
-
-    // 2. SUPPRESSION DU PROFIL PUBLIC
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .delete()
-      .eq('id', userId)
-
-    if (profileError) throw profileError
-
-    // 3. SUPPRESSION DÉFINITIVE DE L'AUTH (Le fantôme)
-    const { error: authError } = await supabase.auth.admin.deleteUser(userId)
-    if (authError) throw authError
+    /* Même primitive que `deleteSalesUserAction` — un seul exemplaire de la
+     * séquence, pour qu'un correctif ne puisse pas n'en corriger qu'une. */
+    const r = await supprimerCompteEtReattribuer(supabase as any, userId)
+    if (!r.success) return r
 
     await tracerAction(garde.appelant, 'compte.suppression', 'Compte supprimé', { cible: userId })
 

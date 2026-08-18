@@ -41,10 +41,28 @@
 --  migration, restauré fidèlement. Le départage déterministe du chemin
 --  nominal (applicatif) N'EST PAS retiré.
 --
---  ⚠ Ce rollback restaure aussi le comportement `v_root = null` : sans
---    root, l'`update` remet `created_by`/`owner_id` à null au lieu de
---    refuser. C'est également l'état d'origine. Le chemin applicatif, lui,
---    refuse toujours — son fail-closed ne dépend pas de cette migration.
+--  ─── DEUX COUCHES, UN SEUL ROLLBACK : LE DÉPARTAGE, PAS LA SÉCURITÉ ───
+--
+--  La migration porte DEUX changements de nature differente :
+--
+--    1. SÉCURITÉ — le refus `P0102` quand aucun root n'existe. Sans lui,
+--       l'`update` posait `created_by = null, owner_id = null`. Défaut de
+--       PERTE DE DONNÉES, prouvé en vivant sur la branche synthétique.
+--    2. FONCTIONNEL — le départage `, p.id`, qui aligne le trigger sur le
+--       chemin applicatif en cas d'égalité de `created_at`.
+--
+--  Ce rollback annule UNIQUEMENT la couche 2. Il CONSERVE `P0102`.
+--
+--  Un rollback opérationnel n'a aucune raison de réintroduire un défaut de
+--  perte de données que l'expérience vient de démontrer : revenir sur le
+--  départage est un choix fonctionnel discutable, remettre l'effacement
+--  silencieux ne l'est pas. Les deux se rejouent donc séparément.
+--
+--  ⚠ INTERDIT AU RUNBOOK NORMAL : restaurer le corps historique exact
+--    (sans `P0102`) reintroduirait l'effacement. Si cette fidélité
+--    historique est un jour nécessaire — reproduction d'incident,
+--    archéologie — elle se fait hors runbook, en connaissance de cause, et
+--    ne doit jamais être présentée comme un retour arrière sûr.
 
 create or replace function public.handle_deleted_commercial()
 returns trigger
@@ -60,6 +78,14 @@ begin
   where p.role = 'root'
   order by p.created_at
   limit 1;
+
+  -- COUCHE DE SÉCURITÉ CONSERVÉE — ce rollback n'annule que le départage.
+  if not found or v_root is null then
+    raise exception using
+      errcode = 'P0102',
+      message = 'Aucun compte root : réattribution impossible, suppression refusée.',
+      hint    = 'heritier_introuvable';
+  end if;
 
   update public.restaurants
      set created_by = v_root,

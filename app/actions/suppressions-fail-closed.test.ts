@@ -151,22 +151,32 @@ describe("deleteSalesUserAction — arrêt avant chaque étape destructive", () 
     expect(journal).not.toContain("auth:deleteUser");
   });
 
-  it("suppression du profil échouée : le compte Auth SURVIT", async () => {
-    echecs["profiles:delete"] = { message: "panne" };
+  it("P0 : la réattribution de `user_id` a lieu AVANT la suppression Auth", async () => {
+    // restaurants.user_id -> auth.users ON DELETE CASCADE (relevé sur la
+    // base). Sans cette réattribution, supprimer le compte Auth détruirait
+    // le restaurant, puis ses jeux, contacts et avis en cascade.
+    await deleteSalesUserAction("cible");
+    const misesAJour = journal.filter((o) => o === "restaurants:update").length;
+    expect(misesAJour, "created_by, owner_id ET user_id").toBe(3);
+    expect(journal.indexOf("auth:deleteUser")).toBeGreaterThan(journal.lastIndexOf("restaurants:update"));
+  });
+
+  it("P0 : réattribution de `user_id` échouée -> aucune suppression Auth", async () => {
+    echecs["restaurants:update"] = { message: "panne" };
     const r = await deleteSalesUserAction("cible");
     expect(r.success).toBe(false);
-    expect(journal, "supprimer l'Auth ici laisserait un profil fantôme").not.toContain("auth:deleteUser");
+    expect(journal, "l'Auth aurait emporté le restaurant en cascade").not.toContain("auth:deleteUser");
   });
 
   it("chemin nominal : l'ordre va du moins destructif au plus destructif", async () => {
     const r = await deleteSalesUserAction("cible");
     expect(r.success).toBe(true);
     expect(journal).toEqual([
-      "restaurants:update",
-      "restaurants:update",
+      "restaurants:update",   // created_by
+      "restaurants:update",   // owner_id
+      "restaurants:update",   // user_id — le lien qui CASCADE
       "sales_restaurants:delete",
-      "profiles:delete",
-      "auth:deleteUser",
+      "auth:deleteUser",      // le profil part par cascade, volontairement
     ]);
   });
 });
@@ -195,44 +205,70 @@ describe("masterDeleteUser — arrêt avant chaque étape destructive", () => {
     expect(journal).not.toContain("auth:deleteUser");
   });
 
-  it("suppression du profil échouée : le compte Auth SURVIT", async () => {
-    echecs["profiles:delete"] = { message: "panne" };
-    const r = await masterDeleteUser("cible");
-    expect(r.success).toBe(false);
-    expect(journal).not.toContain("auth:deleteUser");
+  it("P0 : les trois colonnes sont réattribuées avant la suppression Auth", async () => {
+    await masterDeleteUser("cible");
+    expect(journal.filter((o) => o === "restaurants:update").length).toBe(3);
+    expect(journal.indexOf("auth:deleteUser")).toBeGreaterThan(journal.lastIndexOf("restaurants:update"));
+  });
+
+  it("le profil n'est JAMAIS supprimé explicitement (il part par cascade)", async () => {
+    await masterDeleteUser("cible");
+    expect(journal, "le supprimer avant l'Auth rendrait le rejeu impossible").not.toContain("profiles:delete");
   });
 
   it("chemin nominal : l'ordre va du moins destructif au plus destructif", async () => {
     const r = await masterDeleteUser("cible");
     expect(r.success).toBe(true);
     expect(journal).toEqual([
-      "restaurants:update",
-      "restaurants:update",
+      "restaurants:update",   // created_by
+      "restaurants:update",   // owner_id
+      "restaurants:update",   // user_id — le lien qui CASCADE
       "sales_restaurants:delete",
-      "profiles:delete",
-      "auth:deleteUser",
+      "auth:deleteUser",      // le profil part par cascade, volontairement
     ]);
   });
 });
 
-describe("rejeu après échec partiel", () => {
-  it("un second appel après un échec de profil aboutit sans effet de bord", async () => {
-    echecs["profiles:delete"] = { message: "panne transitoire" };
+const SEQUENCE_NOMINALE = [
+  "restaurants:update",   // created_by
+  "restaurants:update",   // owner_id
+  "restaurants:update",   // user_id — le lien qui CASCADE vers auth.users
+  "sales_restaurants:delete",
+  "auth:deleteUser",      // le profil part par cascade, volontairement
+];
+
+describe("rejeu après échec partiel — y compris le cas le plus tardif", () => {
+  it("P0 : échec de l'appel Auth, puis rejeu qui aboutit", async () => {
+    /*
+     * Le cas que l'ancien test ne couvrait pas : réattributions faites,
+     * puis `auth.admin.deleteUser` échoue. L'ancienne séquence avait DÉJÀ
+     * supprimé le profil à ce stade — au rejeu, `cibleEstProtegee` traite
+     * (à raison) un profil absent comme protégé et refuse. La suppression
+     * ne pouvait donc plus jamais être terminée : un compte Auth orphelin,
+     * indéfiniment. L'ancien test simulait l'échec du profil, c'est-à-dire
+     * précisément le cas qui, lui, fonctionnait.
+     *
+     * Depuis que le profil part par cascade, il survit à cet échec et le
+     * rejeu converge vers le même état final.
+     */
+    echecs["auth:deleteUser"] = { message: "panne transitoire" };
     const premier = await deleteSalesUserAction("cible");
     expect(premier.success).toBe(false);
+    expect(journal, "le profil doit avoir survécu à l'échec Auth").not.toContain("profiles:delete");
 
-    // La panne cesse ; on rejoue. Les étapes déjà faites sont idempotentes
-    // (`update ... eq` sur des lignes déjà réattribuées ne change rien).
     journal = [];
     echecs = {};
     const second = await deleteSalesUserAction("cible");
     expect(second.success).toBe(true);
-    expect(journal).toEqual([
-      "restaurants:update",
-      "restaurants:update",
-      "sales_restaurants:delete",
-      "profiles:delete",
-      "auth:deleteUser",
-    ]);
+    expect(journal).toEqual(SEQUENCE_NOMINALE);
+  });
+
+  it("un second appel après un échec de portefeuille converge au même état", async () => {
+    echecs["sales_restaurants:delete"] = { message: "panne transitoire" };
+    expect((await masterDeleteUser("cible")).success).toBe(false);
+    journal = [];
+    echecs = {};
+    expect((await masterDeleteUser("cible")).success).toBe(true);
+    expect(journal).toEqual(SEQUENCE_NOMINALE);
   });
 });

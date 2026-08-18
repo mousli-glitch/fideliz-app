@@ -1,7 +1,7 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
-import { resoudreRootHeritier, cibleEstProtegee } from "@/lib/securite/root"
+import { supprimerCompteEtReattribuer } from "@/lib/securite/suppression-compte"
 import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
 
 
@@ -27,71 +27,16 @@ export async function deleteSalesUserAction(userId: string) {
   if (!garde.ok) return { success: false, error: garde.error }
 
   try {
-    if (!userId) return { success: false, error: "ID utilisateur manquant." }
-
-    /* 🔒 Ne jamais supprimer un super-admin. Le contrôle par RÔLE ci-dessous
-     * suffit et suffisait déjà : le test par UUID qui le précédait était
-     * redondant, et il aurait laissé passer un second root. */
-    if (await cibleEstProtegee(userId)) {
-      return { success: false, error: "Ce compte super-admin est protégé." }
-    }
-
-    /* L'héritier n'est plus figé : on le résout. Si aucun root actif n'existe,
-     * on refuse plutôt que d'inventer un propriétaire — un restaurant sans
-     * propriétaire valide vaut mieux qu'un restaurant attribué au hasard. */
-    const heritier = await resoudreRootHeritier()
-    if (!heritier.ok) {
-      return { success: false, error: heritier.cause === "aucun_root"
-        ? "Aucun compte root : réattribution impossible."
-        : "Lecture des profils impossible : réattribution annulée." }
-    }
-    const rootHeritier = heritier.rootId
-
-    // 1. Restaurants APPORTÉS par le commercial -> attribués au root (on garde le propriétaire réel)
-    const { error: e1 } = await supabaseAdmin
-      .from('restaurants')
-      .update({ created_by: rootHeritier })
-      .eq('created_by', userId)
-    if (e1) throw new Error("Réattribution (créateur) échouée : " + e1.message)
-
-    // 2. Restaurants éventuellement POSSÉDÉS par le commercial -> propriété au root
-    const { error: e2 } = await supabaseAdmin
-      .from('restaurants')
-      .update({ owner_id: rootHeritier })
-      .eq('owner_id', userId)
-    if (e2) throw new Error("Réattribution (propriétaire) échouée : " + e2.message)
-
     /*
-     * ─── CHAQUE ÉTAPE SE VÉRIFIE AVANT LA SUIVANTE (19/08/2026) ───
-     *
-     * Les étapes 3 et 4 ignoraient leur `error`. Une suppression de profil
-     * échouée n'empêchait donc pas la suppression Auth : le compte Auth
-     * disparaissait en laissant derrière lui une ligne `profiles` pointant
-     * vers un utilisateur inexistant — un fantôme, impossible à recréer
-     * puisque l'e-mail redevient libre. On s'arrête désormais AVANT
-     * l'étape destructive suivante, jamais après.
-     *
-     * Pas de transaction possible ici : `auth.admin.deleteUser` est un
-     * appel d'API, hors de la transaction SQL. D'où l'ordre choisi — du
-     * moins destructif au plus destructif — et un arrêt à la première
-     * erreur. Un rejeu après échec partiel est sûr : chaque étape est
-     * idempotente (`delete ... eq` sur une ligne déjà absente ne fait
-     * rien, `update ... eq` sur des lignes déjà réattribuées non plus).
+     * Séquence entière déléguée à `supprimerCompteEtReattribuer` : les deux
+     * actions de suppression la répétaient presque à l'identique, et un
+     * correctif futur n'aurait ferme qu'un chemin sur deux. Elle réattribue
+     * `created_by`, `owner_id` ET `user_id` (ce dernier CASCADE vers
+     * `auth.users` — sans lui, la suppression Auth détruisait le restaurant),
+     * puis laisse la cascade emporter le profil pour rester rejouable.
      */
-
-    // 3. Nettoyer les liens de portefeuille commercial (table sans clé étrangère côté commercial)
-    const { error: e3 } = await supabaseAdmin
-      .from('sales_restaurants').delete().eq('sales_user_id', userId)
-    if (e3) throw new Error("Nettoyage du portefeuille échoué : " + e3.message)
-
-    // 4. Supprimer le profil public
-    const { error: e4 } = await supabaseAdmin
-      .from('profiles').delete().eq('id', userId)
-    if (e4) throw new Error("Suppression du profil échouée : " + e4.message)
-
-    // 5. Supprimer le compte Auth (libère l'e-mail)
-    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId)
-    if (authError) return { success: false, error: authError.message }
+    const r = await supprimerCompteEtReattribuer(supabaseAdmin as any, userId)
+    if (!r.success) return r
 
     await tracerAction(garde.appelant, 'commercial.suppression', 'Compte commercial supprimé', {
       cible: userId,
