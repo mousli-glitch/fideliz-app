@@ -1122,36 +1122,63 @@ create policy "admin_access 1peuqw_3" on storage.objects as permissive for delet
 grant usage on schema public to anon, authenticated, service_role;
 grant all on all sequences in schema public to anon, authenticated, service_role;
 
--- Tables : Supabase accorde tout par défaut, et c'est la RLS qui filtre.
-grant all on all tables in schema public to anon, authenticated, service_role;
+/*
+ * ─── LES GRANTS DE RELATIONS, OBJET PAR OBJET ───
+ *
+ * Surtout pas de `grant all on all tables`. Cette instruction touche AUSSI
+ * les vues, et elle a déjà ouvert trois fois plus que la production :
+ *
+ *   · huit privilèges sur les quatre vues au lieu de cinq pour anon
+ *     et authenticated ;
+ *   · tous les droits sur `winners`, où anon et authenticated n'en ont
+ *     AUCUN en production ;
+ *   · REFERENCES, TRIGGER et TRUNCATE partout.
+ *
+ * Le motif se répète : ce qu'on accorde en bloc s'ouvre, il ne se ferme
+ * jamais. On restitue donc la matrice mesurée, table par table.
+ *
+ * `service_role` reçoit les huit privilèges sur les seize tables et les
+ * quatre vues, comme en production.
+ */
 
--- Sauf trois, où `anon` n'a que la lecture. Mesuré en production.
-revoke insert, update, delete on public.games       from anon;
-revoke insert, update, delete on public.prizes      from anon;
-revoke insert, update, delete on public.restaurants from anon;
+-- service_role : tout, sur toutes les relations.
+grant all on all tables in schema public to service_role;
+
+-- anon et authenticated : cinq privilèges sur douze tables.
+grant delete, insert, maintain, select, update on
+  public.activity_logs_legacy, public.auth_ghosts_backup_20260606,
+  public.auth_orphan_backup_20260606, public.avis, public.contacts,
+  public.contacts_backup_20260606, public.crm_notes, public.profiles,
+  public.sales_restaurants, public.system_logs, public.winners_archive,
+  public.winners_backup_20260606
+to anon, authenticated;
+
+-- games, prizes, restaurants : anon ne fait que lire ; authenticated écrit,
+-- mais sans MAINTAIN. Cette nuance est mesurée, pas déduite.
+grant select on public.games, public.prizes, public.restaurants to anon;
+grant delete, insert, select, update on public.games, public.prizes, public.restaurants to authenticated;
 
 /*
- * ─── FONCTIONS : SURTOUT PAS DE GRANT GLOBAL ───
+ * `winners` n'est PAS accordée à anon ni à authenticated.
  *
- * La première version de cette baseline se terminait par
- * `grant all on all functions in schema public to anon, authenticated`.
- * C'était une régression de sécurité introduite par la baseline elle-même :
- * elle aurait ouvert à tout visiteur `play_game`, `register_win`,
- * `get_replay_status`, `anonymize_expired_data`, `get_sales_stats` et
- * `activate_game` — six fonctions que la production restreint.
- *
- * Et le replay ne l'aurait pas rattrapé : la migration P0 du 17/08 ne ferme
- * que `archive_redeemed_winners` et `_log_event`. Les six autres seraient
- * restées grandes ouvertes, dans une baseline censée reproduire fidèlement.
- *
- * PostgreSQL accorde EXECUTE à PUBLIC sur toute fonction créée : les 22 le
- * sont donc déjà à ce stade. On retire ensuite, une par une, exactement ce
- * que la production retire.
- *
- * ACL restituées = celles d'AUJOURD'HUI, sauf pour les deux que la migration
- * 20260817235046 ferme : dans la baseline elles restent ouvertes, et c'est
- * son replay qui les referme. C'est la seule inversion de delta légitime.
+ * C'est la table des tickets. Ni le visiteur ni le compte connecté n'y
+ * touchent directement : tout passe par les RPC `SECURITY DEFINER` et par la
+ * vue `public_winners_safe`. Un `grant all` global le leur donnait — et
+ * rendait du même coup cette vue réellement dangereuse.
  */
+
+/*
+ * Les vues : cinq privilèges pour anon et authenticated, huit pour
+ * service_role. Exactement ce que porte la production.
+ *
+ * Ces droits d'écriture accordés à `anon` sur des vues sont une DETTE de
+ * sécurité, pas une cible. La baseline les reproduit parce qu'elle décrit
+ * l'histoire ; leur retrait est une migration ultérieure, à part.
+ */
+grant delete, insert, maintain, select, update on
+  public.public_restaurants, public.public_winners_safe,
+  public.v_my_access_status, public.view_integrity_check
+to anon, authenticated;
 
 -- Réservées à service_role — le serveur seul les appelle.
 revoke execute on function public.play_game(uuid, text, text, text, boolean) from public, anon, authenticated;

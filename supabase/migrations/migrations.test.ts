@@ -176,10 +176,12 @@ describe("baseline — les ACL des fonctions sensibles", () => {
     });
   }
 
-  it("anon n'écrit pas sur games, prizes ni restaurants", () => {
-    for (const t of ["games", "prizes", "restaurants"]) {
-      expect(code).toMatch(new RegExp(`revoke insert, update, delete on public\\.${t}\\s+from anon`, "i"));
-    }
+  /* La baseline n'accorde plus en bloc pour retirer ensuite : elle accorde
+     exactement ce que la production porte. Le contrôle porte donc sur ce qui
+     est donné, pas sur ce qui est repris. */
+  it("anon ne reçoit que SELECT sur games, prizes et restaurants", () => {
+    expect(code).toMatch(/grant select on public\.games, public\.prizes, public\.restaurants to anon;/i);
+    expect(code).not.toMatch(/grant[^;]*\b(insert|update|delete)\b[^;]*public\.games[^;]*to[^;]*\banon\b/i);
   });
 });
 
@@ -245,5 +247,65 @@ describe("baseline — security_invoker sur les quatre vues", () => {
 
   it("les définitions des vues restent inchangées", () => {
     expect(code).toMatch(/create or replace view public\.public_winners_safe as\s+select id, prize_label_snapshot, created_at, status from public\.winners/i);
+  });
+});
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ *  AUCUN GRANT GLOBAL — il a déjà ouvert trois fois plus que la production
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * `grant all on all tables in schema public to anon, authenticated` touche
+ * AUSSI les vues. Il a donné, à chaque fois sans qu'on le voie :
+ *
+ *   · huit privilèges sur les quatre vues au lieu de cinq ;
+ *   · tous les droits sur `winners`, où ces deux rôles n'en ont AUCUN ;
+ *   · REFERENCES, TRIGGER et TRUNCATE partout.
+ *
+ * Avec la vue `public_winners_safe` accordée à `anon`, cette combinaison
+ * rendait les tickets modifiables par un visiteur.
+ */
+describe("baseline — pas de grant global sur les relations", () => {
+  const baseline = readFileSync(
+    join(ICI, migrations.find((n) => n.includes("baseline_fideliz"))!),
+    "utf8"
+  );
+  const code = baseline
+    .split("\n")
+    .filter((l) => !l.trimStart().startsWith("--") && !l.trimStart().startsWith("*"))
+    .join("\n");
+
+  it("aucun grant global de tables à anon ou authenticated", () => {
+    const global = /grant\s+(all|[a-z, ]+)\s+on\s+all\s+tables\s+in\s+schema\s+public\s+to\s+([^;]*)/gi;
+    for (const m of code.matchAll(global)) {
+      expect(m[2]).not.toMatch(/\banon\b/i);
+      expect(m[2]).not.toMatch(/\bauthenticated\b/i);
+    }
+  });
+
+  it("winners n'est accordée ni à anon ni à authenticated", () => {
+    for (const m of code.matchAll(/grant\s+[a-z, ]+\s+on\s+([^;]*?)\s+to\s+([^;]*);/gi)) {
+      const cibles = m[1], roles = m[2];
+      if (/\banon\b|\bauthenticated\b/i.test(roles)) {
+        expect(cibles).not.toMatch(/public\.winners\b(?!_)/i);
+      }
+    }
+  });
+
+  it("les quatre vues reçoivent cinq privilèges, pas huit", () => {
+    expect(code).toMatch(
+      /grant delete, insert, maintain, select, update on[\s\S]{0,220}public_winners_safe[\s\S]{0,220}to anon, authenticated/i
+    );
+    expect(code).not.toMatch(/grant\s+all\s+on\s+public\.public_winners_safe/i);
+  });
+
+  it("anon ne lit que games, prizes et restaurants — sans écriture", () => {
+    expect(code).toMatch(/grant select on public\.games, public\.prizes, public\.restaurants to anon;/i);
+  });
+
+  it("authenticated écrit sur ces trois tables mais sans MAINTAIN", () => {
+    expect(code).toMatch(
+      /grant delete, insert, select, update on public\.games, public\.prizes, public\.restaurants to authenticated;/i
+    );
   });
 });
