@@ -67,6 +67,31 @@
 -- soit le runner. `set local` meurt avec la transaction de la migration.
 set local search_path = public, extensions;
 
+-- ──────────────────────────────────────────── privilèges par défaut
+--
+-- C'est le vrai mécanisme, et il explique tout. La production ne porte pas
+-- de grants explicites sur ses tables : elle a des DEFAULT PRIVILEGES posés
+-- par `postgres` sur le schéma `public`, relevés tels quels :
+--
+--   anon          = arwdm     → INSERT, SELECT, UPDATE, DELETE, MAINTAIN
+--   authenticated = arwdm     → les mêmes cinq
+--   service_role  = arwdDxtm  → les huit
+--
+-- Toute relation créée ensuite en hérite — y compris `avis`, que la première
+-- migration crée et qui n'apparaît donc dans aucun grant. C'est pourquoi ces
+-- lignes viennent AVANT les tables : les poser après ne rattraperait rien.
+--
+-- Les restrictions réelles se font ensuite, par retrait ciblé.
+
+alter default privileges in schema public
+  grant insert, select, update, delete, maintain on tables to anon, authenticated;
+alter default privileges in schema public
+  grant all on tables to service_role;
+alter default privileges in schema public
+  grant usage, select, update on sequences to anon, authenticated, service_role;
+alter default privileges in schema public
+  grant execute on functions to anon, authenticated, service_role;
+
 -- ─────────────────────────────────────────────────────────── extensions
 
 create extension if not exists "uuid-ossp"     with schema extensions;
@@ -1120,65 +1145,32 @@ create policy "admin_access 1peuqw_3" on storage.objects as permissive for delet
 -- trop larges réellement exploitables.
 
 grant usage on schema public to anon, authenticated, service_role;
-grant all on all sequences in schema public to anon, authenticated, service_role;
 
 /*
- * ─── LES GRANTS DE RELATIONS, OBJET PAR OBJET ───
+ * ─── LES RETRAITS CIBLÉS ───
  *
- * Surtout pas de `grant all on all tables`. Cette instruction touche AUSSI
- * les vues, et elle a déjà ouvert trois fois plus que la production :
- *
- *   · huit privilèges sur les quatre vues au lieu de cinq pour anon
- *     et authenticated ;
- *   · tous les droits sur `winners`, où anon et authenticated n'en ont
- *     AUCUN en production ;
- *   · REFERENCES, TRIGGER et TRUNCATE partout.
- *
- * Le motif se répète : ce qu'on accorde en bloc s'ouvre, il ne se ferme
- * jamais. On restitue donc la matrice mesurée, table par table.
- *
- * `service_role` reçoit les huit privilèges sur les seize tables et les
- * quatre vues, comme en production.
+ * Les DEFAULT PRIVILEGES ci-dessus ont déjà accordé cinq privilèges à `anon`
+ * et `authenticated` sur chaque relation créée. La production restreint
+ * ensuite quatre d'entre elles. On reproduit ces retraits, et rien d'autre.
  */
 
--- service_role : tout, sur toutes les relations.
-grant all on all tables in schema public to service_role;
+-- `winners` : la table des tickets. Ni le visiteur ni le compte connecté n'y
+-- touchent — tout passe par les RPC SECURITY DEFINER et par la vue
+-- `public_winners_safe`. Aucun droit, mesuré en production.
+revoke all on public.winners from anon, authenticated;
 
--- anon et authenticated : cinq privilèges sur douze tables.
-grant delete, insert, maintain, select, update on
-  public.activity_logs_legacy, public.auth_ghosts_backup_20260606,
-  public.auth_orphan_backup_20260606, public.avis, public.contacts,
-  public.contacts_backup_20260606, public.crm_notes, public.profiles,
-  public.sales_restaurants, public.system_logs, public.winners_archive,
-  public.winners_backup_20260606
-to anon, authenticated;
+-- `anon` ne fait que LIRE le catalogue du jeu.
+revoke insert, update, delete, maintain on public.games, public.prizes, public.restaurants from anon;
 
--- games, prizes, restaurants : anon ne fait que lire ; authenticated écrit,
--- mais sans MAINTAIN. Cette nuance est mesurée, pas déduite.
-grant select on public.games, public.prizes, public.restaurants to anon;
-grant delete, insert, select, update on public.games, public.prizes, public.restaurants to authenticated;
+-- `authenticated` y écrit, mais n'a pas MAINTAIN. Nuance mesurée, pas déduite.
+revoke maintain on public.games, public.prizes, public.restaurants from authenticated;
 
 /*
- * `winners` n'est PAS accordée à anon ni à authenticated.
- *
- * C'est la table des tickets. Ni le visiteur ni le compte connecté n'y
- * touchent directement : tout passe par les RPC `SECURITY DEFINER` et par la
- * vue `public_winners_safe`. Un `grant all` global le leur donnait — et
- * rendait du même coup cette vue réellement dangereuse.
+ * Les quatre vues gardent les cinq privilèges hérités — c'est l'état de la
+ * production. Les droits d'écriture qu'ils donnent à `anon` sont une DETTE de
+ * sécurité, pas une cible : leur retrait est une migration ultérieure, à
+ * part, et les quatre vues ne sont utilisées que par du code mort.
  */
-
-/*
- * Les vues : cinq privilèges pour anon et authenticated, huit pour
- * service_role. Exactement ce que porte la production.
- *
- * Ces droits d'écriture accordés à `anon` sur des vues sont une DETTE de
- * sécurité, pas une cible. La baseline les reproduit parce qu'elle décrit
- * l'histoire ; leur retrait est une migration ultérieure, à part.
- */
-grant delete, insert, maintain, select, update on
-  public.public_restaurants, public.public_winners_safe,
-  public.v_my_access_status, public.view_integrity_check
-to anon, authenticated;
 
 -- Réservées à service_role — le serveur seul les appelle.
 revoke execute on function public.play_game(uuid, text, text, text, boolean) from public, anon, authenticated;
