@@ -265,6 +265,7 @@ create policy crm_notes_commercial_rattache on public.crm_notes
     )
   );
 
+/*
  * ─────────────────────────────────────────────────────────────────────
  *  RETOUR ARRIÈRE — à coller tel quel, aucune donnée concernée
  * ─────────────────────────────────────────────────────────────────────
