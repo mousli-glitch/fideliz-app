@@ -316,3 +316,74 @@ describe("baseline — pas de grant global sur les relations", () => {
     );
   });
 });
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ *  RETIRER AVANT D'ACCORDER
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * `ALTER DEFAULT PRIVILEGES ... GRANT` n'enlève rien : il s'AJOUTE à ce qui
+ * préexiste. La baseline accordait cinq droits à `anon` et `authenticated` en
+ * croyant les définir, pendant qu'une entrée préexistante en laissait huit.
+ *
+ * Mesuré sur une reconstruction réelle : 114 privilèges de plus qu'en
+ * production, dont TRUNCATE — que la RLS ne filtre pas, puisqu'elle ne
+ * s'applique qu'aux lignes lues, insérées, modifiées ou supprimées par DELETE.
+ *
+ * Ces tests lisent la baseline et vérifient que le retrait précède l'accord.
+ * Un `GRANT` seul repasserait au vert sur un environnement déjà propre et
+ * échouerait sur un environnement neuf : c'est l'ORDRE qui est la garantie.
+ */
+describe("baseline — privilèges par défaut des rôles applicatifs", () => {
+  const baseline = readFileSync(
+    join(ICI, "00000000000000_baseline_fideliz.sql"), "utf8");
+
+  /** Position de la première occurrence, -1 si absente. */
+  const pos = (motif: RegExp) => baseline.search(motif);
+
+  const RETRAIT_TABLES = /alter default privileges in schema public\s+revoke all on tables from anon, authenticated;/i;
+  const ACCORD_TABLES  = /alter default privileges in schema public\s+grant insert, select, update, delete, maintain on tables to anon, authenticated;/i;
+
+  it("le retrait sur les tables existe", () => {
+    expect(baseline).toMatch(RETRAIT_TABLES);
+  });
+
+  it("le retrait PRÉCÈDE l'accord — sans quoi il ne sert à rien", () => {
+    const r = pos(RETRAIT_TABLES);
+    const g = pos(ACCORD_TABLES);
+
+    expect(r).toBeGreaterThan(-1);
+    expect(g).toBeGreaterThan(-1);
+    expect(r, "le revoke doit venir AVANT le grant").toBeLessThan(g);
+  });
+
+  it("l'accord porte exactement les cinq droits historiques, aux deux rôles", () => {
+    expect(baseline).toMatch(ACCORD_TABLES);
+    // Et surtout : jamais `all` à ces deux rôles.
+    expect(baseline).not.toMatch(
+      /alter default privileges in schema public\s+grant all on tables to [^;]*\banon\b/i);
+    expect(baseline).not.toMatch(
+      /alter default privileges in schema public\s+grant all on tables to [^;]*\bauthenticated\b/i);
+  });
+
+  it("les séquences sont aussi normalisées avant accord", () => {
+    const r = pos(/alter default privileges in schema public\s+revoke all on sequences from anon, authenticated, service_role;/i);
+    const g = pos(/alter default privileges in schema public\s+grant usage, select, update on sequences to anon, authenticated, service_role;/i);
+
+    expect(r).toBeGreaterThan(-1);
+    expect(r).toBeLessThan(g);
+  });
+
+  /*
+   * Les fonctions ne sont volontairement PAS normalisées ici : l'EXECUTE par
+   * défaut à PUBLIC est GLOBAL, et un retrait limité à un schéma ne peut pas
+   * l'annuler. C'est le durcissement, en couche séparée, qui emploie la forme
+   * globale. Ce test fige la raison, pour que personne n'ajoute un retrait
+   * inopérant en croyant combler un oubli.
+   */
+  it("aucun retrait par schéma sur les fonctions : il serait inopérant", () => {
+    expect(baseline).not.toMatch(
+      /alter default privileges in schema public\s+revoke (all|execute) on functions/i);
+    expect(baseline).toMatch(/portée du retrait|global|GLOBAL/);
+  });
+});
