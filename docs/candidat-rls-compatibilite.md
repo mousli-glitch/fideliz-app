@@ -223,3 +223,55 @@ Non faits, et je ne les présente pas autrement :
 - parcours `/super-admin` ;
 - `supabase migration list` et dry-run contre la production ;
 - candidat applicatif exécuté contre la base historique.
+
+---
+
+# Le mécanisme de livraison — un blocage, puis sa réponse
+
+## Le CLI refuse un candidat qui ne contient que les deux migrations
+
+`supabase db push --dry-run` contre la production, depuis le candidat à
+2 fichiers :
+
+```
+LegacyDbPushMissingLocalError
+"Remote migration versions not found in local migrations directory."
+suggestion: supabase migration repair --status reverted 20260724002837 … 20260817235046
+```
+
+Le CLI demande de marquer **révoquées** les huit migrations historiques —
+c'est-à-dire de mentir au registre sur des migrations réellement appliquées.
+La consigne était d'arrêter si le CLI demandait ça. **Arrêté.**
+
+Mon raisonnement précédent était donc incomplet : j'avais conclu que
+l'absence de `supabase/` sur `main` garantissait l'isolation. C'est vrai du
+**contenu** de ce qui pourrait partir, et faux du **fonctionnement** du CLI.
+L'isolation était acquise, la livraison ne l'était pas.
+
+## La réponse : ajouter les huit descriptions, pas les huit effets
+
+Les huit migrations historiques sont **déjà réconciliées** avec le registre
+de production, empreinte par empreinte (`npm run migrations:reconcilier`,
+0 écart). Les ajouter au candidat ne change **rien** à la base : elles y sont
+déjà enregistrées, donc le CLI les saute.
+
+Dry-run après ajout :
+
+```
+Would push these migrations:
+ • 20260818011000_rls_profils_et_restaurants.sql
+ • 20260818012000_identite_root_par_le_role.sql
+```
+
+**Exactement les deux attendues.** Aucune baseline, aucun durcissement, aucun
+gel, aucun `repair`.
+
+## Ce que ça change au diff
+
+Le candidat passe de 11 à 19 fichiers. Les huit ajoutés ne sont **pas** des
+changements : ce sont les descriptions verbatim de ce que la production
+contient déjà. Un `db push` ne les exécute pas.
+
+C'est la seule façon d'employer l'outil officiel sans toucher au registre.
+L'alternative — appliquer le SQL à la main — laisserait le registre muet sur
+deux migrations réellement appliquées, et casserait la réconciliation.
