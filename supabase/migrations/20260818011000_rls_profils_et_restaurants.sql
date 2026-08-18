@@ -288,7 +288,16 @@ create policy crm_notes_commercial_rattache on public.crm_notes
  * drop policy crm_notes_root on public.crm_notes;
  * drop policy crm_notes_commercial_rattache on public.crm_notes;
  * create policy sales_manage_notes on public.crm_notes
- *   as permissive for all to public using ((is_sales() OR is_root()));
+ *   as permissive for all to public
+ *   using ((is_sales() OR is_root())) with check ((is_sales() OR is_root()));
+ *
+ * ⚠ Le `with check` explicite n'est pas une coquetterie. La policy d'origine
+ *   en porte un, et sans lui le rollback ramène un état FONCTIONNELLEMENT
+ *   identique — un `for all` sans `with check` réutilise le `using` — mais
+ *   TEXTUELLEMENT différent. L'empreinte des policies ne retombait alors pas
+ *   sur celle de la production. Trouvé en JOUANT le rollback le 18/08, pas en
+ *   le relisant : dix tables sur onze concordaient, et la onzième suffisait à
+ *   ruiner la preuve.
  * create or replace function public."current_role"()
  *   returns text language sql stable set search_path to 'public'
  *   as $r$ select coalesce((select role from public.profiles where id = auth.uid()), 'anon'); $r$;
