@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
+import { autoriserRestaurant } from "@/lib/securite/garde-page-restaurant"
 import { Users, Gamepad2, Trophy, TrendingUp, Settings, DollarSign, ArrowUpRight, Zap, Check } from "lucide-react"
 import Link from "next/link"
 import ParticipationsChart from "@/components/admin/participations-chart"
@@ -10,18 +11,34 @@ export const revalidate = 0
 export default async function AdminDashboardPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
 
+  /*
+   * AUTORISATION AVANT TOUTE LECTURE. La clé de service qui suit contourne la
+   * RLS : sans cette ligne, n'importe quel compte connecté ouvrirait le
+   * tableau de bord de n'importe quel restaurant en devinant son slug — et
+   * les slugs sont imprimés sur les QR codes.
+   *
+   * On repart de l'identifiant RENDU par la garde, jamais du slug de l'URL.
+   */
+  const acces = await autoriserRestaurant(slug, "dashboard.consultation")
+  if (!acces.autorise) {
+    return (
+      <div className="p-8 text-center">
+        <p className="font-bold text-slate-500">Ce restaurant n&apos;est pas accessible avec ce compte.</p>
+      </div>
+    )
+  }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // 1. RÉCUPÉRATION UNIQUE DU RESTO PAR SLUG
   const { data: restaurant } = await (supabase.from("restaurants") as any)
      .select("id, name, avg_basket, subscription_end")
-     .eq("slug", slug)
+     .eq("id", acces.restaurantId)
      .single()
-  
-  if (!restaurant) return <div className="p-8 text-center font-bold text-slate-500">Restaurant introuvable ({slug})</div>
+
+  if (!restaurant) return <div className="p-8 text-center font-bold text-slate-500">Restaurant introuvable</div>
 
   // 2. RÉCUPÉRATION DES JEUX : On vérifie qu'ils appartiennent bien à CE restaurant
   const { data: games } = await (supabase.from("games") as any)

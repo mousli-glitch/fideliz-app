@@ -1,5 +1,6 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { notFound, redirect } from "next/navigation"
+import { autoriserRestaurant } from "@/lib/securite/garde-page-restaurant"
 import { headers } from "next/headers"
 import CsvExportButton from "@/components/admin/csv-export-button"
 import { CustomersTable } from "@/components/admin/customers-table"
@@ -39,6 +40,22 @@ export default async function CustomersPage({
   searchParams?: Promise<{ page?: string; q?: string }>
 }) {
   const { slug } = await params // ✅ IMPORTANT
+
+  /*
+   * AUTORISATION AVANT TOUTE LECTURE — la clé de service contourne la RLS.
+   * On repart de l'identifiant rendu par la garde, jamais du slug de l'URL :
+   * une page qui résout elle-même le slug peut oublier de le vérifier, une
+   * page qui reçoit un identifiant déjà autorisé ne le peut pas.
+   */
+  const acces = await autoriserRestaurant(slug, "clients.consultation")
+  if (!acces.autorise) {
+    return (
+      <div className="p-8 text-center">
+        <p className="font-bold text-slate-500">Ce restaurant n&apos;est pas accessible avec ce compte.</p>
+      </div>
+    )
+  }
+
   const sp = await searchParams // ✅ IMPORTANT (sinon page/q restent à 1 et vide)
 
   const slugRaw = String(slug ?? "")
@@ -83,7 +100,7 @@ export default async function CustomersPage({
 
   // 1) Restaurant (id ou slug)
   let query = supabase.from("restaurants").select("id, name")
-  query = isUUID(cleanSlug) ? query.eq("id", cleanSlug) : query.eq("slug", cleanSlug)
+  query = query.eq("id", acces.restaurantId)
 
   const { data: rawRestaurant, error: restoError } = await query.maybeSingle()
 
