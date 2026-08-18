@@ -29,10 +29,16 @@ const UUID_ROOT = "04eb7091-6876-41e0-84c6-5891658a5768";
    réécrire la rendrait fausse. C'est la migration corrective qui corrige,
    et son fichier cite l'ancien état dans son rollback — donc les deux
    sont exemptés, nommément. */
+/* La baseline décrit l'histoire telle qu'elle fut, identifiant compris : la
+   réécrire la rendrait fausse. Elle est donc exemptée, nommément.
+
+   La migration corrective ne l'est PLUS. Son retour arrière vivait chez elle,
+   en commentaire, et y ramenait l'identifiant. Il est parti dans
+   `docs/runbook-rls.md` — un fichier de migration porte du SQL, pas une
+   procédure. Un fichier exempté sans nécessité est un fichier qui n'est plus
+   contrôlé. */
 const EXEMPTS = new Set([
   "00000000000000_baseline_fideliz.sql",
-  "20260818011000_rls_profils_et_restaurants.sql",
-  "20260818012000_identite_root_par_le_role.sql",
 ]);
 
 function fichiers(dossier: string, ext: string[]): string[] {
@@ -87,9 +93,9 @@ describe("aucune autorisation attachée à une personne", () => {
     ).toEqual([]);
   });
 
-  it("la migration corrective retire bien les deux dernières policies", () => {
+  it("la migration atomique retire bien les deux dernières policies", () => {
     const sql = readFileSync(
-      join(RACINE, "supabase", "migrations", "20260818012000_identite_root_par_le_role.sql"),
+      join(RACINE, "supabase", "migrations", "20260818011000_rls_isolation_inter_tenant.sql"),
       "utf8",
     );
     const propre = sansCommentaires(sql);
@@ -104,7 +110,7 @@ describe("aucune autorisation attachée à une personne", () => {
   it("handle_deleted_commercial cherche le root au lieu de le nommer", () => {
     const sql = sansCommentaires(
       readFileSync(
-        join(RACINE, "supabase", "migrations", "20260818012000_identite_root_par_le_role.sql"),
+        join(RACINE, "supabase", "migrations", "20260818011000_rls_isolation_inter_tenant.sql"),
         "utf8",
       ),
     );

@@ -95,22 +95,115 @@ opérations de catalogue, pas de données.
 perd l'administration ; une erreur `54001` apparaît ; une route QR casse ;
 les 500 augmentent.
 
-### Rollback — dans cet ordre
+### Sorties — et une erreur que j'avais écrite
 
-1. **Rollback applicatif d'abord**, s'il suffit. `vercel rollback` vers le
-   déploiement précédent. **Il conserve la RLS corrigée** — c'est mesuré :
-   l'ancienne application fonctionne sur la base corrigée. Aucune
-   vulnérabilité n'est rouverte.
-2. **Correction en avant** ensuite. Les cinq pannes probables et leur
-   diagnostic SQL sont dans `docs/rollback-rls-joue.md`. Chacune se répare par
-   une policy ou une donnée, plus vite qu'un cycle complet.
-3. **Rollback SQL en dernier recours.** Il est exact — prouvé dans les deux
-   sens — mais il **restaure les vulnérabilités** : tous les profils lisibles,
-   création de restaurants ouverte, `crm_notes` transversal.
+**J'avais mis « rollback applicatif d'abord ». C'est faux ici, et il faut le
+dire clairement.**
 
-**Durée maximale acceptable dans l'état historique : 2 heures.** Au-delà, la
-fuite inter-tenant redevient le risque dominant, devant l'incident qui a
-motivé le retour.
+Ce hotfix est **purement SQL** : aucune application n'est déployée avec lui.
+Revenir à un déploiement Vercel antérieur ramène donc **la même
+application**, et ne touche **aucune policy**. Ce n'est pas une sortie — c'est
+une manœuvre sans effet sur le problème.
+
+Le rollback Vercel ne redevient pertinent que le jour où un changement
+applicatif accompagne réellement une migration. Ce n'est pas ce jour-là.
+
+**Les vraies sorties, dans l'ordre :**
+
+1. **Correction en avant, ciblée.** Les six cas préparés ci-dessous. Chacun se
+   répare par une policy ou une donnée, en une minute, sans rien défaire.
+2. **Rollback SQL exact**, si la correction en avant est impossible ET que la
+   continuité est gravement touchée. Il est prouvé dans les deux sens.
+3. **Surveillance renforcée** pendant tout l'état historique : il est
+   vulnérable, tous les profils y sont lisibles par tout compte connecté.
+4. **Réapplication au plus vite**, une fois la cause comprise.
+
+**Durée maximale dans l'état historique : 2 heures.** Au-delà, la fuite
+inter-tenant redevient le risque dominant, devant l'incident qui a motivé le
+retour.
+
+### Les six corrections en avant, exécutables
+
+Toutes sur `public`, toutes réversibles, aucune ne touche aux données.
+
+**1. Root légitime refusé** — il ne voit plus restaurants, jeux ou logs.
+
+```sql
+select id, role, is_active from public.profiles where role = 'root';
+-- Cause quasi certaine : role <> 'root'. Corriger le rôle, jamais la policy.
+update public.profiles set role = 'root' where id = '<uuid-du-root>';
+```
+
+**2. Restaurateur ne lisant plus son propre profil**
+
+```sql
+select policyname, qual from pg_policies
+ where schemaname='public' and tablename='profiles' and cmd='SELECT';
+-- `profiles_self` doit exister. Si elle manque :
+create policy profiles_self on public.profiles
+  as permissive for select to public using (id = auth.uid());
+```
+
+**3. `current_role()` en récursion — `54001`**
+
+```sql
+create or replace function public."current_role"()
+returns text language sql stable security definer set search_path = ''
+as $r$ select coalesce((select p.role from public.profiles p where p.id = auth.uid()), 'anon'); $r$;
+grant execute on function public."current_role"() to anon, authenticated, service_role;
+```
+
+⚠ `anon` doit **garder** `EXECUTE` : deux policies visant `{public}` passent
+par `is_root()` / `is_sales()`, qui l'appellent en cascade.
+
+**4. Commercial légitime refusé**
+
+```sql
+select count(*) from public.sales_restaurants where sales_user_id = '<uuid>';
+-- Zéro ligne = donnée manquante, pas règle trop stricte.
+-- Employer supabase/operations/rattacher-commercial.sql. Ne JAMAIS ajouter
+-- une policy « voit tout si aucun rattachement » : ce serait rouvrir la fuite.
+```
+
+**5. Policy `crm_notes` incorrecte**
+
+```sql
+drop policy if exists crm_notes_commercial_rattache on public.crm_notes;
+create policy crm_notes_commercial_rattache on public.crm_notes
+  as permissive for all to authenticated
+  using (public."current_role"() = 'sales' and exists (
+    select 1 from public.sales_restaurants sr
+     where sr.restaurant_id = crm_notes.restaurant_id and sr.sales_user_id = auth.uid()))
+  with check (public."current_role"() = 'sales' and exists (
+    select 1 from public.sales_restaurants sr
+     where sr.restaurant_id = crm_notes.restaurant_id and sr.sales_user_id = auth.uid()));
+```
+
+**6. Création root de restaurant refusée**
+
+```sql
+select policyname, with_check from pg_policies
+ where schemaname='public' and tablename='restaurants' and cmd='INSERT';
+-- « Enable insert for root users only » doit subsister. Si elle manque :
+create policy "Enable insert for root users only" on public.restaurants
+  as permissive for insert to authenticated
+  with check (exists (select 1 from profiles
+    where profiles.id = auth.uid() and profiles.role = 'root'::text));
+```
+
+### Le rollback SQL complet
+
+Il vit ici, et plus dans le fichier de migration : un fichier de migration
+porte du SQL, pas une procédure — et un rollback en commentaire géant y
+déséquilibrait le découpage des blocs, au point de faire passer du commentaire
+pour du code aux yeux des contrôles.
+
+⚠ **Il restaure volontairement les failles.** L'ordre inverse celui de
+l'aller : les policies AVANT `current_role()`.
+
+Le SQL exact est celui joué le 18/08 et consigné dans
+`docs/rollback-rls-joue.md` — empreinte de sortie attendue
+`5b6dd5bc9df9ce6068c148a3f5288c05`, celle de la production.
 
 ## Le rattachement commercial est SÉPARÉ
 
