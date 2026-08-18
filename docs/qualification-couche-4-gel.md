@@ -306,79 +306,139 @@ erreur, avec `actif = false`.
 
 **État final : installé, inactif.**
 
-## 7. Matrice de concurrence à deux sessions — contrainte technique bloquante
+## 7. Matrice de concurrence à deux sessions — résolue, prouvée en direct
 
-**Non réalisable avec les outils disponibles dans cet environnement.**
-Constaté, pas contourné par une preuve dégradée :
+**Mise à jour du 19/08/2026 : le blocage d'outillage ci-dessous (`dblink`,
+`pg_background`, pas de `psql`/Docker local) reste vrai, mais n'empêche
+plus la mesure.** Deux sessions Postgres réellement indépendantes et
+concurrentes ont été obtenues sans mot de passe et sans nouveau logiciel
+installé dans le dépôt, via **deux appels HTTP PostgREST authentifiés
+`anon`, lancés en parallèle depuis `curl`** — chaque requête PostgREST
+ouvre sa propre connexion/transaction, indépendante des autres. Testé et
+confirmé au préalable que ce sont bien deux sessions distinctes (deux
+`pg_backend_pid()` différents) et non deux appels sérialisés sur une même
+session.
 
-- `dblink` : installable, mais `dblink_connect` refuse toute connexion
-  émise par un rôle non superutilisateur — `select rolsuper from pg_roles
-  where rolname = current_user` retourne `false` pour le rôle `postgres` de
-  cette branche (les fournisseurs Postgres managés ne donnent
-  quasi-jamais le vrai superutilisateur). Erreur `2F003` obtenue même avec
-  un mot de passe explicite fourni de deux façons différentes — donc la
-  restriction porte sur le rôle appelant, pas sur les identifiants
-  transmis.
-- `pg_background` : absent de `pg_available_extensions` sur cette instance.
-- Aucun client `psql` ni Docker/Postgres local sur cette machine (constaté
-  en tout début de séance) — donc pas de deuxième connexion réelle possible
-  depuis l'extérieur non plus, sans installer un nouveau logiciel, ce qui
-  sort du périmètre synthétique/réversible d'une modification de base.
+**Ce qui a été explicitement écarté** :
+- `execute_sql` (l'outil utilisé pour tout le reste de ce chantier) :
+  testé, et deux appels lancés en parallèle se sont révélés **sérialisés**
+  (le second n'a démarré qu'après la fin complète du premier — aucun
+  chevauchement mesuré). Écarté pour la matrice, faute de concurrence
+  réelle.
+- `dblink`/`pg_background`/`psql` local : blocages déjà documentés plus
+  haut dans ce fichier, inchangés.
+- Aucun mot de passe Postgres, aucune chaîne de connexion : seules l'URL
+  REST du projet et la clé `anon` (publique par conception) ont servi,
+  obtenues via les outils `get_project_url`/`get_publishable_keys` déjà
+  autorisés.
 
-Une tentative complète a été menée (rôle jetable à mot de passe aléatoire
-généré et jamais affiché, table de transit revue et supprimée, extension
-installée puis retirée) avant de constater le blocage — voir l'historique
-des appels pour la trace complète. Tout nettoyé, branche revenue à l'état
-propre (0 rôle résiduel, 0 table de transit, 0 donnée de test).
+**Garde d'identité** avant tout appel : fonction à nom aléatoire créée sur
+`fusion-tests-2` uniquement, retournant un nonce synthétique généré pour
+l'occasion ; appelée via l'URL REST, nonce confirmé identique avant de
+poursuivre. Fonctions de test : noms aléatoires, `SECURITY DEFINER`,
+`search_path` qualifié, révoquées de `PUBLIC` par défaut puis accordées
+temporairement à `anon` sur cette branche seulement, toutes supprimées en
+fin de cycle (confirmé : 0 fonction `temoin_*` restante).
 
-### Analyse théorique du scénario critique, faute de pouvoir le mesurer
+**Isolation REPEATABLE READ** : `SET TRANSACTION ISOLATION LEVEL` échoue
+si tenté depuis l'intérieur d'une fonction RPC (PostgREST a déjà exécuté
+sa propre préparation de requête avant d'appeler la fonction — confirmé
+par l'erreur `25001`). Contournement validé : `alter role anon set
+default_transaction_isolation = 'repeatable read'` — le `BEGIN` implicite
+de PostgREST pour ce rôle démarre alors directement en REPEATABLE READ,
+confirmé par `current_setting('transaction_isolation')` renvoyé par la
+fonction elle-même. Réinitialisé (`alter role anon reset
+default_transaction_isolation`) une fois la matrice terminée.
 
-Le point que Samy identifie comme critique : une transaction REPEATABLE
-READ dont l'instantané est fixé AVANT l'activation peut-elle encore écrire
-APRÈS le point de gel ?
+**Barrière déterministe, pas une preuve par sommeil seul** : la session A
+fixe son instantané au tout premier `select`, attend un délai borné
+(`pg_sleep`, 2 s — un délai qui BORNE l'attente, ne PROUVE rien), puis
+tente son écriture. La preuve d'ordre vient, après coup, de faits
+observables et non du minutage : `actif_au_debut = false` rapporté par A
+(son instantané voyait bien l'état pré-activation), le `xid` de la
+transaction B strictement postérieur à celui de A, et l'horodatage
+`clock_timestamp()` de l'activation de B strictement compris entre la
+lecture de A et sa tentative d'écriture.
 
-Le mécanisme : `refuser_pendant_maintenance()` appelle
-`public.maintenance_actif()`, une fonction `STABLE` qui lit
-`public.maintenance` par un `SELECT` ordinaire. Sous REPEATABLE READ, **la
-documentation PostgreSQL est explicite** : l'instantané est fixé à la
-première requête de la transaction et reste valable pour toute la
-transaction, y compris pour les fonctions `STABLE` appelées ensuite. Une
-transaction déjà ouverte et ayant déjà fixé son instantané avant qu'une
-AUTRE transaction ne valide `actif = true` **ne verrait pas** cette
-validation — `maintenance_actif()` continuerait de répondre `false` pour
-cette transaction précise, et son écriture sur une table gelée
-**passerait**.
+**Un faux départ, détecté et écarté plutôt qu'ignoré** : un premier essai
+(avant l'ajout des diagnostics `pid_backend`/`xid_transaction`/
+`niveau_isolation` à la fonction) a rendu un résultat incohérent
+(`actif_au_debut = true` alors que l'horodatage de lecture précédait le
+commit de B) — signe d'un état de connexion non fiable à ce moment précis.
+Rejoué avec diagnostics complets : cohérent sur toutes les dimensions
+(PID distincts, isolation confirmée, ordre des xid, chronologie). Seul ce
+second résultat, entièrement vérifié, est retenu.
 
-Ce n'est pas une supposition : c'est directement ce que la norme SQL
-REPEATABLE READ (implémentée par PostgreSQL via MVCC) garantit. Le
-mécanisme actuel n'a AUCUN dispositif — verrou, `LOCK TABLE`, verrou
-consultatif — qui forcerait une transaction déjà ouverte à voir
-l'activation avant de commiter. Rien dans le fichier ne s'y oppose.
+### Résultat du candidat AVANT correction — NO-GO confirmé
 
-**Verdict : `NO-GO concurrence`.** Non pas parce qu'un test l'a démontré —
-aucun test n'a pu tourner — mais parce que rien ne réfute un risque que la
-sémantique documentée de PostgreSQL rend probable, et la consigne est
-explicite : ne pas requalifier un scénario non écarté comme acceptable.
+Scénario : A fixe son instantané REPEATABLE READ (`actif_au_debut =
+false`), attend, B active le gel et committe pendant l'attente de A
+(`xid` B = xid A + 1, horodatage d'activation strictement après la
+lecture de A), A tente ensuite un `insert` sur `restaurants` (table
+gelée).
 
-### Piste de correction, non implémentée
+**Résultat mesuré : `ecriture_ok = true`, aucune erreur.** L'écriture a
+réussi alors que le gel était actif au moment de la tentative — le
+mécanisme d'origine (`if maintenance_actif() then raise exception`, une
+lecture MVCC ordinaire) ne voit pas une activation postérieure à
+l'instantané de la transaction, exactement comme l'analyse théorique du
+rapport précédent l'anticipait. **`NO-GO` confirmé par la mesure, pas
+seulement déduit.** Ligne de preuve nettoyée après constat.
 
-Un mécanisme indépendant du snapshot MVCC serait nécessaire — par exemple :
-un verrou consultatif (`pg_advisory_lock`) que l'activation acquerrait en
-mode exclusif après avoir DRAINÉ les transactions en vol
-(`pg_stat_activity`, déjà prévu dans le runbook de bascule du fichier
-lui-même, étape 2 : « laisser finir ce qui est en vol »), combiné à un
-`LOCK TABLE ... IN SHARE MODE` pris par le trigger AVANT sa lecture de
-`maintenance` — un verrou de table, contrairement à une lecture MVCC,
-oblige une transaction à ATTENDRE si une autre le détient en mode
-incompatible, y compris si son instantané est déjà fixé. Cette piste n'a
-pas été implémentée ni vérifiée : elle nécessiterait elle-même d'être
-prouvée par la matrice de concurrence, qui reste bloquée par la même
-contrainte d'outillage.
+### Correction appliquée et prouvée
 
-**Ce qui lèverait le blocage** : un accès à deux connexions Postgres
-réellement indépendantes — Docker + Postgres local, ou un client `psql`
-installé sur cette machine, capables de maintenir chacun une transaction
-ouverte pendant que l'autre agit. Aucune des deux n'est présente
-actuellement ; en installer une sort du périmètre d'une modification de
-base de données synthétique et réversible, et n'a pas été fait
-unilatéralement.
+`refuser_pendant_maintenance()` acquiert désormais `perform 1 from
+public.maintenance where id for share;` **avant** de lire
+`maintenance_actif()`. Sous REPEATABLE READ, PostgreSQL refuse de
+verrouiller silencieusement une version périmée d'une ligne modifiée par
+une transaction validée après l'instantané — il lève `40001`
+(`serialization_failure`) au lieu de rendre la main sur une donnée
+obsolète. `for share`, pas `for update` : un `update` ordinaire sur
+`maintenance` (l'activation) prend un verrou `NO KEY UPDATE`, qui entre en
+conflit avec `for share` (l'activation attend donc les écritures déjà en
+vol, et bloque les nouvelles jusqu'à son propre commit) — mais `for share`
+n'entre pas en conflit avec un autre `for share` : des écritures
+concurrentes sur des lignes différentes ne se bloquent pas entre elles
+pour autant.
+
+**Rejoué avec le même harnais, même scénario exact, après correction** :
+`ecriture_ok = false`, `code_erreur = "40001"`, message `"could not
+serialize access due to concurrent update"`. Isolation confirmée
+`repeatable read`, `xid` B postérieur à `xid` A, chronologie identique au
+run précédent. Aucune ligne laissée (l'échec en `40001` n'insère rien).
+
+### Matrice rejouée après correction
+
+| Scénario | Mécanisme attendu | Résultat mesuré |
+|---|---|---|
+| Instantané fixé avant activation, écriture après | `40001` (fermeture MVCC) | ✅ `40001`, `"could not serialize access due to concurrent update"` |
+| Transaction fraîche après activation — `UPDATE` | `P0100` | ✅ `P0100` |
+| Transaction fraîche après activation — `DELETE` | `P0100` | ✅ `P0100` |
+| Transaction fraîche après activation — `crm_notes` | `P0100` | ✅ `P0100` |
+| Écriture déjà en vol au moment de l'activation | activation **attend**, ne casse rien | ✅ activation retournée seulement après le commit de l'écriture en vol (délai mesuré ≈ durée résiduelle de l'écriture, PID distincts) |
+| Lectures pendant le gel actif (`en_maintenance()` via `anon`) | reste ouvert | ✅ répond `actif:true` avec le message, sans erreur |
+| Écriture normale après levée | réussit | ✅ (déjà prouvé §0bis, `service_role` compris) |
+| Transaction commencée avant activation mais sans requête encore exécutée | se comporte comme une transaction fraîche (l'instantané REPEATABLE READ ne se fixe qu'à la première requête réelle — propriété MVCC de PostgreSQL, pas testée séparément : le scénario « transaction fraîche après activation » en est la démonstration directe, la première requête de cette transaction-là étant précisément l'écriture elle-même) | raisonnement direct, non re-testé séparément |
+
+`service_role` et le RPC métier ne sont pas re-testés séparément dans ce
+cycle : la garde s'applique au niveau du trigger, sur la table, quel que
+soit l'appelant — déjà prouvé structurellement (même trigger, même
+fonction sur les 10 tables) et pour `service_role` spécifiquement en
+§0bis. `avis`/`sales_restaurants`/`winners_archive` : même trigger, même
+fonction, prouvé structurellement (§3) — non rejoués individuellement en
+concurrence réelle, coût jugé disproportionné par rapport à la preuve déjà
+apportée sur le mécanisme lui-même (`restaurants`, `crm_notes`).
+
+**Verdict : les scénarios mesurés passent tous. Le mécanisme corrigé
+résiste à la fenêtre MVCC qui faisait échouer le candidat d'origine.**
+
+### Nettoyage de fin de cycle
+
+Toutes les fonctions `temoin_*` supprimées (confirmé : 0 restante),
+`alter role anon reset default_transaction_isolation` exécuté et vérifié
+(`rolconfig` ne porte plus que `statement_timeout=3s`, la valeur de
+plateforme), répertoire local des identifiants REST supprimé
+(`rm -rf`, confirmé absent), aucune connexion persistante à fermer
+(chaque appel `curl` est une requête HTTP unique, refermée par PostgREST
+lui-même). État final de `fusion-tests-2` : gel installé, `actif =
+false`, aucune donnée de test résiduelle.

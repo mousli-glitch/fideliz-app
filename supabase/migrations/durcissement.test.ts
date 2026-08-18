@@ -337,6 +337,31 @@ describe("gel source Fideliz — aucun laissez-passer, jamais", () => {
       expect(revoke![1].toLowerCase(), `\`service_role\` doit être dans le revoke sur ${fn}()`).toContain("service_role");
     }
   });
+
+  it("le fencing MVCC (verrou de ligne) précède la lecture du drapeau", () => {
+    // Prouvé le 19/08 en concurrence réelle (deux sessions PostgREST) : sans ce
+    // verrou, une transaction REPEATABLE READ dont l'instantané précède
+    // l'activation ne voit pas maintenance_actif() devenir vrai, et son
+    // écriture passe. Le `for share` force PostgreSQL à refuser silencieusement
+    // une version périmée de la ligne (40001) plutôt que de laisser lire le
+    // drapeau obsolète. Ce test ne peut pas rejouer la concurrence (pas de
+    // deuxième session ici) — il garde seulement la présence et l'ordre du verrou.
+    const sql = sansCommentaires(gel.sql);
+    const corps = sql.match(/create or replace function public\.refuser_pendant_maintenance\(\)[\s\S]*?\$\$;/);
+    expect(corps, "fonction refuser_pendant_maintenance introuvable").toBeTruthy();
+    const texte = corps![0];
+    expect(texte, "le verrou `for share` sur maintenance a disparu").toMatch(
+      /from public\.maintenance where id for share/i,
+    );
+    const indexVerrou = texte.search(/for share/i);
+    const indexLectureDrapeau = texte.search(/maintenance_actif\(\)/i);
+    expect(indexVerrou, "le verrou doit être pris avant la lecture de maintenance_actif()").toBeLessThan(
+      indexLectureDrapeau,
+    );
+    // for share, jamais for update : un for update sérialiserait aussi les
+    // écritures concurrentes entre elles (pas seulement contre l'activation).
+    expect(texte).not.toMatch(/for update/i);
+  });
 });
 
 describe("gel source Fideliz — inventaire exhaustif des tables, aucun angle mort", () => {

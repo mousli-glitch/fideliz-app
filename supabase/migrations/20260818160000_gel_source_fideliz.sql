@@ -113,6 +113,31 @@ as $$ select coalesce((select actif from public.maintenance where id), false) $$
  * aucune colonne d'empreinte, aucun `current_setting` : la surface de
  * contournement est nulle parce qu'aucun mécanisme de contournement
  * n'existe, pas parce qu'il est bien gardé.
+ *
+ * ─── LE VERROU DE LIGNE, PAS SEULEMENT LA LECTURE DU DRAPEAU ───
+ *
+ * Prouvé le 19/08/2026 sur `fusion-tests-2` (deux sessions PostgREST
+ * réelles) : une transaction déjà ouverte en REPEATABLE READ, dont
+ * l'instantané précède l'activation, ne voit PAS la mise à jour — un
+ * simple `if maintenance_actif() then ...` lit alors un drapeau périmé
+ * et laisse passer l'écriture. `maintenance_actif()` est `stable` : elle
+ * respecte l'instantané de la transaction appelante, comme n'importe
+ * quelle autre lecture.
+ *
+ * Le `for share` ci-dessous n'est pas une lecture ordinaire : sous
+ * REPEATABLE READ, PostgreSQL refuse de verrouiller silencieusement une
+ * version périmée d'une ligne modifiée par une transaction validée après
+ * l'instantané — il lève `40001` (serialization_failure) au lieu de
+ * rendre la main. C'est ce comportement, indépendant de la lecture du
+ * drapeau, qui ferme la fenêtre.
+ *
+ * `for share` et non `for update` : un `update` ordinaire sur
+ * `maintenance` (l'activation/la levée) prend un verrou NO KEY UPDATE,
+ * qui entre en conflit avec `for share` — l'activation attend donc la
+ * fin des écritures déjà en vol, et bloque les nouvelles jusqu'à son
+ * propre commit. Mais `for share` n'entre PAS en conflit avec un autre
+ * `for share` : des écritures concurrentes sur des tables différentes ne
+ * se bloquent pas entre elles pour autant, seulement contre l'activation.
  */
 create or replace function public.refuser_pendant_maintenance()
 returns trigger
@@ -121,6 +146,8 @@ security definer
 set search_path to 'public'
 as $$
 begin
+  perform 1 from public.maintenance where id for share;
+
   if public.maintenance_actif() then
     /*
      * 57014 (query_canceled) est déjà pris. On choisit une classe applicative
