@@ -179,9 +179,13 @@ describe("baseline — les ACL des fonctions sensibles", () => {
   /* La baseline n'accorde plus en bloc pour retirer ensuite : elle accorde
      exactement ce que la production porte. Le contrôle porte donc sur ce qui
      est donné, pas sur ce qui est repris. */
-  it("anon ne reçoit que SELECT sur games, prizes et restaurants", () => {
-    expect(code).toMatch(/grant select on public\.games, public\.prizes, public\.restaurants to anon;/i);
-    expect(code).not.toMatch(/grant[^;]*\b(insert|update|delete)\b[^;]*public\.games[^;]*to[^;]*\banon\b/i);
+  /* Les droits ne viennent plus de grants explicites mais des DEFAULT
+     PRIVILEGES, puis de retraits ciblés. Le contrôle porte donc sur le
+     retrait. */
+  it("anon perd tout sauf SELECT sur games, prizes et restaurants", () => {
+    expect(code).toMatch(
+      /revoke insert, update, delete, maintain on public\.games, public\.prizes, public\.restaurants from anon;/i
+    );
   });
 });
 
@@ -292,20 +296,23 @@ describe("baseline — pas de grant global sur les relations", () => {
     }
   });
 
-  it("les quatre vues reçoivent cinq privilèges, pas huit", () => {
+  it("les cinq privilèges viennent des DEFAULT PRIVILEGES, jamais d'un grant all", () => {
     expect(code).toMatch(
-      /grant delete, insert, maintain, select, update on[\s\S]{0,220}public_winners_safe[\s\S]{0,220}to anon, authenticated/i
+      /alter default privileges in schema public\s+grant insert, select, update, delete, maintain on tables to anon, authenticated;/i
     );
     expect(code).not.toMatch(/grant\s+all\s+on\s+public\.public_winners_safe/i);
   });
 
-  it("anon ne lit que games, prizes et restaurants — sans écriture", () => {
-    expect(code).toMatch(/grant select on public\.games, public\.prizes, public\.restaurants to anon;/i);
+  it("les DEFAULT PRIVILEGES sont posés avant toute création de table", () => {
+    const iDefaut = code.search(/alter default privileges in schema public/i);
+    const iTable = code.search(/create table if not exists public\./i);
+    expect(iDefaut).toBeGreaterThanOrEqual(0);
+    expect(iDefaut).toBeLessThan(iTable);
   });
 
-  it("authenticated écrit sur ces trois tables mais sans MAINTAIN", () => {
+  it("authenticated perd MAINTAIN sur ces trois tables", () => {
     expect(code).toMatch(
-      /grant delete, insert, select, update on public\.games, public\.prizes, public\.restaurants to authenticated;/i
+      /revoke maintain on public\.games, public\.prizes, public\.restaurants from authenticated;/i
     );
   });
 });

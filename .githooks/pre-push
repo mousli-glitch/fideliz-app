@@ -1,0 +1,18 @@
+#!/bin/sh
+# ═══════════════════════════════════════════════════════════════════
+#  GARDE AVANT POUSSÉE — deux commits rouges ont déjà été poussés
+# ═══════════════════════════════════════════════════════════════════
+#
+# Les 18 et 19/08/2026, deux commits sont partis sur la branche avec des
+# tests en échec, faute d'avoir relu la sortie. La relecture manuelle ne
+# suffit pas : elle dépend de l'attention au moment précis où l'on est
+# pressé.
+#
+# Ce garde est versionné dans .githooks/ et activé par :
+#     git config core.hooksPath .githooks
+#
+# Il refuse la poussée au premier échec, avec un code non nul.
+set -e
+echo "── garde avant poussée ──"
+npm run verifier
+echo "── vert : la poussée continue ──"
