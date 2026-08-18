@@ -4,11 +4,14 @@
  * ═══════════════════════════════════════════════════════════════════════════
  *
  *  Retire EXACTEMENT ce que la migration installe : les 10 triggers
- *  `gel_de_bascule`, les 3 fonctions (`refuser_pendant_maintenance`,
- *  `maintenance_actif`, `en_maintenance`), la table `maintenance`. Rien
- *  d'autre — ne touche ni aux couches 1-2-3 (durcissement, RLS, identité
- *  root), ni à une seule ligne de donnée métier sur les tables qui étaient
- *  gelées.
+ *  `gel_de_bascule`, les 2 fonctions (`refuser_pendant_maintenance`,
+ *  `en_maintenance`), la table `maintenance`. Rien d'autre — ne touche ni
+ *  aux couches 1-2-3 (durcissement, RLS, identité root), ni à une seule
+ *  ligne de donnée métier sur les tables qui étaient gelées.
+ *
+ *  `maintenance_actif()` a existé un temps comme 3e fonction, supprimée le
+ *  19/08 (verrou et décision fondus dans une seule requête verrouillante
+ *  au sein de `refuser_pendant_maintenance()`) — plus rien à en retirer ici.
  *
  *  Idempotent : chaque instruction porte `if exists`, rejouable sans
  *  erreur que la migration ait été appliquée ou non, et rejouable
@@ -47,7 +50,6 @@ drop trigger if exists gel_de_bascule on public.sales_restaurants;
 drop trigger if exists gel_de_bascule on public.winners_archive;
 
 drop function if exists public.refuser_pendant_maintenance();
-drop function if exists public.maintenance_actif();
 drop function if exists public.en_maintenance();
 
 drop table if exists public.maintenance;

@@ -8,16 +8,19 @@
  *  `maintenance` qu'à `anon` et `authenticated`. `service_role` gardait,
  *  par les DEFAULT PRIVILEGES, SELECT/INSERT/UPDATE/DELETE directs — un
  *  appel authentifié avec la clé de service pouvait remettre `actif =
- *  false`, ou supprimer l'unique ligne (`maintenance_actif()` retombe alors
- *  sur `coalesce(..., false)`), puis écrire librement sur les tables
- *  gelées. Un contournement réel du gel, par le chemin même que le trigger
- *  est censé fermer.
+ *  false`, ou supprimer l'unique ligne, puis écrire librement sur les
+ *  tables gelées. Un contournement réel du gel, par le chemin même que le
+ *  trigger est censé fermer.
  *
  *  Corrigé : `revoke all ... from public, anon, authenticated, service_role`
- *  sur la table ET sur les deux fonctions internes (`maintenance_actif()`,
- *  `refuser_pendant_maintenance()`). Seule `en_maintenance()` — qui ne
- *  rend qu'un booléen et un message, rien de modifiable — reste exécutable
- *  par les rôles applicatifs.
+ *  sur la table ET sur la fonction interne (`refuser_pendant_maintenance()`).
+ *  Seule `en_maintenance()` — qui ne rend qu'un booléen et un message, rien
+ *  de modifiable — reste exécutable par les rôles applicatifs.
+ *
+ *  `maintenance_actif()` a existé un temps comme fonction séparée, puis a
+ *  été supprimée le 19/08 (signalement : verrou et décision provenaient de
+ *  deux lectures distinctes) — sa logique vit maintenant dans l'unique
+ *  `select ... for share into` de `refuser_pendant_maintenance()`.
  *
  *  Utilise `has_table_privilege()` / `has_function_privilege()` — les
  *  droits EFFECTIFS (PUBLIC et héritage de rôle résolus nativement), pas
@@ -32,11 +35,10 @@
  *
  *    EXECUTE sur les fonctions :
  *      en_maintenance()               : anon, authenticated, service_role, postgres
- *      maintenance_actif()            : postgres SEUL (implicite, propriétaire)
  *      refuser_pendant_maintenance()  : postgres SEUL (implicite, propriétaire)
  *
  *  À rejouer après toute reconstruction du gel : la requête ci-dessous lève
- *  si l'un des 16 couples rôle×droit sur la table, ou l'un des 12 couples
+ *  si l'un des 16 couples rôle×droit sur la table, ou l'un des 8 couples
  *  rôle×fonction, s'écarte de cette attente.
  */
 
@@ -77,7 +79,6 @@ begin
   fonctions as (
     select fn, attendu from (values
       ('public.en_maintenance()',              true),   -- ouverte aux 4 rôles (voir case ci-dessous)
-      ('public.maintenance_actif()',            false),  -- postgres seul
       ('public.refuser_pendant_maintenance()',  false)   -- postgres seul
     ) as f(fn, attendu)
   ),
@@ -101,6 +102,6 @@ begin
   end if;
 
   raise notice 'PREUVE maintenance OK : aucun rôle applicatif (anon, authenticated, service_role) '
-    'n''a de droit DML direct sur la table, ni d''EXECUTE sur maintenance_actif() ou '
-    'refuser_pendant_maintenance(). Seule en_maintenance() reste exécutable par les 4 rôles.';
+    'n''a de droit DML direct sur la table, ni d''EXECUTE sur refuser_pendant_maintenance(). '
+    'Seule en_maintenance() reste exécutable par les 4 rôles.';
 end $$;

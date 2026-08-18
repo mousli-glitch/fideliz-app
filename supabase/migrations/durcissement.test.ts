@@ -304,9 +304,9 @@ describe("gel source Fideliz — aucun laissez-passer, jamais", () => {
   });
 
   it("refuser_pendant_maintenance() ne contient aucune branche de passage", () => {
-    // Le corps entier, une fois le "if maintenance_actif()" retiré de la
-    // lecture, ne doit contenir qu'un raise exception — jamais un chemin
-    // qui laisserait passer l'écriture pendant que actif = true.
+    // Le corps entier, une fois le "if v_actif then" retiré de la lecture,
+    // ne doit contenir qu'un raise exception — jamais un chemin qui
+    // laisserait passer l'écriture pendant que actif = true.
     const sql = sansCommentaires(gel.sql);
     const corps = sql.match(/create or replace function public\.refuser_pendant_maintenance\(\)[\s\S]*?\$\$;/);
     expect(corps, "fonction refuser_pendant_maintenance introuvable").toBeTruthy();
@@ -329,35 +329,57 @@ describe("gel source Fideliz — aucun laissez-passer, jamais", () => {
     }
   });
 
-  it("P0 du 19/08 : les revoke sur les fonctions internes ciblent aussi service_role", () => {
+  it("P0 du 19/08 : le revoke sur la fonction interne cible aussi service_role", () => {
     const sql = sansCommentaires(gel.sql);
-    for (const fn of ["maintenance_actif", "refuser_pendant_maintenance"]) {
-      const revoke = sql.match(new RegExp(`revoke all on function public\\.${fn}\\(\\) from ([^;]+);`, "i"));
-      expect(revoke, `revoke sur ${fn}() introuvable`).toBeTruthy();
-      expect(revoke![1].toLowerCase(), `\`service_role\` doit être dans le revoke sur ${fn}()`).toContain("service_role");
-    }
+    const revoke = sql.match(/revoke all on function public\.refuser_pendant_maintenance\(\) from ([^;]+);/i);
+    expect(revoke, "revoke sur refuser_pendant_maintenance() introuvable").toBeTruthy();
+    expect(revoke![1].toLowerCase(), "`service_role` doit être dans le revoke sur refuser_pendant_maintenance()").toContain(
+      "service_role",
+    );
   });
 
-  it("le fencing MVCC (verrou de ligne) précède la lecture du drapeau", () => {
-    // Prouvé le 19/08 en concurrence réelle (deux sessions PostgREST) : sans ce
-    // verrou, une transaction REPEATABLE READ dont l'instantané précède
-    // l'activation ne voit pas maintenance_actif() devenir vrai, et son
-    // écriture passe. Le `for share` force PostgreSQL à refuser silencieusement
-    // une version périmée de la ligne (40001) plutôt que de laisser lire le
-    // drapeau obsolète. Ce test ne peut pas rejouer la concurrence (pas de
-    // deuxième session ici) — il garde seulement la présence et l'ordre du verrou.
+  it("maintenance_actif() n'existe plus — verrou et décision viennent d'une seule lecture", () => {
+    // Signalé le 19/08 : une première correction ajoutait le verrou `for share`
+    // PUIS appelait maintenance_actif(), une fonction séparée qui relisait la
+    // table SANS verrou — rien ne garantissait que les deux lectures portaient
+    // sur la même version de la ligne. Corrigé en supprimant cette fonction
+    // (son unique appelante était refuser_pendant_maintenance) et en fusionnant
+    // verrou + décision dans un seul `select ... for share into`.
+    const sql = sansCommentaires(gel.sql);
+    expect(sql, "maintenance_actif() ne doit plus être définie").not.toMatch(
+      /create (or replace )?function public\.maintenance_actif/i,
+    );
+    expect(sql, "maintenance_actif() ne doit plus être appelée").not.toMatch(/maintenance_actif\(\)/i);
+  });
+
+  it("le fencing MVCC : un seul select verrouillant fournit le verrou, actif et message", () => {
+    // Prouvé le 19/08 en concurrence réelle (deux sessions PostgREST) : sans un
+    // verrou pris AVANT toute décision, une transaction REPEATABLE READ dont
+    // l'instantané précède l'activation peut laisser passer l'écriture. Le
+    // `for share` force PostgreSQL à refuser silencieusement une version
+    // périmée de la ligne (40001) plutôt que de laisser lire un drapeau
+    // obsolète. Ce test ne peut pas rejouer la concurrence (pas de deuxième
+    // session ici) — il garde la forme structurelle : une seule requête
+    // verrouillante, avant toute décision, avec un contrôle FOUND explicite.
     const sql = sansCommentaires(gel.sql);
     const corps = sql.match(/create or replace function public\.refuser_pendant_maintenance\(\)[\s\S]*?\$\$;/);
     expect(corps, "fonction refuser_pendant_maintenance introuvable").toBeTruthy();
     const texte = corps![0];
-    expect(texte, "le verrou `for share` sur maintenance a disparu").toMatch(
-      /from public\.maintenance where id for share/i,
+
+    expect(texte, "la lecture verrouillante de actif/message a disparu").toMatch(
+      /select\s+actif\s*,\s*message\s+into\s+v_actif\s*,\s*v_message\s+from\s+public\.maintenance\s+where\s+id\s+for\s+share/i,
     );
+    const occurrencesLectureTable = texte.match(/from public\.maintenance/gi) ?? [];
+    expect(
+      occurrencesLectureTable.length,
+      "une seule lecture de public.maintenance doit exister dans ce corps (le verrou et la décision ne doivent plus provenir de deux requêtes distinctes)",
+    ).toBe(1);
+    expect(texte, "la ligne absente doit échouer fermé (if not found)").toMatch(/if not found then/i);
+
     const indexVerrou = texte.search(/for share/i);
-    const indexLectureDrapeau = texte.search(/maintenance_actif\(\)/i);
-    expect(indexVerrou, "le verrou doit être pris avant la lecture de maintenance_actif()").toBeLessThan(
-      indexLectureDrapeau,
-    );
+    const indexDecision = texte.search(/if v_actif then/i);
+    expect(indexVerrou, "le verrou doit précéder la décision").toBeLessThan(indexDecision);
+
     // for share, jamais for update : un for update sérialiserait aussi les
     // écritures concurrentes entre elles (pas seulement contre l'activation).
     expect(texte).not.toMatch(/for update/i);
@@ -421,5 +443,31 @@ describe("gel source Fideliz — inventaire exhaustif des tables, aucun angle mo
       Array.from(nonClassees),
       "table(s) créée(s) par une migration mais absente(s) des deux listes de classification (gelée / exclue documentée) — mettre à jour le fichier gel et ce test",
     ).toEqual([]);
+  });
+});
+
+describe("gel source Fideliz — activation/levée fail-closed, jamais service_role", () => {
+  // Signalé le 19/08 : un update nu sans contrôle du nombre de lignes peut
+  // échouer silencieusement — l'opérateur croit avoir gelé la source, elle
+  // ne l'est pas. Ces scripts vérifient GET DIAGNOSTICS ... row_count et
+  // lèvent si le résultat n'est pas exactement 1.
+  const VERIFICATIONS = join(ICI, "..", "verifications");
+
+  it("activer-gel-source-fideliz.sql existe, contrôle les triggers et le row_count, jamais service_role", () => {
+    const sql = readFileSync(join(VERIFICATIONS, "activer-gel-source-fideliz.sql"), "utf8");
+    const sansCom = sansCommentaires(sql);
+    expect(sansCom).toMatch(/get diagnostics\s+\w+\s*=\s*row_count/i);
+    expect(sansCom).toMatch(/if\s+\w+\s*<>\s*1\s+then\s+raise exception/i);
+    expect(sansCom).toMatch(/tgname\s*=\s*'gel_de_bascule'/i);
+    expect(sansCom).toMatch(/<>\s*10\s+then\s+raise exception/i);
+    expect(sansCom).not.toMatch(/service_role/i);
+  });
+
+  it("lever-gel-source-fideliz.sql existe, contrôle le row_count, jamais service_role", () => {
+    const sql = readFileSync(join(VERIFICATIONS, "lever-gel-source-fideliz.sql"), "utf8");
+    const sansCom = sansCommentaires(sql);
+    expect(sansCom).toMatch(/get diagnostics\s+\w+\s*=\s*row_count/i);
+    expect(sansCom).toMatch(/if\s+\w+\s*<>\s*1\s+then\s+raise exception/i);
+    expect(sansCom).not.toMatch(/service_role/i);
   });
 });

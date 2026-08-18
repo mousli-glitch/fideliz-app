@@ -502,3 +502,125 @@ aucune connexion persistante à fermer (chaque appel `curl` est une
 requête HTTP unique, refermée par PostgREST lui-même). État final de
 `fusion-tests-2` : gel installé, `actif = false`, aucune donnée de test
 résiduelle.
+
+## 8. Verrou et décision fondus en une seule lecture — harnais permanent
+
+Signalé le 19/08/2026, second tour : le trigger corrigé (§7) faisait
+`perform ... for share` PUIS appelait `maintenance_actif()`, une fonction
+séparée qui relisait `actif` **sans verrou**. Rien ne garantissait que ces
+deux lectures portaient sur la même version de la ligne — le verrou et la
+décision provenaient de deux requêtes distinctes.
+
+**Corrigé** : `maintenance_actif()` supprimée (son unique appelante était
+`refuser_pendant_maintenance()`), verrou et décision fondus dans une seule
+requête — `select actif, message into ... from public.maintenance where id
+for share`. Le drapeau lu est exactement celui que le verrou vient de
+garantir stable, parce qu'il n'y a plus deux requêtes.
+
+**Fail-closed sur ligne absente** : l'ancien `coalesce(actif, false)`
+désactivait silencieusement le gel si la ligne unique disparaissait.
+Remplacé par `if not found then raise exception ... errcode = 'P0101'` —
+prouvé en direct (ligne supprimée dans une transaction, écriture métier
+tentée, refusée avec `P0101`, transaction annulée, aucune trace).
+
+**Scripts d'activation/levée versionnés**, fail-closed, jamais
+`service_role` : `supabase/verifications/activer-gel-source-fideliz.sql`
+vérifie l'existence de la table ET des 10 triggers attendus AVANT
+d'écrire, puis contrôle via `get diagnostics ... row_count` qu'exactement
+une ligne a été affectée — sinon `raise exception`, aucune activation
+silencieusement ratée. `lever-gel-source-fideliz.sql` : même contrôle du
+nombre de lignes. Les deux prouvés en direct sur `fusion-tests-2`,
+chemin heureux ET refus (un trigger retiré délibérément → activation
+refusée, `actif` resté `false`, trigger restauré).
+
+### Harnais de concurrence permanent, versionné
+
+La matrice précédente n'existait qu'en documentation — ses fonctions et
+son script avaient été supprimés après usage, donc pas réellement
+rejouable. Corrigé :
+
+- `supabase/verifications/harnais-gel-concurrence.sql` — fonctions témoins
+  (préfixe `zz_harnais_gel_`), garde d'identité par nonce régénéré à
+  chaque application, `security definer` pour que des appels `anon`
+  puissent activer/désactiver le gel de test sans jamais toucher aux
+  droits réels d'`anon` sur `maintenance`.
+- `scripts/harnais-gel-concurrence.mjs` — orchestration Node, `fetch`
+  natif, **aucune dépendance ajoutée**. Variables d'environnement
+  obligatoires (`SUPABASE_REST_URL`, `SUPABASE_ANON_KEY`,
+  `HARNAIS_NONCE_ATTENDU`), aucune valeur en dur. Sortie : uniquement un
+  tableau JSON `{ scenario, ok, detail }`, aucun secret.
+- `supabase/verifications/harnais-gel-concurrence-nettoyage.sql` —
+  suppression des fonctions témoins (DDL hors de portée d'un rôle `anon`,
+  geste séparé et volontaire).
+
+**Scénario clé, jusqu'ici jamais mesuré** : B active sans committer
+(retient son verrou `NO KEY UPDATE`), A démarre une écriture métier en
+READ COMMITTED pendant que B est en vol, A bloque sur `for share`, B
+committe, A reprend. **Mesuré : A bloque bien (~1,2 s, proportionnel au
+temps de rétention de B) puis reçoit `P0100` après le commit de B — jamais
+un état périmé.** Rejoué aussi : écriture déjà en vol qui fait attendre
+l'activation (corrigé après un premier essai bâclé — sans délai de
+rétention explicite côté témoin, l'écriture committait en quelques ms et
+n'était plus « en vol » au moment de l'activation, faux résultat détecté
+et corrigé, pas ignoré) ; ligne absente → `P0101` ; désactivation non
+committée puis écriture → écriture bloque puis réussit ; 5 répétitions
+d'une course activation/écriture quasi simultanée, 0 violation (jamais
+une écriture réussie avec un horodatage postérieur à un commit
+d'activation).
+
+**Limite honnête, pas contournée par une preuve dégradée** : les
+scénarios exigeant REPEATABLE READ pour la session `A` (transaction
+fraîche testée via ce harnais permanent) n'ont pas pu être forcés. Trois
+mécanismes essayés, tous vérifiés empiriquement :
+1. `SET default_transaction_isolation` depuis l'intérieur de la fonction
+   RPC — sans effet sur la transaction en cours (confirmé : `avant` et
+   `apres_set_default` identiques dans un test direct).
+2. `alter role anon set default_transaction_isolation` — sans effet
+   observé ; `pg_stat_activity` montre que PostgREST se connecte
+   **toujours** en tant que `authenticator` (jamais `anon`), et le `SET
+   ROLE anon` par requête ne réapplique pas les défauts de session du
+   rôle cible.
+3. `alter role authenticator set default_transaction_isolation`, avec
+   `pg_terminate_backend` pour forcer de nouvelles connexions (PID
+   confirmé différent après coup) — toujours sans effet. `pg_settings`
+   confirme : `transaction_isolation` a `source = 'override'` — quelque
+   chose (vraisemblablement PostgREST lui-même) force explicitement le
+   niveau à chaque requête.
+
+Le harnais **lit** le niveau réellement observé dans chaque réponse et
+échoue honnêtement (`"NON VÉRIFIABLE ICI"`) si ce n'est pas `repeatable
+read`, plutôt que de rendre un faux résultat. Cela ne retire rien à la
+preuve déjà faite au §7 (cycle antérieur à ce harnais, `repeatable read`
+confirmé alors, `40001` mesuré) — seulement, ce harnais permanent ne peut
+pas la REJOUER à volonté sur ce projet Supabase avec les mécanismes
+connus. Rôles `anon`/`authenticator` revérifiés propres après coup
+(`rolconfig` sans le réglage résiduel, connexions recyclées).
+
+### Empreinte après suppression de `maintenance_actif()`
+
+Cycle complet rejoué sur `fusion-tests-2` : application → 24 fonctions
+(`fd1b8684…`, contre 25 avant, `maintenance_actif` en moins) → rollback →
+retour exact à 22 fonctions (`e6266426…`, la baseline pré-gel inchangée,
+identique à tous les cycles précédents) → réapplication → 24 fonctions
+(`fd1b8684…`) ✅ identique. `acl_fonctions` 85 (contre 86), même écart d'un
+cran. Toutes les autres dimensions inchangées. `actif = false`, `depuis =
+null`, `par = null` après réapplication.
+
+### Tests permanents ajoutés ce tour
+
+`supabase/migrations/durcissement.test.ts` : `maintenance_actif()`
+n'existe plus (ni définition ni appel) ; le corps de
+`refuser_pendant_maintenance()` ne contient qu'**une seule** lecture de
+`public.maintenance` (comptage littéral des occurrences de `from
+public.maintenance`) ; le verrou précède la décision (`if v_actif then`) ;
+`if not found then` présent ; les deux scripts d'activation/levée
+existent, contrôlent `row_count`, et ne mentionnent jamais `service_role`.
+**211 tests verts.**
+
+### Nettoyage de fin de cycle (ce tour)
+
+Fonctions `zz_harnais_gel_*` supprimées (confirmé : 0 restante), rôles
+`anon`/`authenticator` revérifiés sans réglage résiduel, répertoire local
+des identifiants supprimé (`rm -rf`, confirmé absent), aucune donnée de
+test résiduelle (`restaurants` filtré sur `zz-harnais-gel` : 0 ligne).
+État final de `fusion-tests-2` : gel installé, `actif = false`.

@@ -95,14 +95,6 @@ as $$ select m.actif, m.message from public.maintenance m where m.id $$;
 revoke all on function public.en_maintenance() from public;
 grant execute on function public.en_maintenance() to anon, authenticated, service_role;
 
-create or replace function public.maintenance_actif()
-returns boolean
-language sql
-stable
-security definer
-set search_path to 'public'
-as $$ select coalesce((select actif from public.maintenance where id), false) $$;
-
 /*
  * ─── AUCUN LAISSEZ-PASSER — LE REFUS EST INCONDITIONNEL ───
  *
@@ -114,22 +106,29 @@ as $$ select coalesce((select actif from public.maintenance where id), false) $$
  * contournement est nulle parce qu'aucun mécanisme de contournement
  * n'existe, pas parce qu'il est bien gardé.
  *
- * ─── LE VERROU DE LIGNE, PAS SEULEMENT LA LECTURE DU DRAPEAU ───
+ * ─── UN SEUL VERROU, UNE SEULE LECTURE — PAS TROIS ───
  *
  * Prouvé le 19/08/2026 sur `fusion-tests-2` (deux sessions PostgREST
  * réelles) : une transaction déjà ouverte en REPEATABLE READ, dont
- * l'instantané précède l'activation, ne voit PAS la mise à jour — un
- * simple `if maintenance_actif() then ...` lit alors un drapeau périmé
- * et laisse passer l'écriture. `maintenance_actif()` est `stable` : elle
- * respecte l'instantané de la transaction appelante, comme n'importe
- * quelle autre lecture.
+ * l'instantané précède l'activation, ne voit PAS la mise à jour via une
+ * lecture ordinaire non verrouillée — elle continue de lire l'ancien
+ * état et laisse passer l'écriture.
  *
- * Le `for share` ci-dessous n'est pas une lecture ordinaire : sous
- * REPEATABLE READ, PostgreSQL refuse de verrouiller silencieusement une
- * version périmée d'une ligne modifiée par une transaction validée après
- * l'instantané — il lève `40001` (serialization_failure) au lieu de
- * rendre la main. C'est ce comportement, indépendant de la lecture du
- * drapeau, qui ferme la fenêtre.
+ * Une première correction avait ajouté un `perform ... for share` PUIS
+ * appelé une fonction `maintenance_actif()` séparée qui relisait la table
+ * sans verrou. Signalé le 19/08 : rien ne garantit que ces deux lectures
+ * portent sur la MÊME version de la ligne — le verrou et la décision
+ * provenaient de deux requêtes distinctes. Corrigé en supprimant
+ * `maintenance_actif()` (son unique appelante) et en fusionnant verrou et
+ * décision dans UNE SEULE requête verrouillante : `select ... for share
+ * into`. Le drapeau lu est exactement celui que le verrou vient de
+ * garantir stable pour la suite de la transaction — aucune fenêtre entre
+ * les deux, parce qu'il n'y a plus « les deux ».
+ *
+ * Sous REPEATABLE READ, PostgreSQL refuse de verrouiller silencieusement
+ * une version périmée d'une ligne modifiée par une transaction validée
+ * après l'instantané — il lève `40001` (serialization_failure) au lieu de
+ * rendre la main.
  *
  * `for share` et non `for update` : un `update` ordinaire sur
  * `maintenance` (l'activation/la levée) prend un verrou NO KEY UPDATE,
@@ -138,6 +137,14 @@ as $$ select coalesce((select actif from public.maintenance where id), false) $$
  * propre commit. Mais `for share` n'entre PAS en conflit avec un autre
  * `for share` : des écritures concurrentes sur des tables différentes ne
  * se bloquent pas entre elles pour autant, seulement contre l'activation.
+ *
+ * ─── LA LIGNE ABSENTE ÉCHOUE FERMÉ, PAS OUVERT ───
+ *
+ * L'ancienne version retombait sur `coalesce(actif, false)` si la ligne
+ * unique venait à manquer — gel silencieusement désactivé. Corrigé :
+ * `if not found` refuse l'écriture avec un code dédié (`P0101`), jamais
+ * un comportement « comme si de rien n'était ». Une table de configuration
+ * introuvable est une anomalie à signaler, pas une autorisation implicite.
  */
 create or replace function public.refuser_pendant_maintenance()
 returns trigger
@@ -145,10 +152,24 @@ language plpgsql
 security definer
 set search_path to 'public'
 as $$
+declare
+  v_actif   boolean;
+  v_message text;
 begin
-  perform 1 from public.maintenance where id for share;
+  select actif, message
+    into v_actif, v_message
+    from public.maintenance
+    where id
+    for share;
 
-  if public.maintenance_actif() then
+  if not found then
+    raise exception using
+      errcode = 'P0101',
+      message = 'État du gel introuvable — écriture refusée par précaution.',
+      hint    = 'maintenance_ligne_absente';
+  end if;
+
+  if v_actif then
     /*
      * 57014 (query_canceled) est déjà pris. On choisit une classe applicative
      * dédiée pour que l'application distingue « on est en maintenance » de
@@ -157,8 +178,7 @@ begin
      */
     raise exception using
       errcode = 'P0100',
-      message = coalesce((select message from public.maintenance where id),
-                         'Service momentanément suspendu.'),
+      message = coalesce(v_message, 'Service momentanément suspendu.'),
       hint    = 'bascule_en_cours';
   end if;
   return case tg_op when 'DELETE' then old else new end;
@@ -242,10 +262,10 @@ comment on table public.maintenance is
  * `anon` et `authenticated`. `service_role` gardait donc, par les DEFAULT
  * PRIVILEGES, SELECT/INSERT/UPDATE/DELETE directs sur `maintenance` — un
  * appel PostgREST ou Supabase JS authentifié avec la clé de service pouvait
- * remettre `actif = false`, OU supprimer l'unique ligne (auquel cas
- * `maintenance_actif()` retombe sur son `coalesce(..., false)` et redevient
- * inerte), puis écrire librement sur les tables gelées. Un contournement
- * réel du gel, par le chemin même que le trigger est censé fermer.
+ * remettre `actif = false`, OU supprimer l'unique ligne (la ligne absente
+ * fait désormais échouer fermé, `P0101` — voir plus haut), puis écrire
+ * librement sur les tables gelées. Un contournement réel du gel, par le
+ * chemin même que le trigger est censé fermer.
  *
  * La table est lisible par tous (l'application doit pouvoir afficher un
  * message honnête, via `en_maintenance()` uniquement) et écrite par
@@ -263,14 +283,11 @@ comment on table public.maintenance is
 revoke all on public.maintenance from public, anon, authenticated, service_role;
 
 /*
- * Les fonctions internes non plus. Les DEFAULT PRIVILEGES accordent EXECUTE
- * à tout nouvel objet ; `refuser_pendant_maintenance()` est une fonction de
- * trigger que PostgreSQL refuse d'appeler directement, et `maintenance_actif()`
- * n'a besoin d'être exécutable par personne côté application — mais un
- * droit inutile ne se garde pas pour autant, et un appel direct par
- * `service_role` (hors trigger) n'apporte rien de légitime.
+ * La fonction interne non plus. Les DEFAULT PRIVILEGES accordent EXECUTE à
+ * tout nouvel objet ; `refuser_pendant_maintenance()` est une fonction de
+ * trigger que PostgreSQL refuse d'appeler directement — mais un droit
+ * inutile ne se garde pas pour autant.
  */
-revoke all on function public.maintenance_actif() from public, anon, authenticated, service_role;
 revoke all on function public.refuser_pendant_maintenance() from public, anon, authenticated, service_role;
 
 /*
@@ -278,12 +295,13 @@ revoke all on function public.refuser_pendant_maintenance() from public, anon, a
  *  L'ORDRE DES OPÉRATIONS — CÔTÉ SOURCE UNIQUEMENT
  * ═══════════════════════════════════════════════════════════════════════
  *
- *  1. GELER LA SOURCE. En SQL direct, sous le rôle propriétaire de la
- *     table (connexion admin du runbook) — JAMAIS avec la clé de service
- *     de l'application, qui n'a plus aucun droit sur `maintenance` depuis
- *     la correction du 19/08/2026 (voir plus haut).
- *     update public.maintenance set actif = true, depuis = now(),
- *       message = '…';
+ *  1. GELER LA SOURCE. `supabase/verifications/activer-gel-source-fideliz.sql`
+ *     — en SQL direct, sous le rôle propriétaire de la table (connexion
+ *     admin du runbook), JAMAIS avec la clé de service de l'application,
+ *     qui n'a plus aucun droit sur `maintenance` depuis la correction du
+ *     19/08/2026 (voir plus haut). Ce script contrôle lui-même qu'exactement
+ *     une ligne a été affectée et que les 10 triggers attendus existent —
+ *     un `update` nu ne le garantit pas.
  *
  *  2. LAISSER FINIR CE QUI EST EN VOL. Le gel arrête les nouvelles écritures,
  *     pas celles déjà commencées. Attendre que `pg_stat_activity` ne montre
@@ -301,9 +319,10 @@ revoke all on function public.refuser_pendant_maintenance() from public, anon, a
  *  5. CONTRÔLER. Témoins QR des cinq parcours, réconciliation des comptages,
  *     sondes de sécurité. Un seul rouge : on ne lève pas.
  *
- *  6. LEVER — et seulement après le GO. Même rôle propriétaire qu'à
- *     l'étape 1, jamais la clé de service.
- *     update public.maintenance set actif = false, depuis = null;
+ *  6. LEVER — et seulement après le GO.
+ *     `supabase/verifications/lever-gel-source-fideliz.sql` — même rôle
+ *     propriétaire qu'à l'étape 1, jamais la clé de service, même contrôle
+ *     du nombre de lignes affectées.
  *
  *  EN CAS DE ROLLBACK : revenir à l'ancienne application AVANT de lever le
  *  gel. Lever d'abord rouvrirait les écritures sur une application qu'on
