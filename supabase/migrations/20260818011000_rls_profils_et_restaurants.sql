@@ -96,8 +96,39 @@
  * sous l'identité de l'appelant — la retirer à `authenticated` casserait
  * toutes les policies qui s'en servent, sur `games` comme ailleurs.
  */
+/*
+ * Revue de sûreté, puisqu'elle gagne en privilège :
+ *
+ *   · aucun paramètre — on ne peut pas lui demander le rôle d'un AUTRE
+ *     compte, elle ne sait répondre que sur `auth.uid()` de l'appelant ;
+ *   · propriétaire `postgres`, celui qui crée déjà tout dans `public` ;
+ *   · `pg_temp` placé EXPLICITEMENT en dernier. Sans ça il est cherché en
+ *     premier, et une table temporaire nommée `profiles` détournerait une
+ *     fonction DEFINER. La référence est déjà qualifiée (`public.profiles`),
+ *     ce qui suffirait ; les deux ensemble ne coûtent rien ;
+ *   · `pg_catalog` en tête : les opérateurs et `coalesce` ne peuvent pas être
+ *     redéfinis sous elle ;
+ *   · `stable` — elle lit, elle n'écrit pas, aucun effet de bord ;
+ *   · EXECUTE rendu à `anon`, `authenticated` et `service_role`, soit
+ *     exactement ce que le GRANT à PUBLIC donnait déjà. Restreindre `anon`
+ *     serait tentant : les dix policies qui appellent `current_role()`
+ *     directement visent toutes `{authenticated}`. Mais DEUX policies visent
+ *     `{public}` et appellent `is_root()` / `is_sales()`, qui l'appellent à
+ *     leur tour — `root_full_logs` sur activity_logs_legacy et
+ *     `sales_manage_notes` sur crm_notes. Retirer `anon` ferait échouer toute
+ *     requête anonyme sur ces deux tables. Mesuré, pas supposé.
+ *
+ * Une conception plus sûre existe : déplacer ces aides dans un schéma non
+ * exposé par PostgREST, hors de portée de l'API. Elle impose de réécrire les
+ * douze policies qui les référencent. Ce fichier ferme une fuite ; il n'a pas
+ * à emporter une refonte avec lui. À reprendre avec la charte de fusion.
+ */
 create or replace function public."current_role"()
-returns text language sql stable security definer set search_path to 'public'
+returns text
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, pg_temp
 as $$
   select coalesce(
     (select role from public.profiles where id = auth.uid()),

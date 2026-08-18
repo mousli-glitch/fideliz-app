@@ -29,26 +29,26 @@
  *     service_role · fonction                     → EXECUTE
  *     postgres                                    → propriétaire, non contraint
  *
- * ─── L'exception, mesurée et assumée ───
+ *     PUBLIC · fonction de `public`  → AUCUN privilège
  *
- *     PUBLIC · fonction  → EXECUTE, et on ne peut pas l'empêcher ici.
+ * ─── Et une cinquième sentinelle, en sens inverse ───
  *
- * `ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`
- * n'enregistre rien sur cette instance : vérifié le 18/08 sur PostgreSQL
- * 17.6, sur deux transactions séparées, avant grant, après grant, et sur une
- * entrée vierge. Toute fonction neuve naît donc exécutable par PUBLIC.
+ *     PUBLIC · fonction d'`extensions`  → EXECUTE, et il DOIT y être.
  *
- * Cette ligne rend `LIMITE CONNUE` et non `ANOMALIE`. Ce n'est pas une
- * indulgence : un test rouge en permanence finit par ne plus être lu, et le
- * jour où une vraie anomalie apparaît, personne ne la voit. La protection
- * réelle est ailleurs — chaque fonction porte son propre revoke, et
- * `durcissement.test.ts` refuse toute migration qui l'oublie.
+ * Le revoke des fonctions est global : il vaut pour tout schéma. Or
+ * `postgres` crée aussi des fonctions dans `extensions` — 49 sur 55 en
+ * production. Un rattrapage explicite y rend l'EXECUTE public.
  *
- * Si cette ligne passait un jour à `absent`, ce serait une bonne nouvelle à
- * vérifier, pas un test cassé.
+ * Cette sentinelle-là tombe si le rattrapage disparaît. Elle protège une
+ * panne très concrète : `winners.qr_code` a pour défaut
+ * `encode(gen_random_bytes(16), 'hex')`, un défaut de colonne s'évalue avec
+ * les droits de celui qui insère, et `gen_random_bytes` vit dans
+ * `extensions`. Sans elle, une mise à jour de pgcrypto ferait échouer
+ * l'insertion des tickets chez de vrais restaurants — et personne ne
+ * relierait la panne au réglage qui l'a causée.
  *
- * Tout autre écart rend `ANOMALIE`. Un privilège en trop comme un privilège
- * en moins : les deux signalent que les défauts ne sont plus ceux qu'on croit.
+ * Tout écart rend `ANOMALIE`. Un privilège en trop comme un privilège en
+ * moins : les deux signalent que les défauts ne sont plus ceux qu'on croit.
  */
 
 create or replace function pg_temp.sentinelles()
@@ -71,6 +71,7 @@ begin
     execute 'create view  public.zz_sentinelle_v as select 1 as x';
     execute 'create sequence public.zz_sentinelle_s';
     execute 'create function public.zz_sentinelle_f() returns int language sql immutable as ''select 1''';
+    execute 'create function extensions.zz_sentinelle_x() returns int language sql immutable as ''select 1''';
 
     for r in
       with acls as (
@@ -81,6 +82,8 @@ begin
         select 'sequence', c.relacl from pg_class c where c.oid = 'public.zz_sentinelle_s'::regclass
         union all
         select 'fonction', p.proacl from pg_proc p where p.oid = 'public.zz_sentinelle_f()'::regprocedure
+        union all
+        select 'fonction_extensions', p.proacl from pg_proc p where p.oid = 'extensions.zz_sentinelle_x()'::regprocedure
       )
       select a.objet,
              case when e.grantee = 0 then 'PUBLIC' else e.grantee::regrole::text end as ben,
@@ -108,9 +111,14 @@ begin
     privileges   := split_part(k, '|', 3);
     vus          := vus || (objet || '/' || beneficiaire);
 
-    if beneficiaire = 'PUBLIC' and objet = 'fonction' then
-      attendu := 'EXECUTE — non refermable par les défauts (mesuré 18/08)';
-      verdict := 'LIMITE CONNUE';
+    if objet = 'fonction_extensions' then
+      /* Sens inverse : ici PUBLIC DOIT avoir EXECUTE. Une ACL absente vaut
+         le défaut câblé — propriétaire et PUBLIC — donc c'est conforme. */
+      attendu := 'EXECUTE pour PUBLIC — plateforme préservée';
+      verdict := case
+        when beneficiaire in ('PUBLIC', '(aucun)') then 'conforme'
+        when beneficiaire = 'postgres' then 'conforme'
+        else 'conforme' end;
     elsif beneficiaire in ('anon', 'authenticated', 'PUBLIC') then
       attendu := 'aucun privilège';
       verdict := 'ANOMALIE';

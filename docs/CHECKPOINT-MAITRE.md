@@ -95,15 +95,34 @@ Migration `20260818010000`. Les nouveaux objets naissent fermés — **et les
 20 relations existantes sont inchangées**, empreinte `e16eae01…` avant comme
 après. Sentinelles : `supabase/verifications/sentinelles.sql`.
 
-⚠ **Découverte qui change la conception.** `ALTER DEFAULT PRIVILEGES … REVOKE
-EXECUTE ON FUNCTIONS FROM PUBLIC` **n'enregistre rien** sur cette instance
-(PostgreSQL 17.6, mesuré sur deux transactions séparées, avant grant, après
-grant, sur entrée vierge). Toute fonction neuve reste exécutable par `PUBLIC`,
-donc par `anon`. C'est le mécanisme exact des deux P0 du 17/08.
+⚠ **Correction d'une erreur que j'avais faite.** J'avais conclu qu'on ne
+pouvait pas retirer l'EXECUTE de `PUBLIC` sur les nouvelles fonctions. Faux :
+mes quatre essais portaient `IN SCHEMA public`, or **les défauts par schéma
+s'ajoutent aux globaux et ne peuvent rien en retirer**. Je testais la seule
+forme incapable de le faire. Signalé par ChatGPT sur la documentation PG 17.
 
-La protection est donc une **règle**, pas un réglage : chaque fonction porte
-son propre `revoke … from public`, et `durcissement.test.ts` refuse toute
-migration qui l'oublie. Cinq de ses tests prouvent que la détection mord.
+La forme **globale** fonctionne, mesurée en deux transactions :
+
+```sql
+alter default privileges for role postgres revoke execute on functions from public;
+-- → public.zz_global() : postgres=X | service_role=X, anon = false
+```
+
+**Rayon d'impact mesuré avant adoption** : `postgres` ne crée de fonctions que
+dans `public` (22/22) et `extensions` (49/55). Les schémas de plateforme
+appartiennent à des rôles dédiés. `extensions` est le vrai danger :
+`winners.qr_code` a pour défaut `encode(gen_random_bytes(16),'hex')`, et un
+défaut de colonne s'évalue avec les droits de celui qui insère.
+
+**Décision : combinaison.** Revoke global, puis `grant execute on functions to
+public` **dans `extensions` seulement** — les défauts de schéma s'ajoutant aux
+globaux. Vérifié : `extensions.zz_ext()` reste ouverte, `public.zz_pub()` est
+fermée. Sentinelles : **zéro anomalie**.
+
+Reste ouvert et assumé : un schéma NOUVEAU où `postgres` créerait des
+fonctions les verrait naître fermées. Symptôme bruyant (erreur de permission),
+réparable par un `grant`. La règle « chaque fonction porte son revoke » est
+**conservée** en second rempart, avec son test.
 
 Audit de l'existant : **14 fonctions ouvertes à `PUBLIC`**. Sept sont des
 fonctions de trigger, inappelables (`0A000` mesuré). Six sont `SECURITY

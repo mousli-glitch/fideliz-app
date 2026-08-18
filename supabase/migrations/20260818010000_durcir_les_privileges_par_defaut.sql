@@ -66,9 +66,8 @@
  * appartenant à `supabase_admin` est refusé à `postgres`. Il bloquerait sans
  * corriger — le pire des deux mondes.
  *
- * La protection retenue est donc la détection, assumée comme telle :
- * `public.auditer_privileges_publics()`, plus bas, et le script
- * `scripts/acl-publiques.mjs` qui la confronte à un manifeste versionné.
+ * Pour ce cas-là, la protection retenue est la détection, assumée comme
+ * telle : `public.auditer_privileges_publics()`, plus bas.
  */
 
 /*
@@ -120,40 +119,76 @@ alter default privileges for role postgres in schema public
 /*
  * ────────────────────────────────────────────────────────────  fonctions
  *
- * ⚠ CE QUI SUIT NE FERME PAS `PUBLIC`, ET C'EST MESURÉ.
+ * ─── Une erreur que j'ai faite, et ce qu'elle a coûté de comprendre ───
  *
- * PostgreSQL accorde EXECUTE à `PUBLIC` sur toute nouvelle fonction. Ce droit
- * est celui qui rendait `archive_redeemed_winners` et `_log_event` appelables
- * anonymement — d'où le REVOKE du 17/08 visant `public` et pas seulement
- * `anon`.
+ * J'avais d'abord écrit qu'`ALTER DEFAULT PRIVILEGES` ne pouvait PAS retirer
+ * l'EXECUTE que PostgreSQL accorde à `PUBLIC` sur toute nouvelle fonction.
+ * Les sentinelles le montraient, j'avais retesté quatre fois, et j'en avais
+ * conclu que la protection ne pouvait être qu'une règle de relecture.
  *
- * On pourrait croire qu'`ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE ON
- * FUNCTIONS FROM PUBLIC` le retire. La documentation le laisse entendre. Sur
- * cette instance, c'est faux, et voici la mesure du 18/08, faite sur deux
- * transactions séparées pour écarter tout effet de visibilité :
+ * C'était faux, et la raison est dans la documentation : les défauts POSÉS
+ * SUR UN SCHÉMA s'AJOUTENT aux défauts globaux. Ils ne peuvent rien en
+ * retirer. Mes quatre essais portaient tous `IN SCHEMA public` — je testais
+ * la seule forme incapable de faire ce que je lui demandais.
  *
- *     alter default privileges for role postgres in schema public
- *       revoke execute on functions from public;
- *     → 0 ligne dans pg_default_acl : l'instruction n'enregistre RIEN
+ * La forme qui fonctionne est globale, sans `IN SCHEMA`. Mesuré le 18/08, en
+ * deux transactions séparées :
  *
- *     create function public.zz_d5() …
- *     → proacl NULL, donc défaut câblé : propriétaire + PUBLIC
- *     → has_function_privilege('anon', …, 'EXECUTE') = true
+ *     alter default privileges for role postgres revoke execute on functions from public;
+ *     → pg_default_acl gagne une entrée de portée globale : postgres=X/postgres
  *
- * Testé aussi avant le grant, après le grant, et sur une entrée vierge. Même
- * résultat à chaque fois. (PostgreSQL 17.6.)
+ *     create function public.zz_global() …          (transaction suivante)
+ *     → proacl = postgres=X | service_role=X   — PUBLIC a disparu
+ *     → has_function_privilege('anon', …)        = false
+ *     → has_function_privilege('authenticated', …) = false
  *
- * Les deux instructions ci-dessous sont conservées : elles ferment bien
- * `anon` et `authenticated` en direct, et elles reprendraient tout leur effet
- * si le comportement changeait. Mais elles ne suffisent pas, et il ne faut
- * surtout pas les lire comme une protection des fonctions.
+ * ─── Le rayon d'impact, mesuré avant d'adopter ───
  *
- * LA PROTECTION RÉELLE EST AILLEURS, et elle est une règle, pas un réglage :
- * toute fonction créée dans `public` après cette migration doit porter son
- * propre `revoke execute … from public`. Le test
- * `supabase/migrations/durcissement.test.ts` le vérifie sur chaque fichier de
- * migration et tombe si une seule fonction y échappe.
+ * « Global » veut dire : toute fonction future créée par `postgres`, dans
+ * TOUT schéma. Il fallait donc savoir où `postgres` crée des fonctions. La
+ * réponse, relevée en production, tient en deux lignes :
+ *
+ *     extensions   49 fonctions sur 55, dont 48 ouvertes à PUBLIC
+ *     public       22 sur 22, dont 14 ouvertes à PUBLIC
+ *
+ * Nulle part ailleurs. Les schémas de plateforme — `auth`, `storage`,
+ * `realtime`, `graphql`, `vault`, `supabase_functions` — appartiennent à des
+ * rôles dédiés, jamais à `postgres`, donc ce réglage ne les concerne pas.
+ *
+ * `extensions` est le vrai danger, et il est concret. La colonne
+ * `winners.qr_code` a pour défaut `encode(gen_random_bytes(16), ''hex'')`, et
+ * `gen_random_bytes` vient de `pgcrypto@extensions`. Un défaut de colonne
+ * s''évalue avec les droits de CELUI QUI INSÈRE. Si une mise à jour de
+ * `pgcrypto` par `postgres` recréait ses fonctions sous le défaut global,
+ * elles naîtraient fermées — et l''insertion d''un ticket échouerait chez
+ * trois vrais restaurants.
+ *
+ * ─── D''où la combinaison, et pourquoi elle est supérieure ───
+ *
+ * Puisque les défauts par schéma s''AJOUTENT aux globaux, on retire
+ * globalement, puis on rend à `extensions` ce qu''elle avait. Vérifié en
+ * transaction séparée :
+ *
+ *     extensions.zz_ext()  → ACL NULL, anon EXECUTE = true   (inchangé)
+ *     public.zz_pub()      → postgres=X | service_role=X, anon = false
+ *
+ * Ce qui reste ouvert, et je le dis plutôt que de le taire : si Supabase
+ * créait un jour des fonctions `postgres` dans un schéma NOUVEAU, elles
+ * naîtraient fermées. Le symptôme serait une erreur de permission — bruyante,
+ * pas silencieuse — et un `grant` explicite la corrigerait. Ce risque-là est
+ * détectable et réparable ; celui qu''on ferme ne l''était pas.
+ *
+ * La règle « chaque fonction porte son revoke » est CONSERVÉE malgré tout,
+ * avec son test. Deux protections indépendantes valent mieux qu''une seule
+ * qui dépend d''une entrée de catalogue que personne ne regarde.
  */
+alter default privileges for role postgres
+  revoke execute on functions from public;
+
+alter default privileges for role postgres in schema extensions
+  grant execute on functions to public;
+
+-- Dans `public`, seul `service_role` reçoit quelque chose automatiquement.
 alter default privileges for role postgres in schema public
   revoke all on functions from public, anon, authenticated, service_role;
 alter default privileges for role postgres in schema public

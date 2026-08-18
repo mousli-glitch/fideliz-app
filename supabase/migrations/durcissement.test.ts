@@ -8,18 +8,24 @@ import { fileURLToPath } from "node:url";
  *  LE DURCISSEMENT, ET LA RÈGLE QUI LE COMPLÈTE
  * ═══════════════════════════════════════════════════════════════════════
  *
- * Les privilèges par défaut ferment les tables, les vues et les séquences.
- * Ils ne ferment PAS les fonctions : `ALTER DEFAULT PRIVILEGES … REVOKE
- * EXECUTE ON FUNCTIONS FROM PUBLIC` n'enregistre rien sur cette instance —
- * mesuré le 18/08 sur PostgreSQL 17.6, sur deux transactions séparées.
+ * Deux protections indépendantes, et il en faut deux.
  *
- * Toute nouvelle fonction de `public` naît donc exécutable par `PUBLIC`,
- * donc par `anon`. C'est exactement le défaut qui a produit les deux P0 du
- * 17/08 : `archive_redeemed_winners` et `_log_event` appelables sans compte.
+ * 1. LES DÉFAUTS. La forme GLOBALE — sans `IN SCHEMA` — retire bien à
+ *    `PUBLIC` l'EXECUTE que PostgreSQL accorde à toute nouvelle fonction.
+ *    J'avais conclu l'inverse : mes quatre essais portaient `IN SCHEMA
+ *    public`, or les défauts par schéma s'AJOUTENT aux globaux et ne peuvent
+ *    rien en retirer. Je testais la seule forme incapable de le faire.
  *
- * La seule protection qui tienne est une règle : chaque fonction porte son
- * propre revoke. Une règle qu'aucun test ne vérifie n'est qu'un vœu — d'où
- * ce fichier.
+ *    Le revers : « global » vaut pour tout schéma, et `postgres` crée aussi
+ *    des fonctions dans `extensions` (49 sur 55 en production). D'où le
+ *    rattrapage explicite qui rend à `extensions` son comportement d'origine.
+ *
+ * 2. LA RÈGLE. Chaque fonction de `public` porte son propre revoke. Elle est
+ *    conservée : une protection qui repose sur une entrée de catalogue que
+ *    personne ne regarde est une protection qu'un `ALTER` distrait annule.
+ *
+ * C'est le défaut exact qui a produit les deux P0 du 17/08 —
+ * `archive_redeemed_winners` et `_log_event` appelables sans compte.
  */
 
 const ICI = dirname(fileURLToPath(import.meta.url));
@@ -88,6 +94,34 @@ describe("durcissement — les nouveaux objets naissent fermés", () => {
        applicatif ne s'en sert, et un droit inutile finit par servir. */
     expect(sql).not.toMatch(/grant[^;]*truncate[^;]*on tables to service_role/i);
     expect(sql).not.toMatch(/grant all on tables to service_role/i);
+  });
+
+  it("le revoke des fonctions est GLOBAL, sans IN SCHEMA", () => {
+    /* La forme `IN SCHEMA public` ne peut RIEN retirer d'un défaut global :
+       les entrées de schéma s'ajoutent aux globales. C'est l'erreur que j'ai
+       faite, et ce test existe pour qu'elle ne revienne pas. */
+    const sql = sansCommentaires(durcissement!.sql);
+    expect(sql).toMatch(
+      /alter default privileges for role postgres\s+revoke execute on functions from public/i,
+    );
+  });
+
+  it("extensions retrouve explicitement son EXECUTE public", () => {
+    /* Sans ce rattrapage, une mise à jour de pgcrypto par postgres recréerait
+       `gen_random_bytes` fermée — et `winners.qr_code`, dont c'est le défaut
+       de colonne, cesserait de s'insérer chez de vrais restaurants. */
+    const sql = sansCommentaires(durcissement!.sql);
+    expect(sql).toMatch(
+      /alter default privileges for role postgres in schema extensions\s+grant execute on functions to public/i,
+    );
+  });
+
+  it("le rattrapage extensions vient APRÈS le revoke global", () => {
+    const sql = sansCommentaires(durcissement!.sql);
+    const global = sql.search(/alter default privileges for role postgres\s+revoke execute on functions/i);
+    const rattrapage = sql.search(/in schema extensions\s+grant execute on functions/i);
+    expect(global).toBeGreaterThan(-1);
+    expect(rattrapage).toBeGreaterThan(global);
   });
 
   it("service_role n'obtient sur les séquences que USAGE et SELECT", () => {
