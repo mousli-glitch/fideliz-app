@@ -61,11 +61,33 @@ export async function deleteSalesUserAction(userId: string) {
       .eq('owner_id', userId)
     if (e2) throw new Error("Réattribution (propriétaire) échouée : " + e2.message)
 
+    /*
+     * ─── CHAQUE ÉTAPE SE VÉRIFIE AVANT LA SUIVANTE (19/08/2026) ───
+     *
+     * Les étapes 3 et 4 ignoraient leur `error`. Une suppression de profil
+     * échouée n'empêchait donc pas la suppression Auth : le compte Auth
+     * disparaissait en laissant derrière lui une ligne `profiles` pointant
+     * vers un utilisateur inexistant — un fantôme, impossible à recréer
+     * puisque l'e-mail redevient libre. On s'arrête désormais AVANT
+     * l'étape destructive suivante, jamais après.
+     *
+     * Pas de transaction possible ici : `auth.admin.deleteUser` est un
+     * appel d'API, hors de la transaction SQL. D'où l'ordre choisi — du
+     * moins destructif au plus destructif — et un arrêt à la première
+     * erreur. Un rejeu après échec partiel est sûr : chaque étape est
+     * idempotente (`delete ... eq` sur une ligne déjà absente ne fait
+     * rien, `update ... eq` sur des lignes déjà réattribuées non plus).
+     */
+
     // 3. Nettoyer les liens de portefeuille commercial (table sans clé étrangère côté commercial)
-    await supabaseAdmin.from('sales_restaurants').delete().eq('sales_user_id', userId)
+    const { error: e3 } = await supabaseAdmin
+      .from('sales_restaurants').delete().eq('sales_user_id', userId)
+    if (e3) throw new Error("Nettoyage du portefeuille échoué : " + e3.message)
 
     // 4. Supprimer le profil public
-    await supabaseAdmin.from('profiles').delete().eq('id', userId)
+    const { error: e4 } = await supabaseAdmin
+      .from('profiles').delete().eq('id', userId)
+    if (e4) throw new Error("Suppression du profil échouée : " + e4.message)
 
     // 5. Supprimer le compte Auth (libère l'e-mail)
     const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId)

@@ -3,7 +3,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
 import { exigerRole, tracerAction } from "@/lib/securite/garde-action"
-import { idDuCompteRoot } from "@/lib/securite/compte-root"
+import { resoudreRootHeritier } from "@/lib/securite/root"
 
 // GARDE INTERNE (18/08/2026) : root uniquement.
 // L'action réattribue en masse tous les restaurants sans propriétaire au
@@ -25,15 +25,34 @@ export async function repairOrphansAction() {
    * variable pointe vers le root de production, donc ce chemin ne peut pas
    * s'exercer avec un compte synthétique — il n'était testable qu'en
    * production. On cherche le root par son rôle, comme ailleurs.
+   *
+   * ─── FAIL-CLOSED, CORRIGÉ LE 19/08/2026 ───
+   *
+   * Ce chemin appelait `idDuCompteRoot()`, qui rendait `null` aussi bien
+   * pour « aucun root » que pour « lecture impossible » — son `error`
+   * n'était pas même lu. Ce `null` partait ensuite dans l'`update`
+   * ci-dessous, mené à la CLÉ DE SERVICE : une panne de lecture écrivait
+   * donc `user_id = null` sur tous les restaurants sans propriétaire, et
+   * l'action répondait `success: true`. Une panne devenait une perte de
+   * données silencieuse.
+   *
+   * Désormais : résultat discriminé, et AUCUNE écriture tant qu'un root
+   * n'est pas positivement identifié.
    */
-  const ROOT_ID = await idDuCompteRoot(supabase);
+  const heritier = await resoudreRootHeritier()
+  if (!heritier.ok) {
+    return { success: false, error: heritier.cause === "aucun_root"
+      ? "Aucun compte root : réattribution impossible."
+      : "Lecture des profils impossible : réattribution annulée." }
+  }
+  const ROOT_ID = heritier.rootId
 
   // On ne met à jour QUE owner_id et user_id pour ne pas casser le lien commercial
   const { error } = await supabase
     .from('restaurants')
-    .update({ 
+    .update({
         owner_id: ROOT_ID,
-        user_id: ROOT_ID 
+        user_id: ROOT_ID
     })
     .is('owner_id', null)
 

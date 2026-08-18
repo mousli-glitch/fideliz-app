@@ -19,48 +19,23 @@
  * existe déjà : `lib/securite/garde-action.ts`.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 /*
- * Le client attendu est celui à clé de service. On garde le type réel de la
- * bibliothèque plutôt qu'une forme écrite à la main : un type maison finit
- * toujours par diverger du client, et c'est le compilateur qui le découvre.
+ * ─── `idDuCompteRoot` A ÉTÉ RETIRÉ LE 19/08/2026 ───
+ *
+ * Il rendait `null` AUSSI BIEN pour « aucun root » que pour « lecture
+ * impossible » — son `error` n'était même pas déstructuré. Son seul
+ * appelant, `repairOrphansAction`, transmettait ce `null` à un `update`
+ * mené à la clé de service : une simple panne de lecture écrivait donc
+ * `user_id = null` sur les restaurants concernés, puis retournait un
+ * succès. Un résolveur qui confond « je ne sais pas » et « il n'y en a
+ * pas » n'est pas réparable par un test : il fallait le supprimer.
+ *
+ * Un SEUL résolveur subsiste désormais côté application :
+ * `lib/securite/root.ts::resoudreRootHeritier()`, qui rend un résultat
+ * discriminé (`ok` / `aucun_root` / `erreur_lecture`) et porte le
+ * départage `created_at, id`. Trois résolveurs coexistaient, c'était
+ * déjà deux de trop.
  */
-type ClientAdmin = SupabaseClient<any, any, any, any, any>;
-
-/**
- * L'identifiant du compte root, ou `null` s'il n'en existe aucun.
- *
- * `order by created_at, id` rend la réponse TOTALEMENT déterministe s'il en
- * existait plusieurs. Le `null` n'est pas un cas d'erreur : il produit des
- * lignes orphelines, exactement ce que faisait déjà l'UUID en dur le jour où
- * il pointait vers un compte supprimé — en moins silencieux.
- *
- * ⚠ Exige un client à clé de service : la RLS de `profiles` ne montre à
- * personne le profil d'un autre, root compris.
- *
- * ─── LE DÉPARTAGE `id`, AJOUTÉ LE 19/08/2026 ───
- *
- * `created_at` seul ne départage pas deux comptes créés dans la même
- * milliseconde : PostgreSQL rend alors une ligne arbitraire, et deux appels
- * successifs peuvent désigner deux héritiers différents. Trois résolveurs
- * coexistaient dans le système — cette fonction, `lib/securite/root.ts`, et
- * le trigger Postgres `handle_deleted_commercial()` — dont deux seulement
- * portaient le départage. Les trois appliquent désormais EXACTEMENT
- * `created_at ASC, id ASC` (migration `20260819000000_heritier_ordre_total.sql`
- * pour le côté SQL). Aucun filtre `is_active` d'aucun côté : ce serait un
- * changement de règle, pas un alignement.
- */
-export async function idDuCompteRoot(admin: ClientAdmin): Promise<string | null> {
-  const { data } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("role", "root")
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true })
-    .limit(1);
-  return data?.[0]?.id ?? null;
-}
 
 /**
  * Ce compte est-il protégé contre la suppression ?

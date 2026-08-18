@@ -46,6 +46,19 @@
 --  exception de la clause `order by`. Mêmes `security definer`,
 --  `search_path` vide, même `update`, même `return old`.
 
+--  ─── LE FILET REFUSE AUSSI, AU LIEU D'ÉCRIRE `null` ───
+--
+--  Signalé le 19/08/2026 : sans root, `select ... into v_root` laisse
+--  `v_root` à `null` — et l'`update` posait alors `created_by = null,
+--  owner_id = null` sur tous les restaurants du compte supprimé. Une
+--  suppression hors application (SQL direct) transformait donc l'absence
+--  de root en effacement silencieux du rattachement.
+--
+--  Le chemin applicatif refuse déjà dans ce cas (`resoudreRootHeritier`
+--  rend `aucun_root`). Le filet SQL s'aligne : `if not found` fait échouer
+--  la suppression AVANT l'`update`. Mieux vaut une suppression refusée
+--  qu'un parc de restaurants orphelins.
+
 create or replace function public.handle_deleted_commercial()
 returns trigger
 language plpgsql
@@ -60,6 +73,13 @@ begin
   where p.role = 'root'
   order by p.created_at, p.id
   limit 1;
+
+  if not found or v_root is null then
+    raise exception using
+      errcode = 'P0102',
+      message = 'Aucun compte root : réattribution impossible, suppression refusée.',
+      hint    = 'heritier_introuvable';
+  end if;
 
   update public.restaurants
      set created_by = v_root,
