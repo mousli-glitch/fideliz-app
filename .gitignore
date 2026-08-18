@@ -47,3 +47,7 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Sauvegardes logiques : donnees reelles de clients, jamais dans le depot.
+# 470 contacts, 468 tickets, les comptes Auth. Le depot est PUBLIC.
+sauvegardes/
