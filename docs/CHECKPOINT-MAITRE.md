@@ -20,8 +20,20 @@ traversée UI du hotfix RLS verte.
 2. Gel de bascule — **jamais appliqué**, à éprouver seul.
 3. `migration repair` — toujours bloqué.
 
-⚠ Le hotfix RLS (`20260818011000` + `20260818012000`) est **prouvé mais NON
-déployé**. Il attend ta décision.
+⚠ Le hotfix RLS est **prouvé mais NON déployé**. Candidat minimal prêt :
+branche `candidat/rls-minimal` = `f53a6f2`, construite depuis `41659a8`,
+11 fichiers, 2 migrations, 66 tests verts. Voir
+`docs/candidat-rls-compatibilite.md`.
+
+**Il attend UNE décision de Samy** : `sales_restaurants` est vide en
+production (1 commercial, 4 restaurants, 0 rattachement). Quel commercial
+suit quels restaurants ? Sans réponse, ses écrans de portefeuille seront
+vides après le hotfix — sans perte de données, il n'y en a aucune à perdre.
+
+Ordre recommandé : **migration d'abord, application ensuite** (ce sens est
+mesuré). Le rollback applicatif seul suffit comme porte de sortie : l'ancienne
+application tourne sur la base corrigée, donc revenir en arrière ne restaure
+pas la fuite.
 
 Écrit le **18/08/2026 vers 02 h 20** (Paris). Aucun secret, aucune donnée
 personnelle. À lire en premier si le contexte a été réduit.
