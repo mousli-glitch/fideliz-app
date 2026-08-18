@@ -1,7 +1,6 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
-import { exigerRestaurantParSlug } from "@/lib/securite/garde-action"
 
 function isUUID(str: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
@@ -15,14 +14,6 @@ export async function getCustomersPageAction(
   page: number = 1,
   limit: number = 30
 ) {
-  /* Liste nominative de clients (prénoms, e-mails) : réservée au restaurant
-   * concerné. Aucun écran ne l'appelle aujourd'hui, mais une Server Action
-   * reste joignable dès que son identifiant circule. */
-  const garde = await exigerRestaurantParSlug(
-    restaurantSlugOrId, ["restaurant", "root"], "clients.lecture",
-  )
-  if (!garde.ok) return { success: false as const, message: "Restaurant introuvable." }
-
   try {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

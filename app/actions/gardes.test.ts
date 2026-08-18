@@ -41,6 +41,29 @@ const GARDES = [
  */
 const PUBLIQUES = new Set(["play-game.ts", "register-winner.ts", "check-replay.ts"]);
 
+/*
+ * DORMANTS — injoignables, donc hors du hotfix de production
+ * ═════════════════════════════════════════════════════════
+ *
+ * Ces quatre fichiers ouvrent `service_role` sans garde, mais aucun n'apparaît
+ * dans `server-reference-manifest.json` : le build ne leur attribue aucun
+ * identifiant de dispatch, et Next.js ne route une Server Action que par cet
+ * identifiant. Sans importateur, pas d'entrée au manifeste ; sans entrée, pas
+ * de point d'entrée.
+ *
+ * `get-winners-page.ts` mérite sa mention : un composant l'importe bien, mais
+ * ce composant n'est monté nulle part. Un import ne prouve pas qu'un fichier
+ * vit — il faut que l'importateur vive aussi.
+ *
+ * Ils ne sont donc pas durcis ici : le candidat de production reste limité à
+ * la surface réellement atteignable. Leur durcissement attend sur une branche
+ * séparée. Ce qui les tient fermés, c'est leur absence d'appelant — et c'est
+ * précisément ce que le test suivant surveille.
+ */
+const DORMANTS = new Set([
+  "admin.ts", "player.ts", "get-customers-page.ts", "get-winners-page.ts",
+]);
+
 const fichiers = readdirSync(DOSSIER).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
 
 describe("Server Actions en service_role", () => {
@@ -53,15 +76,71 @@ describe("Server Actions en service_role", () => {
 
     const serviceRole = src.includes("SUPABASE_SERVICE_ROLE_KEY");
     const exporteUneAction = /export async function/.test(src);
-    if (!serviceRole || !exporteUneAction || PUBLIQUES.has(nom)) return;
+    if (!serviceRole || !exporteUneAction || PUBLIQUES.has(nom) || DORMANTS.has(nom)) return;
 
     const garde = GARDES.some((g) => src.includes(g));
     expect(garde, `${nom} ouvre service_role sans aucune garde d'autorisation`).toBe(true);
   });
 
-  it("les six actions corrigées portent leur garde", () => {
+  /*
+   * Le verrou du choix ci-dessus : un dormant n'est sûr que tant qu'AUCUNE
+   * route ne l'atteint. Le test suit les imports de proche en proche depuis
+   * les routes réelles (`page`, `layout`, `route`) — pas seulement les imports
+   * directs, sinon `get-winners-page.ts` passerait pour vivant alors que son
+   * unique importateur n'est lui-même monté nulle part.
+   */
+  it.each([...DORMANTS])("%s reste inatteignable depuis toute route", (nom) => {
+    const fichiers = new Map<string, string>();
+    const parcourir = (d: string) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        const chemin = join(d, e.name);
+        if (e.isDirectory()) { if (!["node_modules", ".next"].includes(e.name)) parcourir(chemin); }
+        else if (/\.(ts|tsx)$/.test(e.name) && !e.name.endsWith(".test.ts")) {
+          fichiers.set(chemin, readFileSync(chemin, "utf8"));
+        }
+      }
+    };
+    for (const racine of ["app", "components", "lib", "utils"]) {
+      try { parcourir(join(process.cwd(), racine)); } catch {}
+    }
+
+    // Résout un alias "@/x/y" vers le fichier réel.
+    const resoudre = (spec: string) => {
+      if (!spec.startsWith("@/")) return null;
+      const base = join(process.cwd(), spec.slice(2));
+      for (const suf of [".ts", ".tsx", "/index.ts", "/index.tsx"]) {
+        if (fichiers.has(base + suf)) return base + suf;
+      }
+      return null;
+    };
+
+    const cible = join(process.cwd(), "app/actions", nom);
+    const vus = new Set<string>();
+    const file = [...fichiers.keys()].filter((f) =>
+      /\/(page|layout|route|template|default|error|loading|not-found)\.tsx?$/.test(f));
+
+    while (file.length) {
+      const f = file.pop()!;
+      if (vus.has(f)) continue;
+      vus.add(f);
+      for (const m of (fichiers.get(f) ?? "").matchAll(/from\s+["'](@\/[^"']+)["']/g)) {
+        const r = resoudre(m[1]);
+        if (r && !vus.has(r)) file.push(r);
+      }
+    }
+
+    /* Contre-témoin : un graphe cassé rendrait TOUT inatteignable et ce test
+     * passerait sans rien vérifier. `update-game.ts` doit y être trouvé. */
+    expect(vus.has(join(process.cwd(), "app/actions/update-game.ts")),
+      "le graphe d'imports est cassé : même update-game.ts semble inatteignable").toBe(true);
+
+    expect(vus.has(cible),
+      `${nom} est devenu atteignable depuis une route : le durcir avant de l'utiliser`).toBe(false);
+  });
+
+  it("les actions vivantes corrigées portent leur garde", () => {
     const attendu = [
-      "update-game.ts", "create-game.ts", "get-winners-page.ts",
+      "update-game.ts", "create-game.ts",
       "get-sales-data.ts", "log-system-error.ts", "google-business.ts",
     ];
     for (const nom of attendu) {

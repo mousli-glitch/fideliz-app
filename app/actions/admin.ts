@@ -1,7 +1,6 @@
 "use server"
 
 import { createClient } from '@supabase/supabase-js'
-import { exigerRole } from '@/lib/securite/garde-action'
 
 // 👇 ON UTILISE LA CLÉ SERVICE ROLE (ADMIN SUPRÊME)
 const supabaseAdmin = createClient(
@@ -9,28 +8,8 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-/*
- * ═══════════════════════════════════════════════════════════════════════════
- *  FICHIER D'AVANT LE MULTI-TENANT — root uniquement
- *
- *  `getAdminWinners()` ne filtre par rien : elle renvoie les gagnants de TOUS
- *  les restaurants, e-mails et prénoms compris. `updateRestaurantAction(id,
- *  updates)` modifie n'importe quel restaurant avec n'importe quel champ. Ces
- *  signatures datent de l'époque où Fideliz servait un seul établissement.
- *
- *  Aucun écran ne les appelle aujourd'hui (vérifié par symbole, pas seulement
- *  par chemin d'import). On ne les supprime pas pour autant — rien ne prouve
- *  qu'elles soient mortes — mais elles sont fermées à tout sauf root.
- * ═══════════════════════════════════════════════════════════════════════════
- */
-async function garderRoot(action: string) {
-  const g = await exigerRole(['root'], action)
-  return g.ok
-}
-
 // 1. Récupérer tous les gagnants (Pour la liste)
 export async function getAdminWinners() {
-  if (!await garderRoot("admin_legacy.getAdminWinners")) return []
   const { data, error } = await supabaseAdmin
     .from('winners')
     .select(`
@@ -49,7 +28,6 @@ export async function getAdminWinners() {
 
 // Récupérer les stats
 export async function getAdminStats() {
-  if (!await garderRoot("admin_legacy.getAdminStats")) return { winners: 0, games: 0 }
     const { count: winnersCount } = await supabaseAdmin.from('winners').select('*', { count: 'exact', head: true })
     const { count: gamesCount } = await supabaseAdmin.from('games').select('*', { count: 'exact', head: true })
     
@@ -61,7 +39,6 @@ export async function getAdminStats() {
 
 // 4. Récupérer les infos du restaurant
 export async function getAdminRestaurant() {
-  if (!await garderRoot("admin_legacy.getAdminRestaurant")) return null
   const { data, error } = await supabaseAdmin
     .from('public_restaurants')
     .select('*')
@@ -73,7 +50,6 @@ export async function getAdminRestaurant() {
 
 // 5. Mettre à jour le restaurant
 export async function updateRestaurantAction(id: string, updates: any) {
-  if (!await garderRoot("admin_legacy.updateRestaurantAction")) return { success: false }
   const { error } = await supabaseAdmin
     .from('public_restaurants')
     .update(updates)
@@ -85,7 +61,6 @@ export async function updateRestaurantAction(id: string, updates: any) {
 
 // 6. Récupérer tous les jeux
 export async function getAdminGames() {
-  if (!await garderRoot("admin_legacy.getAdminGames")) return []
   const { data, error } = await supabaseAdmin
     .from('games')
     .select('*')
@@ -100,7 +75,6 @@ export async function getAdminGames() {
 
 // 7. Changer le statut d'un jeu (Actif / Inactif)
 export async function toggleGameStatusAction(id: string, currentStatus: string) {
-  if (!await garderRoot("admin_legacy.toggleGameStatusAction")) return { success: false }
   const newStatus = currentStatus === 'active' ? 'ended' : 'active'
   
   // Si on active un jeu, on désactive les autres
@@ -122,7 +96,6 @@ export async function toggleGameStatusAction(id: string, currentStatus: string) 
 
 // 8. Supprimer un jeu
 export async function deleteGameAction(id: string) {
-  if (!await garderRoot("admin_legacy.deleteGameAction")) return { success: false }
   const { error } = await supabaseAdmin
     .from('games')
     .delete()
@@ -134,7 +107,6 @@ export async function deleteGameAction(id: string) {
 
 // 9. Créer un jeu (CORRIGÉ : Archive les anciens d'abord)
 export async function createGameAction(restaurantId: string, name: string, actionType: string, actionUrl: string) {
-  if (!await garderRoot("admin_legacy.createGameAction")) return { success: false }
   
   // A. On passe tous les jeux existants de ce resto en "ended"
   // pour éviter le conflit "one_active_game_per_restaurant"
@@ -162,7 +134,6 @@ export async function createGameAction(restaurantId: string, name: string, actio
 
 // 10. Récupérer UN jeu par son ID
 export async function getAdminGameById(id: string) {
-  if (!await garderRoot("admin_legacy.getAdminGameById")) return null
   const { data, error } = await supabaseAdmin
     .from('games')
     .select('*')
@@ -175,7 +146,6 @@ export async function getAdminGameById(id: string) {
 
 // 11. Récupérer les lots (prizes) d'un jeu
 export async function getGamePrizes(gameId: string) {
-  if (!await garderRoot("admin_legacy.getGamePrizes")) return []
   const { data, error } = await supabaseAdmin
     .from('prizes')
     .select('*')
@@ -188,7 +158,6 @@ export async function getGamePrizes(gameId: string) {
 
 // 12. Créer un lot
 export async function createPrizeAction(prizeData: any) {
-  if (!await garderRoot("admin_legacy.createPrizeAction")) return { success: false }
   const { error } = await supabaseAdmin
     .from('prizes')
     .insert(prizeData)
@@ -199,7 +168,6 @@ export async function createPrizeAction(prizeData: any) {
 
 // 13. Supprimer un lot
 export async function deletePrizeAction(id: string) {
-  if (!await garderRoot("admin_legacy.deletePrizeAction")) return { success: false }
   const { error } = await supabaseAdmin
     .from('prizes')
     .delete()
