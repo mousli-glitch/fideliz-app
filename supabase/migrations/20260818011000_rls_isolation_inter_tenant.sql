@@ -278,6 +278,56 @@ create policy "Super Admin Restaurants Delete" on public.restaurants
   as permissive for delete to authenticated
   using ((public."current_role"() = 'root') or (owner_id = auth.uid()));
 
+/*
+ * ────────────────────────────────────────────────────────── crm_notes
+ *
+ * J'avais classé ce défaut « hors périmètre ». C'était une erreur : la
+ * matrice montre qu'un commercial lit, modifie et supprimerait les notes
+ * d'un restaurant auquel il n'est PAS rattaché. C'est une violation
+ * inter-tenant, donc exactement l'objet de ce fichier.
+ *
+ * La policy unique `sales_manage_notes` porte `for all to public using
+ * (is_sales() or is_root())` — aucun filtre de rattachement, et `to public`
+ * inclut `anon`.
+ *
+ * Relevé en production avant correction : la table contient **0 ligne**,
+ * `sales_restaurants` en contient **0** aussi, et `crm_notes` n'apparaît
+ * **nulle part** dans le code applicatif. Aucune donnée n'est donc exposée
+ * aujourd'hui, et aucun parcours ne peut casser. C'est le moment de la
+ * fermer : quand la fusion y écrira, il sera trop tard pour le faire sans
+ * risque.
+ *
+ * Le restaurateur n'y a pas accès : ce sont des notes commerciales SUR son
+ * établissement, pas des notes qui lui appartiennent.
+ */
+drop policy if exists sales_manage_notes on public.crm_notes;
+
+drop policy if exists crm_notes_root on public.crm_notes;
+create policy crm_notes_root on public.crm_notes
+  as permissive for all to authenticated
+  using (public."current_role"() = 'root')
+  with check (public."current_role"() = 'root');
+
+drop policy if exists crm_notes_commercial_rattache on public.crm_notes;
+create policy crm_notes_commercial_rattache on public.crm_notes
+  as permissive for all to authenticated
+  using (
+    public."current_role"() = 'sales'
+    and exists (
+      select 1 from public.sales_restaurants sr
+      where sr.restaurant_id = crm_notes.restaurant_id
+        and sr.sales_user_id = auth.uid()
+    )
+  )
+  with check (
+    public."current_role"() = 'sales'
+    and exists (
+      select 1 from public.sales_restaurants sr
+      where sr.restaurant_id = crm_notes.restaurant_id
+        and sr.sales_user_id = auth.uid()
+    )
+  );
+
 
 /*
  * ══════════ LOT 2 — games, system_logs, trigger ════════════════════
