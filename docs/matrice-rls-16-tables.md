@@ -198,3 +198,92 @@ après sauvegarde et preuve d'inutilité.
    uniquement des `process.env.X`), mais une copie périmée du code qui
    contient l'ancien `ROOT_ID`.
 5. `avis` n'est lisible par personne via la RLS, root compris.
+
+---
+
+# Troisième passe — traversée Auth réelle, 18/08
+
+## Une erreur de méthode que la traversée a révélée
+
+Les cinq comptes avaient été insérés **directement en SQL** dans `auth.users`.
+Conséquence découverte en tentant la première connexion : GoTrue répondait
+`500 — Database error querying schema` sur **toute** lecture de comptes.
+
+Cause : `confirmation_token`, `recovery_token`, `email_change_token_new` et
+`email_change` étaient à `NULL`. GoTrue les lit comme des chaînes et échoue.
+L'API `/auth/v1/settings` répondait `200`, ce qui donnait l'illusion qu'Auth
+fonctionnait.
+
+Les comptes ont été supprimés et **recréés par l'API d'administration
+officielle** — jamais un hash écrit à la main. GoTrue les liste depuis
+(`200`, 5 comptes).
+
+**Une base peut paraître saine et avoir un Auth cassé.** Aucune sonde SQL ne
+l'aurait vu : il fallait tenter une connexion.
+
+## Ce que la vraie création a prouvé
+
+Le compte A a été créé avec `user_metadata = {"role":"root"}`. Le trigger
+`on_auth_user_created` lui a posé **`restaurant`**, comme aux quatre autres.
+
+Le durcissement du 17/08 tient donc **sur le parcours réel**, et pas seulement
+sur une insertion SQL. C'est la preuve qui manquait.
+
+## Cinq sessions réelles
+
+`signInWithPassword`, mots de passe aléatoires et distincts, jamais affichés,
+effacés après usage.
+
+| Compte | Session | `auth.uid()` | `current_role()` |
+|---|---|---|---|
+| A | OK | `aaaa1111…` | `restaurant` |
+| B | OK | `bbbb2222…` | `restaurant` |
+| commercial | OK | `cccc3333…` | `sales` |
+| root | OK | `dddd4444…` | `root` |
+| sans rattachement | OK | `eeee5555…` | `restaurant` |
+
+## API directe, avec ces sessions
+
+| Rôle | profils | restos | jeux | contacts | crm |
+|---|---|---|---|---|---|
+| A | 1 | 1 | 1 | 1 | 0 |
+| B | 1 | 1 | 1 | 1 | 0 |
+| commercial | 1 | 1 | 1 | **0** | 2 |
+| root | 5 | 2 | 2 | 2 | 4 |
+| sans rattachement | 1 | **0** | **0** | **0** | **0** |
+
+### A contre B, par URL directe
+
+| Tentative | HTTP | État réel après |
+|---|---|---|
+| lire le resto de B | — | **0 ligne** |
+| lire le profil de B | — | **0 ligne** |
+| lire les contacts de B | — | **0 ligne** |
+| modifier le resto de B | `204` | nom toujours « Tenant B » |
+| supprimer le resto de B | `204` | **existe toujours** |
+| créer un restaurant | **`403`** | 0 intrus |
+| se promouvoir `root` | `204` | rôle toujours `restaurant` |
+
+### Le commercial contre le tenant B
+
+| Tentative | HTTP | État réel après |
+|---|---|---|
+| lire les notes de B | — | **0 ligne** |
+| lire les notes de A | — | 2 lignes ✓ |
+| modifier une note de B | `204` | **0 note piratée** |
+
+### Le compte sans rattachement
+
+Création de restaurant : **`403`**.
+
+## Le piège des `204`, confirmé une seconde fois
+
+Cinq tentatives ont reçu un code de **succès**. Aucune n'a rien modifié :
+PostgREST rend `204 No Content` pour une opération à zéro ligne, et la RLS
+les avait toutes filtrées.
+
+Compteurs après les cinq `204` : 2 restaurants, 4 notes, 0 intrus, rôle de A
+inchangé, resto de B intact.
+
+**Un contrôle qui lirait le code HTTP conclurait à cinq écritures réussies.**
+C'est la raison pour laquelle chaque sonde de ce dossier relève un compteur.
