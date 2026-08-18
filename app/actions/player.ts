@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from '@supabase/supabase-js'
+import { exigerRole } from '@/lib/securite/garde-action'
 
 // On utilise la Super Clé pour être sûr de tout récupérer sans blocage
 const supabaseAdmin = createClient(
@@ -47,7 +48,25 @@ export async function getPublicGameData(restaurantId: string) {
 }
 
 // 4. Enregistrer un gagnant (Quand le client valide le formulaire)
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  DOUBLON NON PROTÉGÉ — fermé
+ *
+ *  Cette fonction insère un gagnant directement, en `service_role` : ni
+ *  session, ni limite par IP, ni RPC. Telle quelle, c'est un distributeur de
+ *  tickets gagnants — pour le jeu et le lot de son choix, autant de fois qu'on
+ *  veut, sur le dos de n'importe quel restaurant.
+ *
+ *  La vraie inscription vit dans `register-winner.ts` : elle passe par la RPC
+ *  `register_win` et compte les tentatives par empreinte d'IP. C'est elle
+ *  qu'appelle `components/game/public-game-client.tsx`. Celle-ci n'a aucun
+ *  appelant (vérifié par symbole). On la ferme sans la supprimer.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
 export async function registerWinnerAction(gameId: string, prizeId: string, email: string, firstName: string) {
+    const g = await exigerRole(['restaurant', 'root'], 'gagnant.creation_directe')
+    if (!g.ok) throw new Error("Action indisponible.")
+
     const { error } = await supabaseAdmin
       .from('winners')
       .insert({

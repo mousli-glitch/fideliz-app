@@ -60,9 +60,7 @@ const PUBLIQUES = new Set(["play-game.ts", "register-winner.ts", "check-replay.t
  * séparée. Ce qui les tient fermés, c'est leur absence d'appelant — et c'est
  * précisément ce que le test suivant surveille.
  */
-const DORMANTS = new Set([
-  "admin.ts", "player.ts", "get-customers-page.ts", "get-winners-page.ts",
-]);
+const DORMANTS = new Set<string>([]);   // durcis sur cette branche : plus aucune dispense
 
 const fichiers = readdirSync(DOSSIER).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
 

@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@supabase/supabase-js"
+import { exigerRestaurantParSlug } from "@/lib/securite/garde-action"
 
 export type Cursor = { created_at: string; id: string } | null
 
@@ -17,6 +18,15 @@ export async function getWinnersPageAction(
   cursor: Cursor = null,
   limit: number = 50
 ) {
+  /* Les gagnants portent des noms et des numéros de ticket : lecture réservée
+   * au restaurant concerné (et à root). */
+  const garde = await exigerRestaurantParSlug(
+    restaurantSlugOrId,
+    ["restaurant", "root"],
+    "gagnants.lecture",
+  )
+  if (!garde.ok) return { success: false as const, message: "Restaurant introuvable." }
+
   try {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
