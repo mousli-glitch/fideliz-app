@@ -83,12 +83,37 @@ set local search_path = public, extensions;
 --
 -- Les restrictions réelles se font ensuite, par retrait ciblé.
 
+/*
+ * ─── Normaliser AVANT d'accorder ───
+ *
+ * Un `grant` de privilèges par défaut ne retire rien : il s'AJOUTE à ce qui
+ * préexiste. Une base vierge peut déjà porter un défaut plus large — mesuré :
+ * sur une branche neuve, `anon` et `authenticated` reçoivent les huit
+ * privilèges sur les tables de ce schéma.
+ *
+ * Sans retrait explicite, la baseline accordait donc cinq droits en croyant
+ * les définir, pendant que REFERENCES, TRIGGER et TRUNCATE restaient acquis.
+ * Résultat mesuré sur une reconstruction : 114 privilèges de plus qu'en
+ * production, dont TRUNCATE — que la RLS ne filtre pas.
+ *
+ * Le retrait rend le résultat déterministe quel que soit l'état de départ.
+ */
+alter default privileges in schema public
+  revoke all on tables from anon, authenticated;
 alter default privileges in schema public
   grant insert, select, update, delete, maintain on tables to anon, authenticated;
 alter default privileges in schema public
+  revoke all on tables from service_role;
+alter default privileges in schema public
   grant all on tables to service_role;
 alter default privileges in schema public
+  revoke all on sequences from anon, authenticated, service_role;
+alter default privileges in schema public
   grant usage, select, update on sequences to anon, authenticated, service_role;
+/* Les fonctions ne sont PAS normalisées par un retrait ici : l'EXECUTE par
+ * défaut à PUBLIC est global, et un retrait limité au schéma ne peut pas
+ * l'annuler. C'est le durcissement, en couche séparée, qui emploie la forme
+ * globale. Le noter plutôt que de poser un retrait qui n'aurait aucun effet. */
 alter default privileges in schema public
   grant execute on functions to anon, authenticated, service_role;
 
