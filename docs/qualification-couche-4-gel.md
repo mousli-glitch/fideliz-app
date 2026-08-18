@@ -154,25 +154,37 @@ n'est plus exploitable en pratique — signalé pour mémoire, pas changé.
 
 ## 1-2. Audit du candidat avant exécution
 
-**Relu intégralement** : `supabase/migrations/20260818160000_gel_de_bascule.sql`
-(candidat de `candidat/baseline-acl`, 286 lignes).
+**⚠ Section figée : photographie de l'audit initial du 18/08, AVANT les
+corrections des §0/§-1/§0bis/§7.** Le fichier s'appelait alors
+`gel_de_bascule.sql`, portait 7 tables et le mécanisme bidirectionnel à
+jeton décrit ci-dessous. Ce nom, ce compte de tables et ce jeton n'existent
+plus dans le dépôt — voir §-1 (jeton retiré), §3 (10 tables) et §7 (fencing
+ajouté) pour l'état actuel. Conservé ici tel quel pour la trace historique
+de la comparaison de designs, pas comme description du candidat retenu
+aujourd'hui.
+
+**Relu intégralement à l'époque** : `supabase/migrations/20260818160000_gel_de_bascule.sql`
+(candidat de `candidat/baseline-acl`, 286 lignes — depuis renommé
+`gel_source_fideliz.sql`, réécrit, 313 lignes).
 
 **Comparé à `candidat/gel-matrice`** (`20260818160000_gel_source_migration.sql`,
 120 lignes) : ce sont **deux designs différents**, pas une divergence de
 rédaction du même mécanisme.
 
-| | `candidat/gel-matrice` | `candidat/baseline-acl` (retenu) |
+| | `candidat/gel-matrice` | `candidat/baseline-acl` (retenu, à l'époque) |
 |---|---|---|
 | Table | `gel_migration` | `maintenance` |
-| Triggers | `aaa_gel_<table>` par table (préfixe alphabétique) | `gel_de_bascule` (même nom, 7 tables) |
-| Portée | SOURCE seule, lecture pour le migrateur | Bidirectionnel, avec laissez-passer par jeton pour le migrateur |
-| Contournement | Aucun — le migrateur n'écrit jamais côté source | Jeton `bascule.jeton` (SET LOCAL), empreinte SHA-256 stockée, jamais le jeton brut |
+| Triggers | `aaa_gel_<table>` par table (préfixe alphabétique) | `gel_de_bascule` (même nom, 7 tables à l'époque — 10 depuis, §3) |
+| Portée | SOURCE seule, lecture pour le migrateur | Bidirectionnel, avec laissez-passer par jeton pour le migrateur — **le jeton a depuis été retiré, §-1** |
+| Contournement | Aucun — le migrateur n'écrit jamais côté source | Jeton `bascule.jeton` (SET LOCAL), empreinte SHA-256 stockée, jamais le jeton brut — **supprimé le 19/08, §-1** |
 
 Le candidat de `gel-matrice` explicite lui-même qu'il ne gère PAS le cas où
 le migrateur doit écrire pendant le gel ("cette décision vaut pour la
 SOURCE... ne pas transposer"). Le candidat retenu résout précisément ce cas.
-**Conservé tel quel** — c'est le design le plus complet, pas un brouillon à
-remplacer.
+**Le design de la table `maintenance` a été conservé** — c'est le squelette
+le plus complet, pas un brouillon à remplacer — **mais pas son mécanisme de
+jeton**, retiré depuis (§-1) : ce dépôt ne gouverne que la source, où le
+migrateur n'a jamais besoin d'écrire, donc jamais besoin de contournement.
 
 ## 3. Couverture des tables gelées — 10 tables, inventaire nominatif complet
 
@@ -271,9 +283,17 @@ couches 1-2-3. Confirmé par l'application réussie sans erreur (§5).
 ## 5. Inactif par défaut
 
 `actif boolean not null default false` — confirmé par mesure directe après
-application (§5) : `actif = false`, `depuis = null`, `empreinte_jeton = null`.
+application (§ « Application, rollback, réapplication » ci-dessous) :
+`actif = false`, `depuis = null`. (`empreinte_jeton` : colonne de l'époque
+du mécanisme à jeton, retirée depuis — §-1 — n'existe plus dans le schéma
+actuel.)
 
 ## 6. Delta catalogue attendu, écrit avant application
+
+**⚠ Chiffres de l'audit initial du 18/08 (7 tables, avant §0bis/§7).** Pour
+l'état actuel (10 tables, `service_role` verrouillé, fencing `for share`),
+voir les empreintes de §7 (« Cycle d'empreinte complet », « Rollback
+versionné »).
 
 | Dimension | Avant | Delta attendu |
 |---|---|---|
@@ -289,7 +309,12 @@ application (§5) : `actif = false`, `depuis = null`, `empreinte_jeton = null`.
 | default_privileges | 4 | inchangé (aucun `alter default privileges` dans ce fichier) |
 | vues | 4 | inchangé |
 
-## Application, rollback, réapplication — mesuré
+## Application, rollback, réapplication — mesuré (audit initial, 7 tables)
+
+**⚠ Empreintes du 18/08, candidat à 7 tables, avant séparation/P0/fencing.**
+Gardées comme trace du tout premier cycle réussi. Pour l'état actuel (10
+tables), voir §7 « Rollback versionné — cycle complet rejoué avec le
+fichier exact ».
 
 | Étape | colonnes | fonctions | triggers | rls | acl_relations | acl_fonctions |
 |---|---|---|---|---|---|---|
@@ -432,13 +457,48 @@ apportée sur le mécanisme lui-même (`restaurants`, `crm_notes`).
 **Verdict : les scénarios mesurés passent tous. Le mécanisme corrigé
 résiste à la fenêtre MVCC qui faisait échouer le candidat d'origine.**
 
+### Rollback versionné — cycle complet rejoué avec le fichier exact
+
+`supabase/verifications/rollback-gel-source-fideliz.sql` (nouveau,
+idempotent — `if exists` partout, une seule transaction, ne touche que
+les 10 triggers/3 fonctions/1 table du gel). Rejoué intégralement sur
+`fusion-tests-2`, à partir de l'état déjà corrigé (P0 service_role +
+fencing `for share`) :
+
+| Étape | colonnes | fonctions | triggers | rls | acl_relations | acl_fonctions |
+|---|---|---|---|---|---|---|
+| Avant rollback | 239/`249debac…` | 25/`9ba8790f…`\* | 35/`39c574bd…` | 17/`f9c98e60…` | 430/`23645b75…` | 86/`37fc897b…` |
+| Après CE rollback | 234/`742de13e…` | 22/`e6266426…` | 5/`db9da30c…` | 16/`0cea333d…` | 423/`de253aeb…` | 80/`1f6c087c…` |
+| Réapplication (fichier brut exact) | 239/`249debac…` ✅ | 25/`ee254233…`\* | 35/`39c574bd…` ✅ | 17/`f9c98e60…` ✅ | 430/`23645b75…` ✅ | 86/`37fc897b…` ✅ |
+
+\* **Écart trouvé et corrigé sur `fonctions` entre ces deux lignes** — pas
+un défaut du rollback : mon redéploiement isolé de `refuser_pendant_maintenance()`
+(juste après avoir écrit le correctif `for share`, avant ce cycle de
+rollback) avait omis, par ma propre main, le commentaire `/* 57014
+(query_canceled) est déjà pris... */` présent dans le fichier réellement
+versionné — un texte inerte, aucun effet d'exécution, mais un texte
+différent, donc un hash différent. Exactement le risque que le P0 du
+18/08 avait déjà signalé, retrouvé une seconde fois par moi-même plutôt
+que laissé passer. **Revérifié avec le fichier brut exact** (celui
+soumis pour ce rollback/réapplication, comprenant le commentaire) : la
+preuve `40001` rejouée une dernière fois contre cet état précis —
+`ecriture_ok: false`, `code_erreur: 40001`, `niveau_isolation: repeatable
+read`, `actif_au_debut: false` — identique aux résultats précédents. La
+correction elle-même n'a jamais été en cause ; seule l'empreinte de
+comparaison l'était, maintenant corrigée ci-dessus.
+
+**Correspondance exacte sur toutes les autres dimensions.** `actif =
+false`, `depuis = null`, `par = null` après réapplication — inactif par
+défaut, confirmé.
+
 ### Nettoyage de fin de cycle
 
 Toutes les fonctions `temoin_*` supprimées (confirmé : 0 restante),
 `alter role anon reset default_transaction_isolation` exécuté et vérifié
 (`rolconfig` ne porte plus que `statement_timeout=3s`, la valeur de
 plateforme), répertoire local des identifiants REST supprimé
-(`rm -rf`, confirmé absent), aucune connexion persistante à fermer
-(chaque appel `curl` est une requête HTTP unique, refermée par PostgREST
-lui-même). État final de `fusion-tests-2` : gel installé, `actif =
-false`, aucune donnée de test résiduelle.
+(`rm -rf`, confirmé absent) — répété deux fois, une par cycle de test —,
+aucune connexion persistante à fermer (chaque appel `curl` est une
+requête HTTP unique, refermée par PostgREST lui-même). État final de
+`fusion-tests-2` : gel installé, `actif = false`, aucune donnée de test
+résiduelle.

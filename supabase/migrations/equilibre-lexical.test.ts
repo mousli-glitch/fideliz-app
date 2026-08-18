@@ -29,21 +29,33 @@ import { fileURLToPath } from "node:url";
 // dollar-quote — où elles ne sont que du texte, pas des délimiteurs.
 //
 // Ne demande ni base ni secret : il lit le dépôt.
+//
+// Durci le 19/08/2026 : le déséquilibre des commentaires bloc n'est pas la
+// seule façon dont un fichier SQL peut mentir sur sa propre structure. Un
+// */ sans ouverture, une chaîne simple-quote, un identifiant double-quote,
+// ou une chaîne dollar-quote jamais refermée produisent le même symptôme —
+// tout ce qui suit change de sens sans erreur de syntaxe visible à l'oeil.
+// Le scanner détecte maintenant les quatre, avec la ligne où le jeton
+// fautif commence.
 
 export interface ResultatEquilibre {
   profondeurFinale: number;
   ouverturesNonFermees: number[];
+  erreurs: string[];
 }
 
 // Scanner lexical minimal mais correct : imbrication réelle des
 // commentaires bloc, et les chaînes ('...', "...", $tag$...$tag$) qui
 // neutralisent les délimiteurs de commentaire en dehors de tout
-// commentaire déjà ouvert.
+// commentaire déjà ouvert. Signale aussi tout jeton resté ouvert jusqu'à
+// la fin du fichier — chaîne, identifiant, dollar-quote — et tout */
+// rencontré sans ouverture correspondante.
 export function equilibreCommentairesBloc(sql: string): ResultatEquilibre {
   let i = 0;
   let ligne = 1;
   let profondeur = 0;
   const ouvertures: number[] = [];
+  const erreurs: string[] = [];
   const n = sql.length;
 
   const avancerLigne = (depuis: number, jusque: number) => {
@@ -75,31 +87,43 @@ export function equilibreCommentairesBloc(sql: string): ResultatEquilibre {
 
     // Profondeur 0 : les chaînes neutralisent /* et */ tant qu'on y est.
     if (c === "'") {
+      const ligneDebut = ligne;
       let j = i + 1;
+      let fermee = false;
       while (j < n) {
         if (sql[j] === "'") {
           if (sql[j + 1] === "'") { j += 2; continue; }
           j++;
+          fermee = true;
           break;
         }
         j++;
       }
       avancerLigne(i, j);
+      if (!fermee) {
+        erreurs.push(`chaîne simple-quote jamais refermée, ouverte ligne ${ligneDebut}`);
+      }
       i = j;
       continue;
     }
 
     if (c === '"') {
+      const ligneDebut = ligne;
       let j = i + 1;
+      let fermee = false;
       while (j < n) {
         if (sql[j] === '"') {
           if (sql[j + 1] === '"') { j += 2; continue; }
           j++;
+          fermee = true;
           break;
         }
         j++;
       }
       avancerLigne(i, j);
+      if (!fermee) {
+        erreurs.push(`identifiant double-quote jamais refermé, ouvert ligne ${ligneDebut}`);
+      }
       i = j;
       continue;
     }
@@ -107,11 +131,15 @@ export function equilibreCommentairesBloc(sql: string): ResultatEquilibre {
     if (c === "$") {
       const m = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/.exec(sql.slice(i));
       if (m) {
+        const ligneDebut = ligne;
         const tag = m[0];
         const debutContenu = i + tag.length;
         const fin = sql.indexOf(tag, debutContenu);
         const j = fin === -1 ? n : fin + tag.length;
         avancerLigne(i, j);
+        if (fin === -1) {
+          erreurs.push(`chaîne dollar-quote ${tag} jamais refermée, ouverte ligne ${ligneDebut}`);
+        }
         i = j;
         continue;
       }
@@ -131,11 +159,17 @@ export function equilibreCommentairesBloc(sql: string): ResultatEquilibre {
       continue;
     }
 
+    if (c === "*" && c2 === "/") {
+      erreurs.push(`*/ sans ouverture correspondante, ligne ${ligne}`);
+      i += 2;
+      continue;
+    }
+
     if (c === "\n") ligne++;
     i++;
   }
 
-  return { profondeurFinale: profondeur, ouverturesNonFermees: ouvertures };
+  return { profondeurFinale: profondeur, ouverturesNonFermees: ouvertures, erreurs };
 }
 
 const ICI = dirname(fileURLToPath(import.meta.url));
@@ -143,15 +177,16 @@ const fichiersMigration = readdirSync(ICI).filter((f) => f.endsWith(".sql"));
 
 describe("équilibre lexical — chaque migration referme tous ses commentaires bloc", () => {
   for (const nom of fichiersMigration) {
-    it(`${nom} : profondeur finale 0, aucune ouverture orpheline`, () => {
+    it(`${nom} : profondeur finale 0, aucune ouverture orpheline, aucune erreur lexicale`, () => {
       const sql = readFileSync(join(ICI, nom), "utf8");
-      const { profondeurFinale, ouverturesNonFermees } = equilibreCommentairesBloc(sql);
+      const { profondeurFinale, ouverturesNonFermees, erreurs } = equilibreCommentairesBloc(sql);
       expect(
         profondeurFinale,
         `${nom} : ${ouverturesNonFermees.length} commentaire(s) bloc jamais fermé(s), ` +
           `ouvert(s) ligne(s) ${ouverturesNonFermees.join(", ")}. Un */ manque.`,
       ).toBe(0);
       expect(ouverturesNonFermees).toEqual([]);
+      expect(erreurs, `${nom} : ${erreurs.join(" | ")}`).toEqual([]);
     });
   }
 
@@ -201,5 +236,57 @@ describe("équilibre lexical — chaque migration referme tous ses commentaires 
 
     const reel = equilibreCommentairesBloc(commeLeVrai);
     expect(reel.profondeurFinale).toBeGreaterThan(0);
+  });
+
+  it("le scanner détecte un */ sans ouverture (cas fabriqué)", () => {
+    const cassé = "select 1;\n*/\nselect 2;\n";
+    const r = equilibreCommentairesBloc(cassé);
+    expect(r.erreurs).toEqual(["*/ sans ouverture correspondante, ligne 2"]);
+  });
+
+  it("le scanner détecte une chaîne simple-quote jamais refermée (cas fabriqué)", () => {
+    const cassé = "select 1;\nselect 'texte jamais refermé;\nselect 2;\n";
+    const r = equilibreCommentairesBloc(cassé);
+    expect(r.erreurs).toEqual(["chaîne simple-quote jamais refermée, ouverte ligne 2"]);
+  });
+
+  it("le scanner accepte une chaîne simple-quote avec échappement '' correctement refermée (non-régression)", () => {
+    const propre = "select 'texte avec '' échappé, puis refermé';\n";
+    const r = equilibreCommentairesBloc(propre);
+    expect(r.erreurs).toEqual([]);
+  });
+
+  it("le scanner détecte un identifiant double-quote jamais refermé (cas fabriqué)", () => {
+    const cassé = 'select 1;\nselect * from "table_jamais_refermee;\nselect 2;\n';
+    const r = equilibreCommentairesBloc(cassé);
+    expect(r.erreurs).toEqual(["identifiant double-quote jamais refermé, ouvert ligne 2"]);
+  });
+
+  it("le scanner détecte une chaîne dollar-quote jamais refermée (cas fabriqué)", () => {
+    // Attention : le texte de test ne doit contenir aucune occurrence
+    // littérale de "$$" après l'ouverture, sinon le scanner la trouverait
+    // légitimement comme fermeture — même dans un commentaire descriptif.
+    const cassé = "create function f() returns text language sql as $$ select 'x';\n-- jamais refermee\n";
+    const r = equilibreCommentairesBloc(cassé);
+    expect(r.erreurs).toEqual(["chaîne dollar-quote $$ jamais refermée, ouverte ligne 1"]);
+  });
+
+  it("le scanner détecte une chaîne dollar-quote taguée ($corps$) jamais refermée (cas fabriqué)", () => {
+    const cassé = "create function f() returns text language sql as $corps$ select 'x';\n";
+    const r = equilibreCommentairesBloc(cassé);
+    expect(r.erreurs).toEqual(["chaîne dollar-quote $corps$ jamais refermée, ouverte ligne 1"]);
+  });
+
+  it("un fichier par ailleurs propre ne déclenche aucune des quatre erreurs (non-régression)", () => {
+    const propre = [
+      "create table t (id int, nom text);",
+      "comment on table t is 'un texte avec un */ dedans, inoffensif';",
+      "create function f() returns void language sql as $$",
+      "  select \"colonne entre guillemets\" from t;",
+      "$$;",
+    ].join("\n");
+    const r = equilibreCommentairesBloc(propre);
+    expect(r.erreurs).toEqual([]);
+    expect(r.profondeurFinale).toBe(0);
   });
 });
