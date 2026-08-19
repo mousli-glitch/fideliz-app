@@ -24,7 +24,7 @@ compilait pas alors que je le déclarais prouvé) ; elle est désormais tenue.
 | Paquet hotfix | fichiers **livrés** exécutés : préimage ↔ postimage | `harnais-hotfix.test.ts` |
 | Lecteurs monétaires (lot 3) | 24/24 avec le correctif, **5/24 sans lui** ; aller-retour migration ↔ rollback par empreinte | `harnais-lecteurs-monetaires.sql`, `lecteurs-monetaires.test.ts` |
 
-**751 tests** (20 fichiers), `tsc --noEmit` code 0, `npm run build` vert.
+**797 tests** (21 fichiers), `tsc --noEmit` code 0, `npm run build` vert.
 
 ## Préparé, non appliqué
 
@@ -63,13 +63,39 @@ autres migrations `20260819*` restent sur la branche synthétique.
 
 | Lot | Contenu | Pourquoi ce n'est pas fait |
 |---|---|---|
-| 4 | matrice de conservation fonctionnelle | — |
 | 5 | audit `service_role` exhaustif | partiellement fait (`docs/inventaire-destructif.md`) |
 | 6 | compatibilité interfaces, affichage monétaire, marque | — |
 | 7 | migrateur complet rejouable | le dry-run existe et est idempotent ; le reste non |
 | 8 | répétition du gel | scripts prêts, non rejoués en séquence complète |
 | 9 | répétition générale synthétique de bout en bout | — |
 | 10 | dossier `READY_FOR_MIGRATION` | — |
+
+## Lot 4 — la matrice de conservation, écrite avec ses trous
+
+`docs/matrice-conservation-fonctionnelle.md`. Une ligne par fonction, quatre
+niveaux dont un seul est une preuve : **PROUVÉ**, **SOUS TÉMOIN**, **ANALYSÉ**,
+**RIEN**.
+
+Le témoin de non-régression existe déjà côté Cartiz (`npm run qr:verifier`,
+171 contrôles) et couvre les cinq parcours dont les QR sont imprimés. Il n'a
+pas été reconstruit. Vérifié au passage : le lot 3 n'a cassé aucune de ses
+assertions.
+
+**Cinq trous nommés**, mesurés et non déduits :
+
+1. le Storage n'est sous aucun témoin côté Fideliz — alors que **9 jeux sur 9**
+   et **4 logos sur 4** en dépendent ;
+2. **aucun jeu 100 %-gagnant n'existe** en production : la conservation de ce
+   cas ne peut être prouvée que sur fixture synthétique ;
+3. les **1 513 avis** n'ont aucun témoin de lecture applicative ;
+4. `pg_cron` est **présente en production et absente du banc** ; et l'état
+   actuel porte une dette — **trois tâches d'archivage identiques à la même
+   minute**, une quatrième dix minutes plus tard ;
+5. les 4 tables de sauvegarde (133 lignes) attendent une décision de Samy.
+
+⚠️ Le témoin n'a **pas** été lancé le 19/08 : une boucle de requêtes avait
+déclenché le pare-feu Vercel sur mon adresse. C'est la première chose à faire
+à la reprise.
 
 ## Lot 3 — les lecteurs monétaires, fermé et prouvé
 
@@ -108,10 +134,13 @@ touchée (vérifié par empreinte dans chaque transaction).
 **Ce qui est acquis :** chaque ticket émis depuis ce commit porte sa condition
 figée, correctement calculée.
 
-**Ce qui ne l'est pas encore :** le scanner affiche toujours « Aucun » sur un
-minimum décimal — cet écran lit le code déployé. Il faut déployer le code du
-lot 3 (`bbef844`) pour que l'interface suive. L'ordre est désormais dans le bon
-sens : la base est en avance sur le code.
+**Le code a suivi le même jour**, par un commit isolé construit depuis
+`origin/main` — jamais en fusionnant `candidat/baseline-acl`, qui appelle six
+RPC absentes de production et casserait la création et la modification d'un
+jeu. Commit `f655267`, onze fichiers, aucune dépendance ajoutée.
+
+Puis `e14ba98`, qui ferme l'interrupteur « Minimum de commande » : l'éteindre
+masquait le champ et laissait le montant en base.
 
 Trace : `deploiement/lot-3-lecteurs-monetaires/APPLICATION-PRODUCTION.md`.
 
