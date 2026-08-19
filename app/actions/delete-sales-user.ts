@@ -45,7 +45,7 @@ export async function deleteSalesUserAction(userId: string) {
       { cible: userId, idempotent: !!r.idempotent },
     )
 
-    return { success: true, idempotent: r.idempotent }
+    return { success: true, idempotent: r.idempotent, avertissement: r.avertissement }
   } catch (err: any) {
     console.error("🚨 deleteSalesUserAction:", err)
     return { success: false, error: err.message }

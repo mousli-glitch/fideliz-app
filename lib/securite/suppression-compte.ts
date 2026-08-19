@@ -113,7 +113,7 @@ export type ResultatSuppression =
    * déjà fait » le peut ; celui qui n'en a pas besoin lit `success` comme
    * avant.
    */
-  | { success: true; idempotent?: boolean }
+  | { success: true; idempotent?: boolean; avertissement?: string }
   | { success: false; error: string; ambigu?: false }
   /*
    * État distinct, et non un échec ordinaire : l'appel Auth a échoué ET la
@@ -145,6 +145,7 @@ type ClientAdmin = SupabaseClient<any, any, any, any, any>;
 export async function supprimerCompteEtReattribuer(
   admin: ClientAdmin,
   userId: string,
+  demandeur?: string | null,
 ): Promise<ResultatSuppression> {
   if (!userId) return { success: false, error: "ID utilisateur manquant." };
 
@@ -207,21 +208,73 @@ export async function supprimerCompteEtReattribuer(
   }
   const root = heritier.rootId;
 
+  /*
+   * 0. LA FENÊTRE. Voir `20260819020000_fenetre_de_suppression_compte.sql`.
+   *
+   * Poser le marqueur ne suffit pas : une transaction d'écriture déjà
+   * ouverte, dont le trigger a lu le marqueur avant qu'il n'existe, pourrait
+   * committer un rattachement APRÈS nos réattributions — et la cascade
+   * l'emporterait. L'appel ci-dessous pose le marqueur ET prend un verrou
+   * exclusif sur `restaurants` dans la même transaction : à sa sortie, les
+   * écritures en vol sont terminées (donc visibles des réattributions) et
+   * les suivantes voient le marqueur (donc sont refusées).
+   *
+   * L'échec est un refus : sans la fenêtre, l'ordre séquentiel de ce fichier
+   * est la seule protection, et il n'en est pas une.
+   */
+  const { error: eFenetre } = await admin.rpc("ouvrir_fenetre_suppression", {
+    p_user_id: userId,
+    p_demandeur: demandeur ?? null,
+  });
+  if (eFenetre) {
+    return {
+      success: false,
+      error:
+        "Impossible d'ouvrir la fenêtre de suppression : " + eFenetre.message +
+        " — aucune mutation n'a été tentée.",
+    };
+  }
+
+  // Toute sortie après ce point referme la fenêtre, SAUF quand l'issue est
+  // indéterminée : là, le marqueur doit rester, il protège un compte dont on
+  // ne sait pas s'il va disparaître.
+  const echouer = async (error: string): Promise<ResultatSuppression> => {
+    await admin.rpc("fermer_fenetre_suppression", { p_user_id: userId });
+    return { success: false, error };
+  };
+
+  /*
+   * Sur succès, la fermeture ne doit pas transformer un compte supprimé en
+   * échec — mais elle ne doit pas non plus disparaître en silence : un
+   * marqueur resté en place interdit tout rattachement futur à cet
+   * identifiant. On le dit.
+   */
+  const terminer = async (r: { success: true; idempotent?: boolean }): Promise<ResultatSuppression> => {
+    const { error } = await admin.rpc("fermer_fenetre_suppression", { p_user_id: userId });
+    if (!error) return r;
+    return {
+      ...r,
+      avertissement:
+        "Compte supprimé, mais la fenêtre de suppression n'a pas pu être refermée : " +
+        error.message + " — retirer la ligne de `comptes_en_suppression` à la main.",
+    };
+  };
+
   // 1. Restaurants APPORTÉS par la cible -> créateur = root.
   const { error: eCreateur } = await admin
     .from("restaurants").update({ created_by: root }).eq("created_by", userId);
-  if (eCreateur) return { success: false, error: "Réattribution (créateur) échouée : " + eCreateur.message };
+  if (eCreateur) return echouer("Réattribution (créateur) échouée : " + eCreateur.message);
 
   // 2. Restaurants POSSÉDÉS par la cible -> propriété au root.
   const { error: eProprietaire } = await admin
     .from("restaurants").update({ owner_id: root }).eq("owner_id", userId);
-  if (eProprietaire) return { success: false, error: "Réattribution (propriétaire) échouée : " + eProprietaire.message };
+  if (eProprietaire) return echouer("Réattribution (propriétaire) échouée : " + eProprietaire.message);
 
   // 3. LE LIEN QUI CASCADE. Sans cette réattribution, la suppression Auth
   //    détruirait le restaurant et tout ce qui en dépend.
   const { error: eUserId } = await admin
     .from("restaurants").update({ user_id: root }).eq("user_id", userId);
-  if (eUserId) return { success: false, error: "Réattribution (user_id) échouée : " + eUserId.message };
+  if (eUserId) return echouer("Réattribution (user_id) échouée : " + eUserId.message);
 
   /*
    * 4. Portefeuille commercial.
@@ -236,7 +289,7 @@ export async function supprimerCompteEtReattribuer(
    */
   const { error: ePortefeuille } = await admin
     .from("sales_restaurants").delete().eq("sales_user_id", userId);
-  if (ePortefeuille) return { success: false, error: "Nettoyage du portefeuille échoué : " + ePortefeuille.message };
+  if (ePortefeuille) return echouer("Nettoyage du portefeuille échoué : " + ePortefeuille.message);
 
   /*
    * 5. Suppression Auth. Le profil part par cascade — volontairement, pour
@@ -255,21 +308,55 @@ export async function supprimerCompteEtReattribuer(
    * On ne suppose donc rien : on RELIT l'existence du compte, de façon
    * autoritative et bornée, et on distingue trois issues.
    */
+  /*
+   * 4bis. DERNIER CONTRÔLE AVANT L'IRRÉVERSIBLE.
+   *
+   * La fenêtre garantit qu'aucune référence nouvelle n'a pu apparaître. Ce
+   * contrôle ne la remplace pas : il vérifie que les réattributions ont
+   * effectivement vidé les trois colonnes. Une réattribution qui aurait
+   * silencieusement porté sur zéro ligne — filtre erroné, colonne renommée —
+   * ne se voit pas dans son `error`, elle se voit ici. Et ce qu'on y verrait,
+   * ce serait un restaurant sur le point d'être détruit.
+   */
+  const { count: restant, error: eRestant } = await admin
+    .from("restaurants")
+    .select("id", { count: "exact", head: true })
+    .or(`user_id.eq.${userId},owner_id.eq.${userId},created_by.eq.${userId}`);
+
+  if (eRestant || restant === null || restant === undefined) {
+    return echouer(
+      "Impossible de vérifier qu'aucun restaurant ne dépend encore du compte : " +
+        "suppression annulée avant l'irréversible.",
+    );
+  }
+  if (restant > 0) {
+    return echouer(
+      `${restant} restaurant(s) référencent encore ce compte après réattribution : ` +
+        "suppression annulée. La cascade en aurait détruit au moins un.",
+    );
+  }
+
   const { error: eAuth } = await admin.auth.admin.deleteUser(userId);
-  if (!eAuth) return { success: true };
+  if (!eAuth) return terminer({ success: true });
 
   const verdict = await relireExistenceAuth(admin, userId);
 
   if (verdict === "absent") {
     // Le serveur avait réussi ; l'erreur portait sur la réponse, pas sur
     // l'effet. L'état final visé est atteint : succès idempotent.
-    return { success: true };
+    return terminer({ success: true });
   }
   if (verdict === "present") {
     // Rien n'a été supprimé : échec franc, et l'action reste rejouable
     // puisque le profil est intact.
-    return { success: false, error: eAuth.message };
+    return echouer(eAuth.message);
   }
+  /*
+   * Issue indéterminée : la fenêtre reste OUVERTE, délibérément. On ne sait
+   * pas si le compte va disparaître ; rouvrir les rattachements maintenant
+   * reviendrait à autoriser qu'on accroche un restaurant à un compte
+   * peut-être condamné. Le marqueur se referme à la reprise.
+   */
   return {
     success: false,
     ambigu: true,

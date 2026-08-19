@@ -126,7 +126,7 @@ export async function masterDeleteUser(userId: string) {
       { cible: userId, idempotent: !!r.idempotent },
     )
 
-    return { success: true, idempotent: r.idempotent }
+    return { success: true, idempotent: r.idempotent, avertissement: r.avertissement }
   } catch (err: any) {
     console.error("Erreur MasterDelete:", err)
     return { success: false, error: err.message }

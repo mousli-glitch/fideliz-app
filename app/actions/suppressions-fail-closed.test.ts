@@ -60,6 +60,8 @@ let heritier: unknown = { ok: true, rootId: "root-synthetique" };
  */
 let relectureAuth: "present" | "absent" | "erreur" | "brut" = "present";
 let erreurBruteGetUser: Record<string, unknown> = {};
+/* Comptages rendus par un `select ... head:true`, par clé `table:select`. */
+let comptages: Record<string, number | null> = {};
 /* Ce que le préflight lit dans `profiles` pour la cible. */
 let profilCible: unknown = { etat: "present", role: "sales" };
 
@@ -69,7 +71,12 @@ function reponsePour(cle: string, payload?: unknown, predicat?: [string, unknown
   // La clé d'échec peut viser une colonne précise : `restaurants:update:user_id`.
   const colonne = payload && typeof payload === "object" ? Object.keys(payload as object)[0] : undefined;
   const e = echecs[colonne ? `${cle}:${colonne}` : cle] ?? echecs[cle];
-  return Promise.resolve({ data: e ? null : [], error: e ?? null });
+  return Promise.resolve({
+    data: e ? null : [],
+    // Par défaut 0 : après réattribution, plus rien ne référence la cible.
+    count: cle in comptages ? comptages[cle] : 0,
+    error: e ?? null,
+  });
 }
 
 /*
@@ -86,12 +93,25 @@ function clientSimule() {
       let predicat: [string, unknown] | undefined;
       chaine.update = (v: unknown) => { verbe = "update"; payload = v; return chaine; };
       chaine.delete = () => { verbe = "delete"; return chaine; };
-      chaine.select = () => chaine;
+      // `select` ne fixe le verbe que s'il ouvre la requête : `update(...).select()`
+      // reste un update.
+      chaine.select = () => { if (!verbe) verbe = "select"; return chaine; };
       chaine.eq = (col: string, val: unknown) => { predicat = [col, val]; return chaine; };
       chaine.is = (col: string, val: unknown) => { predicat = [col, val]; return chaine; };
+      chaine.or = (filtre: string) => { predicat = ["or", filtre]; return chaine; };
       chaine.then = (r: (v: unknown) => unknown) =>
         reponsePour(`${table}:${verbe}`, payload, predicat).then(r);
       return chaine;
+    },
+    /*
+     * Les deux fonctions de fenêtre. Elles encadrent la séquence : sans
+     * elles, l'ordre séquentiel du fichier serait la seule protection contre
+     * un rattachement concurrent, et ce n'en est pas une.
+     */
+    rpc: async (nom: string) => {
+      journal.push(`rpc:${nom}`);
+      const e = echecs[`rpc:${nom}`];
+      return { data: null, error: e ?? null };
     },
     auth: {
       admin: {
@@ -140,6 +160,7 @@ beforeEach(() => {
   heritier = { ok: true, rootId: "root-synthetique" };
   relectureAuth = "present";
   erreurBruteGetUser = {};
+  comptages = {};
   profilCible = { etat: "present", role: "sales" };
 });
 
@@ -238,11 +259,14 @@ describe("deleteSalesUserAction — arrêt avant chaque étape destructive", () 
     const r = await deleteSalesUserAction("cible");
     expect(r.success).toBe(true);
     expect(journal).toEqual([
+      "rpc:ouvrir_fenetre_suppression",   // marqueur + barrière, avant toute mutation
       "restaurants:update",   // created_by
       "restaurants:update",   // owner_id
       "restaurants:update",   // user_id — le lien qui CASCADE
       "sales_restaurants:delete",
+      "restaurants:select",   // dernier contrôle avant l'irréversible
       "auth:deleteUser",      // le profil part par cascade, volontairement
+      "rpc:fermer_fenetre_suppression",
     ]);
   });
 });
@@ -286,21 +310,27 @@ describe("masterDeleteUser — arrêt avant chaque étape destructive", () => {
     const r = await masterDeleteUser("cible");
     expect(r.success).toBe(true);
     expect(journal).toEqual([
+      "rpc:ouvrir_fenetre_suppression",   // marqueur + barrière, avant toute mutation
       "restaurants:update",   // created_by
       "restaurants:update",   // owner_id
       "restaurants:update",   // user_id — le lien qui CASCADE
       "sales_restaurants:delete",
+      "restaurants:select",   // dernier contrôle avant l'irréversible
       "auth:deleteUser",      // le profil part par cascade, volontairement
+      "rpc:fermer_fenetre_suppression",
     ]);
   });
 });
 
 const SEQUENCE_NOMINALE = [
+  "rpc:ouvrir_fenetre_suppression",   // marqueur + barrière, AVANT toute mutation
   "restaurants:update",   // created_by
   "restaurants:update",   // owner_id
   "restaurants:update",   // user_id — le lien qui CASCADE vers auth.users
   "sales_restaurants:delete",
+  "restaurants:select",   // dernier contrôle : plus aucune référence à la cible
   "auth:deleteUser",      // le profil part par cascade, volontairement
+  "rpc:fermer_fenetre_suppression",
 ];
 
 describe("rejeu après échec partiel — y compris le cas le plus tardif", () => {
@@ -529,5 +559,117 @@ describe("relecture d'existence : seuls les signaux structurés concluent", () =
     erreurBruteGetUser = { status: 500, message: "Not Found (upstream)" };
     const r = await masterDeleteUser("cible");
     expect(r.success, "une panne ne doit pas devenir un succès").toBe(false);
+  });
+});
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LA FENÊTRE — l'ordre séquentiel du fichier n'est pas une protection
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Entre la dernière réattribution et l'appel Auth, rien n'empêchait une autre
+ * session de rattacher un restaurant au compte visé : la cascade l'aurait
+ * emporté. La barrière SQL (`ouvrir_fenetre_suppression`) ferme cet
+ * intervalle ; ces tests vérifient que le code l'utilise vraiment, au bon
+ * moment, et qu'il refuse quand elle manque.
+ */
+describe("fenêtre de suppression : ouverte avant, refermée après", () => {
+  it("elle s'ouvre AVANT la première réattribution", async () => {
+    await masterDeleteUser("cible");
+    expect(journal.indexOf("rpc:ouvrir_fenetre_suppression")).toBeLessThan(
+      journal.indexOf("restaurants:update"),
+    );
+  });
+
+  it("fenêtre impossible à ouvrir : aucune mutation n'est tentée", async () => {
+    // Sans barrière, la séquence n'a plus aucune protection : elle refuse.
+    echecs["rpc:ouvrir_fenetre_suppression"] = { message: "fonction absente" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal).toEqual(["rpc:ouvrir_fenetre_suppression"]);
+  });
+
+  it("échec d'une réattribution : la fenêtre est refermée, pas laissée ouverte", async () => {
+    echecs["restaurants:update:user_id"] = { message: "panne" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal, "un marqueur oublié bloquerait tout rattachement futur").toContain(
+      "rpc:fermer_fenetre_suppression",
+    );
+    expect(journal).not.toContain("auth:deleteUser");
+  });
+
+  it("issue Auth INDÉTERMINÉE : la fenêtre reste OUVERTE, délibérément", async () => {
+    // On ne sait pas si le compte va disparaître : rouvrir les rattachements
+    // maintenant reviendrait à autoriser qu'on accroche un restaurant à un
+    // compte peut-être condamné.
+    echecs["auth:deleteUser"] = { message: "coupure" };
+    relectureAuth = "erreur";
+    const r = await masterDeleteUser("cible");
+    expect((r as { etat?: string }).etat).toBe("AUTH_OUTCOME_AMBIGUOUS");
+    expect(journal).not.toContain("rpc:fermer_fenetre_suppression");
+  });
+
+  it("échec Auth franc (compte encore présent) : la fenêtre est refermée", async () => {
+    echecs["auth:deleteUser"] = { message: "panne" };
+    relectureAuth = "present";
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal).toContain("rpc:fermer_fenetre_suppression");
+  });
+
+  it("fermeture en échec après succès : succès conservé, mais dit", async () => {
+    echecs["rpc:fermer_fenetre_suppression"] = { message: "panne" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success, "un marqueur non retiré n'annule pas la suppression").toBe(true);
+    expect((r as { avertissement?: string }).avertissement).toBeTruthy();
+  });
+
+  it("la convergence idempotente n'ouvre aucune fenêtre", async () => {
+    profilCible = { etat: "absent" };
+    relectureAuth = "absent";
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(true);
+    expect(journal).not.toContain("rpc:ouvrir_fenetre_suppression");
+  });
+});
+
+/*
+ * ─── LE DERNIER CONTRÔLE AVANT L'IRRÉVERSIBLE ───
+ *
+ * Une réattribution qui porte silencieusement sur zéro ligne — filtre erroné,
+ * colonne renommée — ne se voit pas dans son `error`. Elle se voit ici, et ce
+ * qu'on y verrait serait un restaurant sur le point d'être détruit.
+ */
+describe("dernier contrôle : plus aucune référence à la cible", () => {
+  it("il reste une référence : la suppression Auth n'a PAS lieu", async () => {
+    comptages["restaurants:select"] = 2;
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal, "la cascade en aurait détruit au moins un").not.toContain("auth:deleteUser");
+    expect(journal).toContain("rpc:fermer_fenetre_suppression");
+  });
+
+  it("le contrôle lui-même échoue : on n'y va pas non plus", async () => {
+    echecs["restaurants:select"] = { message: "panne" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal).not.toContain("auth:deleteUser");
+  });
+
+  it("comptage indisponible (null) : refus, jamais un « donc zéro »", async () => {
+    comptages["restaurants:select"] = null;
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal).not.toContain("auth:deleteUser");
+  });
+
+  it("il vise les TROIS colonnes, pas seulement celle qui cascade", async () => {
+    await masterDeleteUser("cible");
+    const controle = operations.find((o) => o.cle === "restaurants:select");
+    const filtre = String(controle?.predicat?.[1] ?? "");
+    for (const colonne of ["user_id", "owner_id", "created_by"]) {
+      expect(filtre, `${colonne} doit entrer dans le contrôle`).toContain(colonne);
+    }
   });
 });

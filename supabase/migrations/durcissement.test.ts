@@ -427,6 +427,21 @@ describe("gel source Fideliz — inventaire exhaustif des tables, aucun angle mo
   });
 
   it("aucune table créée par une migration n'échappe aux deux camps (gelée ou exclue documentée)", () => {
+    /*
+     * Troisième voie de classification, ajoutée le 19/08/2026.
+     *
+     * Jusqu'ici une table ne pouvait être déclarée hors gel qu'en la
+     * nommant dans l'inventaire du FICHIER GEL. C'était une impasse : toute
+     * migration ultérieure devait rouvrir une couche déjà appliquée et
+     * qualifiée, juste pour y ajouter une phrase — donc en changer le
+     * contenu, donc en invalider l'empreinte.
+     *
+     * Une migration peut désormais justifier ELLE-MÊME l'exclusion de la
+     * table qu'elle crée, par un bloc `HORS GEL` qui la nomme. C'est plus
+     * strict, pas moins : la justification vit à l'endroit exact où la
+     * décision est prise, et une table créée sans un mot d'explication reste
+     * un échec.
+     */
     const connues = new Set([...TABLES_GELEES, ...TABLES_EXCLUES_DOCUMENTEES]);
     const nonClassees = new Set<string>();
     for (const m of migrations) {
@@ -436,12 +451,16 @@ describe("gel source Fideliz — inventaire exhaustif des tables, aucun angle mo
       );
       for (const match of matches) {
         const table = match[1].toLowerCase();
-        if (!connues.has(table)) nonClassees.add(table);
+        if (connues.has(table)) continue;
+        // La migration qui crée la table doit porter sa justification.
+        const justifiee =
+          /HORS GEL/i.test(m.sql) && new RegExp("`" + table + "`").test(m.sql);
+        if (!justifiee) nonClassees.add(table);
       }
     }
     expect(
       Array.from(nonClassees),
-      "table(s) créée(s) par une migration mais absente(s) des deux listes de classification (gelée / exclue documentée) — mettre à jour le fichier gel et ce test",
+      "table(s) créée(s) par une migration sans classification : ni gelée, ni nommée dans l'inventaire du fichier gel, ni justifiée par un bloc `HORS GEL` dans sa propre migration",
     ).toEqual([]);
   });
 });
