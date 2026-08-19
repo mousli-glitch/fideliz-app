@@ -98,7 +98,24 @@ Trois acquis en plus du calcul :
   s'écrivent plus pareil. L'ancien scanner affichait « Aucun » dans les deux
   cas — la même faute que le `else 0`, déplacée dans l'interface.
 
-### Paquet d'application production — prêt, non joué
+### Appliqué en production le 19 août 2026
+
+Le paquet a été joué : préflight `ETAPES 2 ET 3 REQUISES`, étapes 2 et 3
+commitées, contrôles post `CONTROLE OK`. Empreintes `bd472a31…` → `9e7af73a…`
+et `32a32389…` → `2ae951e4…`, isolation lot/jeu intacte, aucune donnée métier
+touchée (vérifié par empreinte dans chaque transaction).
+
+**Ce qui est acquis :** chaque ticket émis depuis ce commit porte sa condition
+figée, correctement calculée.
+
+**Ce qui ne l'est pas encore :** le scanner affiche toujours « Aucun » sur un
+minimum décimal — cet écran lit le code déployé. Il faut déployer le code du
+lot 3 (`bbef844`) pour que l'interface suive. L'ordre est désormais dans le bon
+sens : la base est en avance sur le code.
+
+Trace : `deploiement/lot-3-lecteurs-monetaires/APPLICATION-PRODUCTION.md`.
+
+### Le paquet lui-même
 
 `deploiement/lot-3-lecteurs-monetaires/` : quatre étapes plus un retour
 arrière, chacune exécutée en répétition générale sur la branche synthétique
