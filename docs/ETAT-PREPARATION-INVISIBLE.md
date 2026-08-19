@@ -98,6 +98,23 @@ Trois acquis en plus du calcul :
   s'écrivent plus pareil. L'ancien scanner affichait « Aucun » dans les deux
   cas — la même faute que le `else 0`, déplacée dans l'interface.
 
+### Paquet d'application production — prêt, non joué
+
+`deploiement/lot-3-lecteurs-monetaires/` : quatre étapes plus un retour
+arrière, chacune exécutée en répétition générale sur la branche synthétique
+replacée dans la forme exacte de la production. Les trois verdicts du préflight
+ont été observés.
+
+Le paquet est **généré** (`generer.mjs` versionné) et un test compare les
+fichiers livrés à ce que le générateur produit : le paquet ne peut pas dériver
+des migrations qu'il embarque.
+
+Deux points que le README dit sans détour : cette application est **nécessaire
+mais pas suffisante** — le scanner continuera d'afficher « Aucun » jusqu'au
+déploiement du code ; et le rollback de l'étape 2 **supprime les colonnes**,
+donc les conditions figées de tous les tickets émis depuis (il est hors du
+paquet, voir `DANGER-retour-arriere-contrat.md`).
+
 ### Point ouvert, mineur
 
 La grammaire accepte `« 999999,99 »` → 99 999 999 centimes, au-dessus de la
