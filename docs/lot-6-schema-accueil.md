@@ -296,7 +296,7 @@ Une ligne, une question fermée, une recommandation. Ce sont des **règles produ
 
 **Schéma et identité**
 
-- **P-1** — Le gérant s'appelle-t-il `restaurateur` partout après fusion (et les 7 comptes `restaurant` sont-ils réécrits) ? → **Recommandé : oui.** Cartiz est la cible, 5 prédicats SQL vivants testent `restaurateur` en dur, et le renommage inverse coûterait la convention appliquée par tout le module fidélité depuis `011`.
+- **P-1 ✅ TRANCHÉE le 19/08/2026 — `restaurateur` partout, les 7 comptes sont réécrits.** Surface et plan : `p1-restaurateur-partout.md`. *(recommandation d'origine : oui)* Cartiz est la cible, 5 prédicats SQL vivants testent `restaurateur` en dur, et le renommage inverse coûterait la convention appliquée par tout le module fidélité depuis `011`.
 - **P-2** — Conserve-t-on `is_active` sur `profiles` (donc le pouvoir de couper un compte sans le détruire) ? → **Recommandé : oui, migration additive.** Cartiz n'a **aucun** mécanisme équivalent ; sans elle, sept lecteurs Fideliz passent au vert et tout compte désactivé redevient actif.
 - **P-3** — Conserve-t-on `is_blocked` sur `restaurants`, **et** branche-t-on les policies publiques dessus ? → **Recommandé : oui pour la colonne, oui pour les policies — sauf `/m/<slug>`, `/c/<serial>` et `/verify/<uuid>`, jamais coupés** (voir P-11).
 - **P-4** — Pour best-pizza, quel compte survit — celui qui a réellement servi, l'autre étant supprimé après versement ? → **Recommandé : oui, le compte utilisé survit**, par cohérence avec l'arbitrage la-ruche. À écrire dans un **fichier de correspondance des comptes** au même niveau d'autorité que celui des restaurants ; sans lui l'opérateur tranchera dans l'instant.

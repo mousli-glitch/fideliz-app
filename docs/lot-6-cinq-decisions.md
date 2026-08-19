@@ -36,7 +36,7 @@ flyers distribués.
 
 ---
 
-## 2 · P-1 — Le gérant s'appelle-t-il `restaurateur` partout ?
+## 2 · P-1 — Le gérant s'appelle-t-il `restaurateur` partout ?  ✅ TRANCHÉE
 
 **La question.** Un seul vocabulaire de rôle après fusion. Lequel ?
 
@@ -59,7 +59,11 @@ prédicats SQL vivants y testent cette valeur en dur, et le renommage inverse
 coûterait la convention de tout le module fidélité.
 
 **Coût de se tromper.** Silencieux et total : un restaurateur connecté, valide,
-qui ne voit rien. `lib/securite/garde-action.ts:39` refuse tout rôle inconnu —
+qui ne voit rien.
+
+> **Tranchée par Samy le 19/08/2026 : `restaurateur` partout.** Surface mesurée
+> et plan dans `p1-restaurateur-partout.md` — 54 sites TypeScript et 9 objets
+> vivants en base. Le vrai écrivain du rôle est un déclencheur, pas le code. `lib/securite/garde-action.ts:39` refuse tout rôle inconnu —
 c'est du fail-closed, donc ça ne casse pas bruyamment, ça ferme.
 
 ---
