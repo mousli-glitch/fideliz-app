@@ -180,8 +180,22 @@ export async function updateGameAction(gameId: string, data: any) {
         active_action: data.form?.active_action,
         action_url: data.form?.action_url,
         validity_days: data.form?.validity_days,
-        // BRUT : c'est la base qui valide, et qui refuse.
-        min_spend: brut(data.form?.min_spend),
+        /*
+         * L'interrupteur « Minimum de commande » ÉTEINT retire la condition.
+         *
+         * Sans cette ligne, éteindre l'interrupteur sur une fiche existante
+         * masquait le champ à l'écran et laissait le montant en base : le
+         * restaurateur croyait avoir retiré la condition, son client se la
+         * voyait encore opposée en caisse.
+         *
+         * `=== false` et non `!` : un champ ABSENT n'est pas un refus, et
+         * transformer une information manquante en décision métier est
+         * exactement le défaut que le contrat monétaire ferme par ailleurs.
+         *
+         * « 0 » plutôt que la chaîne vide : c'est un « aucun minimum »
+         * EXPLICITE, que la grammaire stricte accepte sans ambiguïté.
+         */
+        min_spend: data.form?.has_min_spend === false ? '0' : brut(data.form?.min_spend),
         is_date_limit_active: !!data.form?.is_date_limit_active,
         start_date: data.form?.is_date_limit_active && data.form?.start_date
           ? new Date(data.form.start_date).toISOString() : null,

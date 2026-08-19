@@ -388,3 +388,62 @@ describe("whitelist restaurant : omission, null explicite et valeur", () => {
     expect(Object.keys(appelRpc()?.p_restaurant ?? {})).toEqual(["primary_color"]);
   });
 });
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ÉTEINDRE L'INTERRUPTEUR RETIRE LA CONDITION
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * La fiche d'édition envoie `form` tel quel, interrupteur compris — et
+ * l'action ne lisait QUE `min_spend`. Éteindre « Minimum de commande »
+ * masquait le champ à l'écran et LAISSAIT le montant partir en base.
+ *
+ * Le restaurateur croyait avoir retiré la condition ; son client se la voyait
+ * encore opposée en caisse. La fiche de CRÉATION, elle, tranchait déjà au
+ * moment de l'appel : la règle vivait dans une page et pas dans l'autre.
+ */
+describe("l'interrupteur du minimum d'achat", () => {
+  it("éteint : la condition est réellement retirée", async () => {
+    await updateGameAction("jeu-1", {
+      ...CHARGE,
+      form: { ...CHARGE.form, min_spend: "5,90", has_min_spend: false },
+    });
+    expect(appelRpc()?.p_jeu.min_spend).toBe("0");
+  });
+
+  it("éteint : quelle que soit la valeur restée dans le champ", async () => {
+    for (const saisie of ["5,90", "12", "abc", 10]) {
+      journal = [];
+      await updateGameAction("jeu-1", {
+        ...CHARGE,
+        form: { ...CHARGE.form, min_spend: saisie, has_min_spend: false },
+      });
+      expect(appelRpc()?.p_jeu.min_spend).toBe("0");
+    }
+  });
+
+  it("allumé : la saisie passe telle quelle, comme avant", async () => {
+    await updateGameAction("jeu-1", {
+      ...CHARGE,
+      form: { ...CHARGE.form, min_spend: "5,90", has_min_spend: true },
+    });
+    expect(appelRpc()?.p_jeu.min_spend).toBe("5,90");
+  });
+
+  /*
+   * L'INFORMATION ABSENTE N'EST PAS UNE DÉCISION. `!has_min_spend` aurait mis
+   * le montant à zéro dès que le champ manque — le même `else 0` que le
+   * contrat monétaire ferme par ailleurs, réintroduit par la porte de service.
+   */
+  it("champ absent : rien n'est décidé, la saisie passe telle quelle", async () => {
+    for (const absent of [undefined, null, 0, ""]) {
+      journal = [];
+      await updateGameAction("jeu-1", {
+        ...CHARGE,
+        form: { ...CHARGE.form, min_spend: "5,90", has_min_spend: absent },
+      });
+      expect(appelRpc()?.p_jeu.min_spend).toBe("5,90");
+    }
+  });
+});
+
