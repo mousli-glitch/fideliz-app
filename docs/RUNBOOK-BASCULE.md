@@ -64,13 +64,41 @@ Aucune de ces étapes ne touche la production.
 | 2.5 | **Rejouer 2.4 à l'identique** | mêmes comptes, aucune ligne en double — **c'est R4** |
 | 2.6 | `comptes.ts --appliquer` vers le banc | 3 opérations |
 | 2.7 | Rejouer la sonde R8 sur le banc chargé | vert |
-| 2.8 | Rejouer le témoin de conservation | **189/189** — R5. ⚠ `verifier.mjs` vise une application DÉPLOYÉE, et ses fixtures encodent les VRAIS identifiants de restaurant. Sur banc il faut lancer l'application en local (`BASE_CARTIZ=http://localhost:3000`) contre un banc portant ces identifiants et leurs `flyer_pages` |
+| 2.8 | Rejouer le témoin de conservation | **R5 — ACQUIS le 19/08 : 189/189, 0 rouge, en 19,2 s.** Recette éprouvée ci-dessous |
 | 2.9 | `supabase/tests/isolation-apres-versement.sql` | **R6 — ACQUIS le 19/08** : chaque gérant voit exactement le sien, le compte coupé rien, `anon` bloqué en 42501 |
 | 2.10 | Servir les menus depuis le banc | R7. **Le préalable est déjà prouvé** : `lib/fusion/surface-menu.test.ts` montre que les colonnes lues par le menu et celles écrites par le versement sont DISJOINTES, sauf `theme_json` dont la fusion est un no-op pour les deux clients |
 | 2.11 | Supprimer le banc | il coûte 0,013 $/h |
 
 **Point d'arrêt.** Si 2.5 crée des doublons, le migrateur n'est pas
 idempotent et la bascule est reportée. Aucune exception.
+
+### La recette de 2.8, éprouvée le 19/08/2026
+
+`verifier.mjs` vise une application DÉPLOYÉE et ses fixtures encodent les
+VRAIS identifiants de restaurant — les URL du Storage public en dépendent. Un
+banc synthétique ne peut pas y répondre. La recette :
+
+1. Ensemencer le banc avec les **vrais identifiants** de `best-pizza` et
+   `la-ruche`, leur `theme_json`, `vue_defaut`, `vue_premier`,
+   `horaires_actifs`, **et leurs 16 lignes `flyer_pages`** — positions
+   comprises, y compris le trou à la position 10 de la-ruche, que la fixture
+   documente comme un orphelin.
+2. Poser l'état d'après versement (les colonnes que le migrateur écrit).
+3. Lancer l'application en local **avec les variables du banc en surcharge** :
+   Next donne la priorité aux variables déjà présentes dans l'environnement,
+   même quand `.env.local` existe.
+
+       NEXT_PUBLIC_SUPABASE_URL=… NEXT_PUBLIC_SUPABASE_ANON_KEY=… npm run dev
+
+4. **Vérifier que l'application lit bien le banc**, et non la production.
+   Le discriminant : `/m/chez-samy` doit répondre **404** — ce restaurant
+   existe en production, pas sur le banc. S'il répond 200, le témoin
+   mesurerait la production et son vert ne prouverait rien.
+5. `BASE_CARTIZ=http://localhost:3000 node scripts/non-regression/verifier.mjs`
+
+Résultat du 19/08 : **189 assertions vertes, 0 rouge**, dont « 4 pages de
+carte sont servies », « les pages s'affichent dans le bon ordre, aucune perdue
+ni ajoutée » et « chaque page garde son mode d'affichage ».
 
 ---
 
