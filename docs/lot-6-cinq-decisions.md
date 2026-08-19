@@ -68,7 +68,7 @@ c'est du fail-closed, donc ça ne casse pas bruyamment, ça ferme.
 
 ---
 
-## 3 · P-12 — L'habilitation prend-elle la forme d'une table `restaurant × module` ?
+## 3 · P-12 — L'habilitation prend-elle la forme d'une table `restaurant × module` ?  ✅ TRANCHÉE
 
 **La question.** Comment dit-on « ce restaurant a droit à ça » ?
 
