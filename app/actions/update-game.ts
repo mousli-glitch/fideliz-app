@@ -18,6 +18,22 @@ function normalizeAmount(value: any): string {
 }
 
 /*
+ * La saisie, TELLE QUELLE.
+ *
+ * Vide, absente ou nulle -> `null` (une absence reste une absence). Tout le
+ * reste part en chaîne, sans conversion : `Number("abc")` vaudrait `NaN`, que
+ * JSON sérialise en `null` — c'est-à-dire, pour un stock, « illimité ». Une
+ * conversion qui échoue produit une valeur, et une valeur ne ressemble pas à
+ * une erreur. La validation appartient à la base, qui refuse au lieu de
+ * deviner.
+ */
+function brut(v: unknown): string | null {
+  if (v === null || v === undefined) return null
+  const t = String(v).trim()
+  return t === "" ? null : t
+}
+
+/*
  * ═══════════════════════════════════════════════════════════════════════════
  *  ENREGISTRER UN JEU
  * ═══════════════════════════════════════════════════════════════════════════
@@ -55,11 +71,27 @@ function normalizeAmount(value: any): string {
  * requête : `data.restaurant_id` a servi à RÉSOUDRE, il ne sert plus à
  * décider.
  *
- * Le jeu et ses lots partent ensemble dans `enregistrer_jeu_et_lots`
- * (migration 20260819030000) : une seule transaction, le jeu verrouillé et
- * comparé au tenant, les lots validés avant écriture, le remplacement
- * atomique. Deux appels REST, si soigneux soient-ils, ne peuvent pas être
- * atomiques — c'est la seule forme qui ferme le défaut 3.
+ * Le design du restaurant, le jeu et ses lots partent ENSEMBLE dans
+ * `enregistrer_jeu_et_lots` (migrations 20260819030000 puis 20260819050000) :
+ * une seule transaction, le jeu verrouillé et comparé au tenant, les saisies
+ * validées BRUTES avant écriture, le remplacement atomique, et un nombre de
+ * lignes affectées exact à chaque étape. Deux appels REST, si soigneux
+ * soient-ils, ne peuvent pas être atomiques — c'est la seule forme qui ferme
+ * les défauts 2 et 3.
+ *
+ * ─── DEUX DÉFAUTS DE PLUS, SIGNALÉS AU TOUR SUIVANT ───
+ *
+ * 5. L'ACTION COMPLÈTE N'ÉTAIT TOUJOURS PAS ATOMIQUE. Le couple jeu+lots
+ *    l'était, mais le design du restaurant s'écrivait AVANT l'appel : un
+ *    refus rendait `success: false` alors que couleur et logo avaient déjà
+ *    changé. Décaler ce PATCH après l'appel n'aurait fait que déplacer l'état
+ *    partiel — les trois écritures partent donc ensemble, et seuls deux
+ *    champs du restaurant sont acceptés, par whitelist.
+ *
+ * 6. UNE SAISIE INVALIDE DEVENAIT UNE VALEUR MÉTIER VALIDE. `Number("abc")`
+ *    vaut `NaN`, que JSON sérialise en `null` — et pour `quantity`, `null`
+ *    signifie « stock illimité ». La validation n'était pas contournée : elle
+ *    n'avait plus rien à valider. Les saisies partent désormais BRUTES.
  */
 export async function updateGameAction(gameId: string, data: any) {
   const garde = await exigerRestaurantParSlug(
@@ -77,35 +109,41 @@ export async function updateGameAction(gameId: string, data: any) {
   const restaurantId = garde.restaurant.id
 
   try {
-    // 1. Design du restaurant — borné au tenant résolu, et son erreur est lue.
-    const { error: restoError } = await supabaseAdmin.from("restaurants").update({
-      primary_color: data.design?.primary_color,
-      logo_url: data.design?.logo_url,
-    }).eq("id", restaurantId)
-
-    if (restoError) {
-      return { success: false, error: "Erreur sauvegarde restaurant : " + restoError.message }
-    }
-
     /*
-     * 2. Le jeu ET ses lots, atomiquement.
+     * ─── UN SEUL ACTE ───
      *
-     * Les lots partent tels quels ; c'est la fonction qui valide libellés,
-     * poids et stocks, parce que c'est le seul endroit qu'aucune requête ne
-     * peut contourner.
+     * La version précédente écrivait le design du restaurant AVANT d'appeler
+     * la fonction. Un refus — un poids invalide, un total différent de 100 —
+     * rendait donc `success: false` alors que la couleur et le logo avaient
+     * déjà changé. Décaler ce PATCH après l'appel n'aurait fait que déplacer
+     * l'état partiel. Les trois écritures partent ensemble.
+     *
+     * ─── NE JAMAIS CONVERTIR AVANT DE VALIDER ───
+     *
+     * `Number("abc")` vaut `NaN`, et `JSON.stringify(NaN)` vaut `"null"`.
+     * Pour `quantity`, `null` signifie « stock illimité » : une saisie
+     * alphabétique arrivait donc en base sous la forme d'un lot parfaitement
+     * valide et sans limite. La validation n'était pas contournée — elle
+     * n'avait plus rien à valider, la valeur avait déjà été transformée.
+     *
+     * On transmet donc la saisie BRUTE, et c'est la fonction qui tranche.
      */
-    const lots = (Array.isArray(data.prizes) ? data.prizes : []).map((p: any) => {
-      // Stock : si la limite est active, on garde le nombre saisi ;
-      // vide/null = illimité (null), PAS 0.
-      const qty = data.form?.is_stock_limit_active
-        ? (p.quantity === null || p.quantity === undefined || p.quantity === "" ? null : Number(p.quantity))
-        : null
-      return { label: p.label, color: "#000000", weight: Number(p.weight), quantity: qty }
-    })
+    const lots = (Array.isArray(data.prizes) ? data.prizes : []).map((p: any) => ({
+      label: p?.label,
+      color: "#000000",
+      weight: brut(p?.weight),
+      // Limite de stock inactive : illimité, quoi qu'ait saisi le gérant.
+      quantity: data.form?.is_stock_limit_active ? brut(p?.quantity) : null,
+    }))
 
     const { error: eEnregistrement } = await supabaseAdmin.rpc("enregistrer_jeu_et_lots", {
       p_game_id: gameId,
       p_restaurant_id: restaurantId,
+      // Whitelist stricte : ces deux champs, pas un de plus.
+      p_restaurant: {
+        primary_color: data.design?.primary_color ?? null,
+        logo_url: data.design?.logo_url ?? null,
+      },
       p_jeu: {
         name: data.form?.name,
         active_action: data.form?.active_action,

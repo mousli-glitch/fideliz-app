@@ -91,7 +91,13 @@ beforeEach(() => {
 
 function appelRpc() {
   return journal.find((o) => o.cle === "rpc:enregistrer_jeu_et_lots")?.payload as
-    | { p_game_id: string; p_restaurant_id: string; p_jeu: Record<string, unknown>; p_lots: unknown[] }
+    | {
+        p_game_id: string
+        p_restaurant_id: string
+        p_jeu: Record<string, unknown>
+        p_lots: unknown[]
+        p_restaurant: Record<string, unknown>
+      }
     | undefined;
 }
 
@@ -109,10 +115,24 @@ describe("P0 : le tenant vient de la garde, jamais du corps de la requête", () 
     expect(appel?.p_restaurant_id, "sans tenant, le jeu d'un confrère passerait").toBeTruthy();
   });
 
-  it("le design du restaurant est borné au tenant résolu", async () => {
+  it("le design du restaurant part DANS l'appel, plus par un PATCH séparé", async () => {
+    /*
+     * Il s'écrivait AVANT l'appel : un refus rendait `success: false` alors
+     * que couleur et logo avaient déjà changé. Décaler après n'aurait fait
+     * que déplacer l'état partiel.
+     */
     await updateGameAction("jeu-1", { ...CHARGE, restaurant_id: "resto-annonce-par-le-navigateur" });
-    const maj = journal.find((o) => o.cle === "restaurants:update");
-    expect((maj?.payload as { cible?: string })?.cible).toBe("resto-autorise");
+    expect(journal.map((o) => o.cle), "aucune écriture hors de la transaction")
+      .not.toContain("restaurants:update");
+    expect(appelRpc()?.p_restaurant).toBeTruthy();
+  });
+
+  it("seuls DEUX champs du restaurant sont transmis — whitelist", async () => {
+    await updateGameAction("jeu-1", {
+      ...CHARGE,
+      design: { ...CHARGE.design, slug: "vole", is_blocked: true, subscription: "pro" },
+    });
+    expect(Object.keys(appelRpc()?.p_restaurant ?? {}).sort()).toEqual(["logo_url", "primary_color"]);
   });
 
   it("garde refusée : rien n'est tenté", async () => {
@@ -156,15 +176,44 @@ describe("un seul appel atomique — plus de DELETE puis INSERT", () => {
     expect(r.error).toContain("100");
   });
 
-  it("échec de la sauvegarde du restaurant : on n'enregistre pas le jeu derrière", async () => {
-    echecs["restaurants:update"] = { message: "panne" };
+  it("un refus n'a laissé AUCUNE écriture partielle — il n'y a qu'un seul appel", async () => {
+    echecs["rpc:enregistrer_jeu_et_lots"] = { message: "Lot 1 : le poids doit être un entier" };
     const r = await updateGameAction("jeu-1", CHARGE);
     expect(r.success).toBe(false);
-    expect(journal.map((o) => o.cle)).not.toContain("rpc:enregistrer_jeu_et_lots");
+    // Une seule opération au total : rien ne peut avoir été écrit à moitié.
+    expect(journal.map((o) => o.cle)).toEqual(["rpc:enregistrer_jeu_et_lots"]);
   });
 });
 
-describe("les stocks : vide veut dire illimité, jamais zéro", () => {
+describe("ne jamais convertir avant de valider", () => {
+  /*
+   * Le défaut : `Number("abc")` vaut `NaN`, et `JSON.stringify(NaN)` vaut
+   * `"null"`. Pour `quantity`, `null` signifie « stock illimité ». Une saisie
+   * alphabétique arrivait donc en base sous la forme d'un lot parfaitement
+   * valide et SANS LIMITE DE STOCK. La validation n'était pas contournée :
+   * elle n'avait plus rien à valider, la valeur avait déjà été transformée.
+   */
+  for (const saisie of ["abc", "NaN", "Infinity", "-3", "5.5", "1e3", "0x10", "9999999999"]) {
+    it(`« ${saisie} » part TEL QUEL, jamais en null`, async () => {
+      await updateGameAction("jeu-1", {
+        ...CHARGE,
+        form: { ...CHARGE.form, is_stock_limit_active: true },
+        prizes: [{ label: "Lot", weight: 100, quantity: saisie }],
+      });
+      const q = (appelRpc()?.p_lots as { quantity: unknown }[])[0].quantity;
+      expect(q, "un null ici voudrait dire « illimité »").not.toBeNull();
+      expect(q).toBe(saisie);
+    });
+  }
+
+  it("le poids aussi part brut", async () => {
+    await updateGameAction("jeu-1", {
+      ...CHARGE,
+      prizes: [{ label: "Lot", weight: "abc", quantity: null }],
+    });
+    expect((appelRpc()?.p_lots as { weight: unknown }[])[0].weight).toBe("abc");
+  });
+
   it("limite de stock inactive : tous les stocks partent à null", async () => {
     await updateGameAction("jeu-1", {
       ...CHARGE,
@@ -174,18 +223,18 @@ describe("les stocks : vide veut dire illimité, jamais zéro", () => {
     expect((appelRpc()?.p_lots as { quantity: unknown }[])[0].quantity).toBeNull();
   });
 
-  it("limite active, stock saisi : le nombre est conservé", async () => {
+  it("limite active, stock saisi : la valeur est conservée", async () => {
     await updateGameAction("jeu-1", {
       ...CHARGE,
       form: { ...CHARGE.form, is_stock_limit_active: true },
       prizes: [{ label: "Lot", weight: 100, quantity: 5 }],
     });
-    expect((appelRpc()?.p_lots as { quantity: unknown }[])[0].quantity).toBe(5);
+    expect((appelRpc()?.p_lots as { quantity: unknown }[])[0].quantity).toBe("5");
   });
 
-  it("limite active, stock vide : null (illimité), surtout pas 0", async () => {
-    // Un 0 rendrait le lot inatteignable au lieu de l'ouvrir.
-    for (const vide of ["", null, undefined]) {
+  it("limite active, saisie VIDE : null — « rien de saisi » veut dire illimité", async () => {
+    // Distinct de « abc » : une absence n'est pas une valeur invalide.
+    for (const vide of ["", "   ", null, undefined]) {
       journal = [];
       await updateGameAction("jeu-1", {
         ...CHARGE,

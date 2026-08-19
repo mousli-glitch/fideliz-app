@@ -32,6 +32,13 @@
  *
  *  ATTENDU : 10 cas, tous conformes. Le verdict LÈVE sinon.
  *
+ *  ─── SECONDE VAGUE, MIGRATION 20260819050000 ───
+ *
+ *  Deux défauts de plus, signalés au tour suivant et éprouvés par
+ *  `harnais-agregat-jeu.sql`, à côté : l'action complète n'était toujours pas
+ *  atomique (le design du restaurant s'écrivait AVANT l'appel), et une saisie
+ *  invalide devenait une valeur métier valide par coercition TypeScript.
+ *
  *  Joué le 19/08/2026 sur la branche de test synthétique — les 10 cas
  *  conformes. Notamment :
  *
@@ -63,8 +70,12 @@ end $$;
 -- Garde anti-dérive : sans la fonction, ce harnais n'éprouverait rien.
 do $$
 begin
-  if to_regprocedure('public.enregistrer_jeu_et_lots(uuid,uuid,jsonb,jsonb)') is null then
-    raise exception 'HARNAIS INAPPLICABLE : la fonction n''existe pas. La migration 20260819030000 n''est pas appliquée.';
+  -- Signature ELARGIE par 20260819050000 (5e argument, whitelist restaurant).
+  -- Les appels a quatre arguments restent valides : le 5e a une valeur par
+  -- defaut. C'est la SIGNATURE qu'on verifie, pas le nombre d'arguments qu'on
+  -- passe.
+  if to_regprocedure('public.enregistrer_jeu_et_lots(uuid,uuid,jsonb,jsonb,jsonb)') is null then
+    raise exception 'HARNAIS INAPPLICABLE : la fonction n''existe pas. Migrations 20260819030000 puis 20260819050000 non appliquées.';
   end if;
 end $$;
 
