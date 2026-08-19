@@ -2,20 +2,12 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { autoriserParJeu } from '@/lib/securite/garde-objet'
+import { montantAEcrire } from '@/lib/montant-formulaire'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-// Normalise un montant saisi par le gérant : accepte "5,90" ou "5.90", garde les centimes.
-// Renvoie une chaîne propre ("5.9") car la colonne min_spend est de type texte.
-function normalizeAmount(value: any): string {
-  if (value === null || value === undefined || value === "") return "0"
-  const n = parseFloat(String(value).replace(",", ".").trim())
-  if (!isFinite(n) || n < 0) return "0"
-  return String(Math.round(n * 100) / 100) // 2 décimales max
-}
 
 export async function updateGameAction(gameId: string, data: any) {
   /*
@@ -45,8 +37,12 @@ export async function updateGameAction(gameId: string, data: any) {
       active_action: data.form.active_action,
       action_url: data.form.action_url,
       validity_days: data.form.validity_days,
-      // Montant minimum : on accepte les décimales (5,90 comme 5.90) et on normalise en "5.9"
-      min_spend: normalizeAmount(data.form.min_spend),
+      /*
+       * Montant minimum. Décimales acceptées, ET l'interrupteur « Minimum de
+       * commande » éteint retire réellement la condition — il ne faisait
+       * jusqu'ici que masquer le champ à l'écran.
+       */
+      min_spend: montantAEcrire(data.form),
       
       // NOUVEAUX CHAMPS DATES & STOCKS
       is_date_limit_active: data.form.is_date_limit_active,
