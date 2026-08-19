@@ -128,7 +128,6 @@ export default async function AdminWinnersPage({
         email,
         status,
         redeemed_at,
-        consumed_at,
         prize_label_snapshot,
         prizes(label, color)
       `

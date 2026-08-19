@@ -170,9 +170,11 @@ export function AdminWinnersTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput, slug, initialQuery])
 
-  // ✅ Format date remise
+  /* Date de remise. Le repli sur `consumed_at` a ete retire le 19/08/2026 :
+     la table n'a jamais pu porter le statut `consumed`, la colonne est donc
+     restee vide, et ce repli ne s'est jamais declenche. */
   const formatRedeemDate = (winner: any) => {
-    const dt = winner?.redeemed_at || winner?.consumed_at
+    const dt = winner?.redeemed_at
     if (!dt) return null
     try {
       return format(new Date(dt), "dd MMM HH:mm", { locale: fr })
@@ -376,7 +378,7 @@ export function AdminWinnersTable({
               {filteredWinners.length > 0 ? (
                 filteredWinners.map((winner) => {
                   const isSelected = selectedIds.includes(winner.id)
-                  const isRedeemed = winner.status === "redeemed" || winner.status === "consumed"
+                  const isRedeemed = winner.status === "redeemed"
                   const redeemedLabel = formatRedeemDate(winner)
 
                   return (

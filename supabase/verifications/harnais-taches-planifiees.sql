@@ -21,17 +21,31 @@
  *
  * ─── FIDÉLITÉ DU BANC, VÉRIFIÉE ET NON SUPPOSÉE ───
  *
- * Relevé le 19/08/2026 : l'empreinte BRUTE de `archive_redeemed_winners`
- * diverge entre le banc et la production. Après normalisation des espaces, les
- * deux empreintes coïncident : l'écart est **typographique** — la production
- * met une colonne par ligne, le banc les groupe.
- *
- *     archive_redeemed_winners  normalisée  41efb2e1…  des deux côtés
- *     anonymize_expired_data    normalisée  b9db1128…  des deux côtés
+ * Relevé le 19/08/2026 au matin : l'empreinte BRUTE de
+ * `archive_redeemed_winners` divergeait entre le banc et la production, alors
+ * que les empreintes NORMALISÉES coïncidaient — l'écart était typographique,
+ * la production mettant une colonne par ligne là où le banc les groupait.
  *
  * C'est le même piège que les « 9 fonctions cosmétiques » du diff sémantique :
- * une empreinte brute qui diverge ne prouve pas un comportement différent. Le
- * harnais commence donc par revérifier cette égalité, et refuse si elle tombe.
+ * une empreinte brute qui diverge ne prouve pas un comportement différent.
+ *
+ * ⚠️ Cette divergence est CLOSE depuis la migration 20260819130000, qui a posé
+ * le même corps exact des deux côtés (brute ff8c11cf…). La garde ci-dessous
+ * reste sur l'empreinte normalisée : c'est elle qui dit « même comportement »,
+ * et c'est la seule chose que ce harnais a besoin de savoir.
+ *
+ *     archive_redeemed_winners  normalisée  7f78c8f3…  des deux côtés
+ *     anonymize_expired_data    normalisée  b89f0d08…  des deux côtés
+ *
+ * Le harnais commence donc par revérifier cette égalité, et refuse si elle
+ * tombe.
+ *
+ * ⚠️ LEÇON DU 19/08 : ces deux constantes sont des RÉFÉRENCES, pas des
+ * vérités éternelles. La migration 20260819110000 a légitimement changé
+ * `anonymize_expired_data` sans que la constante suive — le harnais aurait
+ * refusé de tourner à sa prochaine exécution, sur une fausse alerte.
+ * Toute migration qui touche l'une de ces deux fonctions doit mettre à jour
+ * sa constante DANS LE MÊME COMMIT.
  *
  * ⚠️ RÉSERVÉ À UNE CIBLE SYNTHÉTIQUE : il écrit et supprime des tickets.
  */
@@ -42,8 +56,8 @@ do $$
 declare
   v_u int; v_p int; v_r int; v_h text;
   c_prefixe constant text := '00000000-0000-4000-8000-0000000092';
-  c_archive constant text := '41efb2e1bd688f46f0c7ac610bc1b5381bf0f01f9225ceb23ff109d0b584a322';
-  c_anonym  constant text := 'b9db11287af45202d12be7ae60ec74c89ed707d3986d5932a3921a2d955d1ec0';
+  c_archive constant text := '7f78c8f32d6bba8536b89100b17c95dec0973e0dcb0ef4ab838d645a59b3eee2';
+  c_anonym  constant text := 'b89f0d089bd9f6f791c17a29a3d53bdec7ab02fc44dd1d364c6d5b153fb84a11';
 begin
   select count(*) into v_u from auth.users;
   select count(*) into v_p from public.profiles;
@@ -236,24 +250,34 @@ begin
 end $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
---  Bloc 4 : LE TROU, MESURÉ ET NON DÉDUIT
+--  Bloc 4 : L'ARCHIVE NE S'ÉCHAPPE PLUS À LA RÉTENTION
 -- ═══════════════════════════════════════════════════════════════════════════
 --
--- `anonymize_expired_data` met à jour `winners` et `contacts`. Elle ne
--- regarde JAMAIS `winners_archive`. Or l'archivage sort les tickets consommés
--- au bout de 90 jours — bien avant les 24 mois de l'anonymisation.
+-- ─── CE QUE CE BLOC MESURAIT AVANT LE 19/08/2026 ───
 --
--- Conséquence : un ticket consommé est archivé à 3 mois, puis n'est plus
--- jamais anonymisé. Son prénom et son e-mail restent dans `winners_archive`
--- indéfiniment.
+-- `anonymize_expired_data` mettait à jour `winners` et `contacts`, et ne
+-- regardait JAMAIS `winners_archive`. Or l'archivage sort les tickets
+-- consommés au bout de 90 jours — bien avant les 24 mois de l'anonymisation.
+-- Un ticket consommé partait donc à l'archive à trois mois et n'était plus
+-- jamais anonymisé.
 --
--- Relevé en production le 19/08/2026 : 37 tickets archivés, **les 37 portent
--- encore prénom et e-mail**, le plus ancien a 11 mois. Aucune infraction
--- aujourd'hui — et une certitude dans 13 mois.
+-- Ce bloc était un test de CARACTÉRISATION : il passait au vert quand le
+-- défaut était présent, et son en-tête annonçait qu'il échouerait le jour où
+-- la règle changerait. C'est ce qui est arrivé.
 --
--- Ce bloc FIGE le comportement actuel. Il passe au vert quand le défaut est
--- présent : c'est un test de caractérisation, pas une approbation. Le jour où
--- la règle changera, il échouera et il faudra le réécrire — c'est voulu.
+-- ─── CE QU'IL MESURE DEPUIS ───
+--
+-- La migration 20260819110000 a étendu la règle des 24 mois à l'archive, en
+-- comptant depuis `coalesce(redeemed_at, created_at)` — l'archive ne porte pas
+-- `expires_at`, et `redeemed_at` précède toujours `expires_at`, donc la
+-- fenêtre est plus stricte, jamais plus laxe.
+--
+-- ⚠️ CE BLOC A ÉTÉ ÉCRIT EN RETARD. La migration a été appliquée en production
+-- le 19/08 au matin ; les six contrôles ci-dessous avaient été joués à la
+-- volée sur le banc pour la prouver, mais n'avaient pas été versés dans ce
+-- fichier. Le harnais du dépôt a donc affirmé le contraire de la production
+-- pendant quelques heures. Une preuve qui ne finit pas dans le dépôt n'est
+-- pas une preuve : c'est un souvenir.
 
 do $$
 declare
@@ -262,7 +286,7 @@ declare
 begin
   perform pg_temp.poser();
 
-  /* Un ticket consommé il y a 30 mois : éligible aux DEUX traitements. */
+  /* Un ticket consommé il y a 30 mois : au-delà de la fenêtre de rétention. */
   update public.winners
      set redeemed_at = now() - interval '30 months',
          created_at  = now() - interval '31 months',
@@ -271,41 +295,76 @@ begin
 
   perform public.archive_redeemed_winners(90, 5000);
 
-  insert into _tp values ('trou mesure', 'le ticket de 30 mois est parti a l''archive',
+  insert into _tp values ('archive et retention', 'le ticket de 30 mois est parti a l''archive',
     'archive', case when exists (select 1 from public.winners_archive where id = '00000000-0000-4000-8000-000000009211') then 'archive' else 'RESTE' end,
     exists (select 1 from public.winners_archive where id = '00000000-0000-4000-8000-000000009211'));
 
   v_json := public.anonymize_expired_data();
 
-  insert into _tp values ('trou mesure', 'l''anonymisation ne le voit plus : il garde son prenom',
-    'Ancien consomme',
+  insert into _tp values ('archive et retention', 'l''anonymisation le rattrape DANS l''archive',
+    'Anonyme',
     coalesce((select first_name from public.winners_archive where id = '00000000-0000-4000-8000-000000009211'), '(absent)'),
-    (select first_name from public.winners_archive where id = '00000000-0000-4000-8000-000000009211') = 'Ancien consomme');
+    (select first_name from public.winners_archive where id = '00000000-0000-4000-8000-000000009211') = 'Anonyme');
 
-  insert into _tp values ('trou mesure', 'et son e-mail, apres 30 mois',
-    'present',
-    case when (select email from public.winners_archive where id = '00000000-0000-4000-8000-000000009211') is not null then 'present' else 'efface' end,
-    (select email from public.winners_archive where id = '00000000-0000-4000-8000-000000009211') is not null);
+  insert into _tp values ('archive et retention', 'son e-mail est efface dans l''archive',
+    'NULL',
+    coalesce((select email from public.winners_archive where id = '00000000-0000-4000-8000-000000009211'), 'NULL'),
+    (select email from public.winners_archive where id = '00000000-0000-4000-8000-000000009211') is null);
+
+  /*
+   * LE CAS QUI EMPECHE DE TOUT DETRUIRE. Le ticket 9212 est archive lui aussi
+   * — 120 jours, donc au-dela des 90 de l'archivage — mais il n'a que quatre
+   * mois : la fenetre de retention est de 24. Il doit rester nominatif.
+   *
+   * Sans ce controle, une regle qui anonymiserait TOUTE l'archive passerait au
+   * vert. C'est exactement la decision qui a ete ecartee le 19/08 : etendre la
+   * regle, pas detruire en avance.
+   */
+  insert into _tp values ('archive et retention', 'l''archive de 4 mois est INTACTE — rien n''est detruit en avance',
+    'Ancien consomme2',
+    coalesce((select first_name from public.winners_archive where id = '00000000-0000-4000-8000-000000009212'), '(absent)'),
+    (select first_name from public.winners_archive where id = '00000000-0000-4000-8000-000000009212') = 'Ancien consomme2');
+
+  insert into _tp values ('archive et retention', 'le compte rendu annonce l''archive traitee',
+    '1 archive, 0 ticket vif',
+    coalesce(v_json->>'archives_anonymises','ABSENT') || ' archive, ' || coalesce(v_json->>'winners_anonymises','?') || ' ticket vif',
+    (v_json->>'archives_anonymises')::int = 1 and (v_json->>'winners_anonymises')::int = 0);
+
+  /* Rejouee : elle ne retouche rien. */
+  v_json := public.anonymize_expired_data();
+  insert into _tp values ('archive et retention', 'rejouee, elle ne retouche aucune archive',
+    '0', coalesce(v_json->>'archives_anonymises','ABSENT'),
+    (v_json->>'archives_anonymises')::int = 0);
 end $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
---  Bloc 5 : DEUX CONTRAINTES QUI SE CONTREDISENT, ET UNE BRANCHE MORTE
+--  Bloc 5 : UN SEUL CONTRAT DE STATUT, ET PLUS DE BRANCHE MORTE
 -- ═══════════════════════════════════════════════════════════════════════════
 --
--- `winners.status` porte DEUX contraintes CHECK, toutes deux validées, en
--- production comme sur le banc :
+-- ─── CE QUE CE BLOC MESURAIT AVANT LE 19/08/2026 ───
+--
+-- `winners.status` portait DEUX contraintes CHECK, toutes deux validées :
 --
 --     check_winner_status    available, redeemed, consumed
 --     winners_status_check   available, redeemed
 --
--- Elles s'appliquent ensemble : la plus stricte gagne, et `consumed` est
--- impossible. Or `archive_redeemed_winners` teste explicitement
--- `status = 'consumed'` — cette branche ne peut JAMAIS se déclencher.
+-- Elles s'appliquaient ensemble : la plus stricte gagnait, `consumed` était
+-- impossible, et `archive_redeemed_winners` gardait une branche
+-- `status = 'consumed'` qui ne pouvait JAMAIS se déclencher.
 --
--- Ce n'est pas un défaut aujourd'hui. Ça le devient le jour où quelqu'un
--- « range » en supprimant `winners_status_check`, qu'il croira redondante avec
--- l'autre : `consumed` deviendrait écrivable, et une branche jamais exercée
--- se réveillerait en production. Ce bloc fige les deux faits.
+-- ─── CE QU'IL MESURE DEPUIS ───
+--
+-- Décision de Samy (option P-a) : `consumed` n'existe pas. La migration
+-- 20260819130000 a supprimé la contrainte permissive et la branche morte.
+--
+-- Le contrat est désormais dit à UN SEUL endroit — et c'est précisément ce que
+-- ce bloc surveille. Le danger n'a pas disparu, il a changé de forme : avant,
+-- il fallait craindre qu'on supprime la stricte en la croyant redondante ;
+-- maintenant, il n'y a plus de filet du tout si elle disparaît. Une seule
+-- contrainte tient `consumed` fermé.
+--
+-- Vérifié sur le banc le 19/08 : sans `winners_status_check`, `consumed`
+-- redevient écrivable. Ce bloc est donc une sentinelle, pas une formalité.
 
 do $$
 declare
@@ -324,22 +383,44 @@ begin
   insert into _tp values ('contraintes', 'la table REFUSE le statut consumed',
     'refuse', case when v_refuse then 'refuse' else 'ACCEPTE' end, v_refuse);
 
-  insert into _tp values ('contraintes', 'les deux contraintes de statut coexistent',
-    '2', (select count(*)::text from pg_constraint
+  insert into _tp values ('contraintes', 'une seule contrainte porte le contrat de statut',
+    '1', (select count(*)::text from pg_constraint
           where conrelid = 'public.winners'::regclass and contype = 'c'
             and pg_get_constraintdef(oid) like '%status%'),
     (select count(*) from pg_constraint
      where conrelid = 'public.winners'::regclass and contype = 'c'
-       and pg_get_constraintdef(oid) like '%status%') = 2);
+       and pg_get_constraintdef(oid) like '%status%') = 1);
 
-  insert into _tp values ('contraintes', 'la fonction d''archivage garde une branche morte pour consumed',
-    'presente', case when exists (
+  /* C'est elle, et elle seule, qui tient `consumed` ferme. Si ce controle
+     rougit, l'etat fantome est de retour. */
+  insert into _tp values ('contraintes', 'winners_status_check est presente et validee',
+    'oui', case when exists (
+        select 1 from pg_constraint
+        where conrelid = 'public.winners'::regclass and conname = 'winners_status_check'
+          and convalidated) then 'oui' else 'NON' end,
+    exists (select 1 from pg_constraint
+            where conrelid = 'public.winners'::regclass and conname = 'winners_status_check'
+              and convalidated));
+
+  insert into _tp values ('contraintes', 'la branche morte a quitte la fonction d''archivage',
+    'retiree', case when exists (
         select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname='public' and p.proname='archive_redeemed_winners'
-          and position('''consumed''' in p.prosrc) > 0) then 'presente' else 'retiree' end,
-    exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-            where n.nspname='public' and p.proname='archive_redeemed_winners'
-              and position('''consumed''' in p.prosrc) > 0));
+          and position('consumed' in p.prosrc) > 0) then 'ENCORE LA' else 'retiree' end,
+    not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname='public' and p.proname='archive_redeemed_winners'
+                  and position('consumed' in p.prosrc) > 0));
+
+  /* La borne monetaire du lot 3 n'etait que prospective : NOT VALID, donc les
+     lignes anterieures n'avaient jamais ete controlees. Validee le 19/08. */
+  insert into _tp values ('contraintes', 'la borne monetaire est validee, pas seulement declaree',
+    'validee', case when exists (
+        select 1 from pg_constraint
+        where conrelid = 'public.winners'::regclass
+          and conname = 'winners_min_spend_cents_borne' and convalidated) then 'validee' else 'NOT VALID' end,
+    exists (select 1 from pg_constraint
+            where conrelid = 'public.winners'::regclass
+              and conname = 'winners_min_spend_cents_borne' and convalidated));
 end $$;
 
 -- ═══ Nettoyage ═══
