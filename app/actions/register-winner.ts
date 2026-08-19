@@ -102,7 +102,13 @@ export async function registerWinnerAction(data: any) {
         winner_id: result.winner_id,
         qr_code: result.qr_code,
         expires_at: result.expires_at,
-        min_spend: result.min_spend || 0,
+        /*
+         * Voir `play-game.ts` : `|| 0` transformait un minimum indéterminé en
+         * « aucun minimum ». `min_spend` reste en EUROS ; `min_spend_cents`
+         * est la référence, et `null` y signifie « indéterminé ».
+         */
+        min_spend: result.min_spend ?? null,
+        min_spend_cents: result.min_spend_cents ?? null,
       },
     }
   } catch (e: any) {

@@ -87,7 +87,17 @@ export async function playGameAction(data: any) {
         winner_id: result.winner_id,
         qr_code: result.qr_code,
         expires_at: result.expires_at,
-        min_spend: result.min_spend || 0,
+        /*
+         * `result.min_spend || 0` se trouvait ici. Sur un minimum indéterminé,
+         * `null || 0` vaut 0 — « aucun minimum ». C'est le `else 0` du SQL,
+         * recopié en JavaScript : le corriger d'un côté et le laisser de
+         * l'autre n'aurait rien corrigé du tout.
+         *
+         * `min_spend` reste en EUROS, comme avant. `min_spend_cents` est la
+         * référence, et `null` y veut dire « indéterminé », pas « aucun ».
+         */
+        min_spend: result.min_spend ?? null,
+        min_spend_cents: result.min_spend_cents ?? null,
       },
     }
   } catch (e: any) {

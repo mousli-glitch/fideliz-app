@@ -9,6 +9,7 @@ import GooglePlaceInput from "@/components/GooglePlaceInput"
 import LogoUploader from "@/components/LogoUploader" 
 import { updateGameAction } from "@/app/actions/update-game"
 import BackgroundUploader from "@/components/BackgroundUploader"
+import { lireMinimum, saisieDepuisCentimes } from "@/lib/monetaire"
 
 // --- LES 10 FONDS D'ÉCRAN SUPABASE ---
 const BACKGROUNDS = [
@@ -130,9 +131,25 @@ export default function EditGamePage() {
                 active_action: game.active_action,
                 action_url: game.action_url || "",
                 validity_days: game.validity_days || 30,
-                // On accepte "5,90" comme "5.90" (anciennes saisies) et on garde les centimes
-                min_spend: game.min_spend ? (parseFloat(String(game.min_spend).replace(',', '.')) || 0) : 0,
-                has_min_spend: (parseFloat(String(game.min_spend || 0).replace(',', '.')) || 0) > 0,
+                /*
+                 * Le montant, relu par le contrat canonique.
+                 *
+                 * Ici se trouvait un double `parseFloat(...) || 0`. Sur une
+                 * valeur illisible — « abc » — il rendait 0, donc
+                 * `has_min_spend` valait `false` : l'interrupteur s'affichait
+                 * ÉTEINT, et le simple fait d'enregistrer la fiche effaçait la
+                 * condition sans que personne ne l'ait décidé.
+                 *
+                 * Désormais : le champ en centimes prime, et une valeur
+                 * illisible est REMONTÉE TELLE QUELLE dans le champ, interrupteur
+                 * allumé. Le restaurateur la voit et la corrige — au lieu de la
+                 * perdre en silence.
+                 */
+                ...(() => {
+                    const m = lireMinimum(null, game.min_spend_cents, game.min_spend)
+                    if (m.etat === 'illisible') return { min_spend: m.saisie, has_min_spend: true }
+                    return { min_spend: saisieDepuisCentimes(m.centimes), has_min_spend: m.centimes > 0 }
+                })(),
                 requires_menu: game.requires_menu || false,
                 requires_review_proof: game.requires_review_proof || false,
                 // Chargement des nouveaux champs
