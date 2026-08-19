@@ -89,18 +89,51 @@ schéma qui diffère de la production d'une contrainte sur trente-huit.*
 on sait rebâtir le schéma, on ne sait toujours pas ramener les fichiers, et le
 schéma rebâti a un défaut qui bloque la création d'un restaurant.
 
+## ✅ La contrainte est élargie, et l'exercice passe
+
+**Tranché par Samy : « élargis la contrainte dans le registre ».**
+
+### La cause exacte, trouvée avant d'écrire
+
+Le fichier `079_vip_obtenu_et_recompense_qui_dort.sql` du dépôt **élargit bien
+la contrainte**, à ses lignes 18-22. C'est son entrée au registre qui n'en
+porte que la moitié — elle s'appelle `..._fonctions`.
+
+La migration a donc été appliquée **en deux temps, et une seule moitié a été
+enregistrée**. Le déclencheur savait insérer `vip_obtenu` ; la contrainte
+enregistrée l'ignorait.
+
+### Le correctif
+
+Une entrée `20260815154315`,
+`vip_obtenu_et_recompense_qui_dort_contrainte`, posée **juste après** celle
+qu'elle complète — pour que l'histoire se lise dans l'ordre. Sa définition est
+**engendrée depuis la production**, donc incapable de diverger. Empreintes des
+contraintes et des fonctions comparées avant/après : **inchangées**.
+
+### L'exercice, joué sur un banc reconstruit depuis l'historique seul
+
+| | Verdict |
+|---|---|
+| Empreinte des **contraintes** | **identique à la production** |
+| Empreinte des **index** | **identique** |
+| Empreinte des **triggers** | **identique** |
+| Création d'un restaurant | **réussie** — 11 automatisations et 1 réglage posés par déclencheur |
+| Batterie `transitions` (invariant I-4) | **toutes les assertions vertes** |
+| Nettoyage | banc rendu vierge, 0 restaurant, 0 compte |
+
+**C'est l'étape 3 de la procédure, jouée pour la première fois.** Elle
+fonctionne — sur le schéma. Pas sur les données.
+
 ## Ce qui reste à faire
 
-1. **Élargir `automatisations_scenario_check` dans le registre** pour qu'il
-   porte les douze valeurs. Une ligne, et le schéma reconstruit devient
-   utilisable. *Non fait — c'est une écriture au registre de production.*
-2. **Comparer le reste par contenu, pas par compte** : index, triggers,
-   valeurs par défaut, droits. Seules les contraintes CHECK et huit corps de
-   fonctions ont été comparés au contenu.
-3. **Le Storage** — toujours le point le plus exposé, et toujours sans
-   procédure.
-4. **Un exercice complet** avec `Restore to new project`, qui seul apporte les
-   données. Le banc n'apporte que le schéma.
+1. **Comparer ce qui ne l'a pas été** : valeurs par défaut, droits de colonne,
+   séquences. Contraintes, index, triggers et huit corps de fonctions l'ont été
+   **par le contenu** ; le reste ne l'est pas.
+2. **Le Storage** — toujours le point le plus exposé, et toujours sans
+   procédure. **C'est désormais le seul angle mort majeur.**
+3. **Un exercice complet** avec `Restore to new project`, qui seul apporte les
+   données. Le banc n'apporte que le schéma — mais il l'apporte juste.
 
 ## Ce que je n'ai pas vérifié
 
