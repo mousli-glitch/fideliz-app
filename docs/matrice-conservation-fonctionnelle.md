@@ -24,7 +24,7 @@ repris d'un document antérieur sans être revérifié.
 ## Ce qui existe déjà, et qu'il ne faut pas reconstruire
 
 Le témoin de non-régression vit **côté Cartiz**
-(`scripts/non-regression/`, `npm run qr:verifier`) : 171 contrôles, ~15 s,
+(`scripts/non-regression/`, `npm run qr:verifier`) : ~185 contrôles, ~15 s,
 aucune écriture, aucun secret, verdict GO / NO-GO / INDÉTERMINÉ.
 
 Il couvre **cinq parcours dont les QR sont déjà imprimés et distribués** :
@@ -76,9 +76,9 @@ témoin. Les quatre libellés de ticket (`DÉJÀ UTILISÉ`, `DÉLAI DÉPASSÉ`,
 | Stock qui se recharge | `stock_refill_enabled` de Soukara (`daily`) survit | **SOUS TÉMOIN** | `lotsStockVariable`, seul champ volontairement non figé |
 | Minimum d'achat appliqué | le montant affiché est celui qu'on applique | **PROUVÉ** | lot 3 : harnais 24/24 avec le correctif, 5/24 sans ; en production depuis le 19/08 |
 | Ticket → `/verify` | les 3 classes gardent leur état ; un ticket inconnu est refusé | **SOUS TÉMOIN** | `controlerTickets`, empreinte SHA-256 avant ouverture |
-| Fond d'écran du jeu | **9 jeux sur 9** tirent leur fond du Storage | ⚠️ **RIEN** | voir trou n°1 |
-| Logo du restaurant | **4 sur 4** depuis le Storage | ⚠️ **RIEN** | voir trou n°1 |
-| Jeu 100 %-gagnant | un lot unique à poids 100 doit rester 100 %-gagnant | ⚠️ **RIEN** | voir trou n°2 |
+| Fond d'écran du jeu | **9 jeux sur 9** tirent leur fond du Storage | **SOUS TÉMOIN** | bloc `objets` des 3 fixtures : `ETag` + poids en `HEAD` |
+| Logo du restaurant | **4 sur 4** depuis le Storage | **SOUS TÉMOIN** | idem |
+| Jeu 100 %-gagnant | un lot unique à poids 100 doit rester 100 %-gagnant | **PROUVÉ** | `harnais-jeu-100-gagnant.sql` — 19/19, et 2 rouges sous dégradation |
 
 ### 2. Ce qu'un restaurateur touche
 
@@ -114,32 +114,47 @@ témoin. Les quatre libellés de ticket (`DÉJÀ UTILISÉ`, `DÉLAI DÉPASSÉ`,
 
 ---
 
-## Les trous, nommés
+## Les trous — deux comblés le jour même, trois ouverts
 
-### Trou n°1 — le Storage n'est sous aucun témoin, côté Fideliz
+### ~~Trou n°1~~ — comblé le 19/08 : le Storage est sous témoin
 
-Les fixtures Cartiz contrôlent les objets du Storage par leur **ETag**, c'est-à-dire
-leur empreinte MD5, et détectent même les orphelins. Les fixtures **Fideliz** n'ont
-ni `objets` ni `orphelins`.
+Les trois fixtures Fideliz portent désormais un bloc `objets` — le fond du jeu et
+le logo du restaurant, contrôlés en `HEAD` sur leur poids et leur `ETag`.
 
-Or **9 jeux sur 9** portent un `bg_image_url` vers le Storage, et **4 logos sur 4**
-aussi. Une fusion qui déplacerait les buckets, renommerait les objets ou
-régénérerait les URL casserait le fond de tous les jeux et tous les logos — et rien
-ne le signalerait. La page répondrait 200, avec un fond blanc.
+Deux choses apprises en le posant, et écrites dans le témoin :
 
-**Ce qu'il faut :** étendre les trois fixtures Fideliz avec un bloc `objets`, sur le
-modèle exact des fixtures Cartiz.
+- **`etag`, et non `md5`.** Trois des six objets sont des téléversements
+  multipartites (`-1`, `-2`) : leur `ETag` est l'empreinte des empreintes des
+  parties, pas celle du fichier. Le poids est donc contrôlé à côté, lui ne dépend
+  que du contenu. Poids constant + `ETag` changé = ré-téléversement, signalé `~` ;
+  poids changé = `✗`.
+- **Le fond de Soukara est partagé par trois jeux** (un autre par deux). Un
+  rangement des objets par restaurant casserait les autres. Le fixture porte
+  `partagePar`.
 
-### Trou n°2 — aucun jeu 100 %-gagnant n'existe en production
+Deux défauts du témoin trouvés au passage et corrigés : `controlerObjets` plantait
+dès qu'un parcours de jeu recevait un bloc `objets` sans `pages`, et l'échantillon
+de ticket valide de Best Pizza produisait un **faux NO-GO** chaque semaine faute de
+`peutExpirer`.
 
-Mesuré : **0 jeu** n'a un lot unique à poids 100. La conservation de cette
-fonctionnalité ne peut donc pas être prouvée sur les données réelles.
+### ~~Trou n°2~~ — comblé le 19/08 : le jeu 100 %-gagnant est prouvé
 
-C'est un cas limite qui compte : un jeu 100 %-gagnant ne doit jamais devenir
-« perdant » après migration, et le tirage pondéré sur un seul lot est le chemin le
-plus court vers une division par zéro ou un `stock_empty` injustifié.
+`supabase/verifications/harnais-jeu-100-gagnant.sql`, joué sur le banc : **19/19**.
 
-**Ce qu'il faut :** une fixture synthétique sur le banc, pas une case cochée.
+- 120 tirages sans limite de stock : 120 gains, **aucun refus**, jamais un autre
+  lot que le seul existant, stock illimité jamais décrémenté ;
+- sous limite de stock à 12 : exactement 12 gains, premier refus au tirage **13**,
+  stock à zéro, jamais négatif, 8 refus tous motivés `stock_empty` ;
+- stock nul au départ : refus, et **aucun ticket émis**.
+
+**Et il mord.** Dégradé pour retirer deux unités au lieu d'une : 6 gains au lieu de
+12, premier refus au tirage 7 — deux assertions au rouge, restauration vérifiée par
+empreinte.
+
+Le troisième contrôle, lui, est resté vert sous dégradation : 12 − 2×6 = 0
+exactement. C'est écrit dans le fichier, parce que c'est instructif — **le nombre
+de gains porte la preuve, pas l'état final du compteur**. Un invariant de fin peut
+être satisfait par un chemin faux.
 
 ### Trou n°3 — les 1 513 avis n'ont aucun témoin
 
