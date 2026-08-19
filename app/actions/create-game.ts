@@ -1,7 +1,8 @@
 "use server"
 
 import { createClient } from '@supabase/supabase-js'
-import { exigerRestaurantParSlug } from '@/lib/securite/garde-action'
+import { revalidatePath } from 'next/cache'
+import { exigerRestaurantParSlug, tracerAction } from '@/lib/securite/garde-action'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,125 +46,120 @@ function texteDepuisCentimes(centimes: number): string {
  * créer le jeu. Créer un jeu bascule l'ancien en `ended` : un slug étranger
  * suffisait donc à éteindre le jeu d'un confrère, et son QR imprimé avec.
  */
+/**
+ * Les seuls champs restaurant que la création a le droit d'écrire, et
+ * uniquement ceux réellement fournis. Une absence n'est pas une valeur : avec
+ * `?? null`, la clé existerait toujours et effacerait le champ.
+ */
+function champsRestaurant(design: any): Record<string, unknown> {
+  const champs: Record<string, unknown> = {}
+  for (const cle of ["primary_color", "brand_color", "logo_url"] as const) {
+    if (design && Object.prototype.hasOwnProperty.call(design, cle)) champs[cle] = design[cle]
+  }
+  return champs
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  CRÉER UN JEU — UN SEUL ACTE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ─── CE QUE CE CHEMIN FAISAIT, ET POURQUOI C'ÉTAIT DANGEREUX ───
+ *
+ * Cinq requêtes séparées à la clé de service, plusieurs erreurs non lues : le
+ * design du restaurant, la désactivation des anciens jeux, l'insertion des
+ * lots. Un échec tardif laissait donc, en production :
+ *
+ *   — les anciens jeux TERMINÉS et le nouveau jamais créé : le restaurant
+ *     n'a plus de jeu, et son QR imprimé ne mène nulle part ;
+ *   — ou un jeu créé SANS AUCUN LOT : la roue tourne sur du vide.
+ *
+ * Et le restaurant était re-résolu depuis `data.slug` — une valeur du
+ * NAVIGATEUR — alors que la garde l'avait déjà résolu ET autorisé. Celle qui
+ * décide doit être celle qui autorise.
+ *
+ * Les poids et stocks passaient par `Number(...)`, qui transforme `"abc"` en
+ * `NaN` puis, via JSON, en `null` — c'est-à-dire en « stock illimité ». Une
+ * saisie fautive devenait une valeur métier.
+ *
+ * ─── LA FORME RETENUE ───
+ *
+ * Le tenant vient de `garde.restaurant.id`. Les saisies partent BRUTES. Tout
+ * — design, fin des anciens jeux, création, lots — part dans
+ * `creer_jeu_et_lots` (migration 20260819090000) : une transaction, le
+ * restaurant verrouillé, la validation avant la moindre écriture, des
+ * `row_count` exacts. Un refus ne laisse aucun état partiel.
+ */
 export async function createGameAction(data: any) {
   const garde = await exigerRestaurantParSlug(data?.slug, ['restaurant', 'root'], 'jeu.creation')
   if (!garde.ok) return { success: false, error: garde.error }
 
+  if (!garde.restaurant?.id) {
+    return { success: false, error: "Restaurant non résolu : création annulée." }
+  }
+  // Le tenant autoritatif : celui que la garde a résolu ET autorisé.
+  const restaurantId = garde.restaurant.id
+
   try {
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error("ERREUR CONFIG : La clé SUPABASE_SERVICE_ROLE_KEY est manquante.")
-    }
-    
-    if (!data.slug) throw new Error("ERREUR : Le slug du restaurant est manquant.")
+    const lots = (Array.isArray(data.prizes) ? data.prizes : []).map((p: any) => ({
+      label: p?.label,
+      color: p?.color ?? "#000000",
+      weight: brut(p?.weight),
+      // Limite de stock inactive : illimité, quoi qu'ait saisi le gérant.
+      quantity: data.form?.is_stock_limit_active ? brut(p?.quantity) : null,
+    }))
 
-    // Validation
-    if (!data.form.name || data.form.name.trim() === "") throw new Error("Le nom du jeu est obligatoire.")
-    if (!data.form.action_url || data.form.action_url.trim() === "") throw new Error("Le lien d'action (URL) est manquant.")
-    if (data.form.validity_days < 1) throw new Error("La durée de validité doit être d'au moins 1 jour.")
+    const { data: resultat, error } = await supabaseAdmin.rpc("creer_jeu_et_lots", {
+      p_restaurant_id: restaurantId,
+      // Whitelist stricte, et seulement les clés réellement fournies.
+      p_restaurant: champsRestaurant(data.design),
+      p_jeu: {
+        name: data.form?.name,
+        active_action: data.form?.active_action,
+        action_url: data.form?.action_url,
+        validity_days: data.form?.validity_days,
+        // BRUT : c'est la base qui valide, et qui refuse.
+        min_spend: brut(data.form?.min_spend),
+        is_date_limit_active: !!data.form?.is_date_limit_active,
+        start_date: data.form?.is_date_limit_active && data.form?.start_date
+          ? new Date(data.form.start_date).toISOString() : null,
+        end_date: data.form?.is_date_limit_active && data.form?.end_date
+          ? new Date(data.form.end_date).toISOString() : null,
+        is_stock_limit_active: !!data.form?.is_stock_limit_active,
+        requires_menu: !!data.form?.requires_menu,
+        requires_review_proof: !!data.form?.requires_review_proof,
+        bg_image_url: data.design?.bg_image_url,
+        bg_choice: data.design?.bg_choice,
+        title_style: data.design?.title_style,
+        card_style: data.design?.card_style,
+        wheel_palette: data.design?.wheel_palette,
+        wheel_color_1: data.design?.wheel_color_1 || null,
+        wheel_color_2: data.design?.wheel_color_2 || null,
+        overlay_style: data.design?.overlay_style || 'dark',
+        stock_refill_enabled: !!(data.form?.is_stock_limit_active && data.form?.stock_refill_enabled),
+        stock_refill_period: data.form?.stock_refill_period || 'monthly',
+      },
+      p_lots: lots,
+    })
 
-    /*
-     * LE MONTANT, VALIDÉ AVANT LA MOINDRE ÉCRITURE.
-     *
-     * Ce chemin n'est pas encore transactionnel — c'est un P0 distinct, non
-     * traité ici — mais une saisie illisible doit au moins refuser AVANT que
-     * quoi que ce soit ne bouge, plutôt que d'être silencieusement convertie
-     * en « aucun minimum ».
-     */
-    const { data: centimesBruts, error: eMontant } = await supabaseAdmin
-      .rpc("centimes_depuis_saisie", { p_saisie: brut(data.form?.min_spend) })
-
-    if (eMontant) {
-      return { success: false, error: eMontant.message }
-    }
-    const minSpendCents: number = centimesBruts ?? 0
-
-    // Trouver le restaurant
-    const { data: restaurant, error: restoError } = await supabaseAdmin
-        .from("restaurants")
-        .select("id, replay_enabled, replay_delay_hours, action_sequence, identify_first, ip_rate_limit_per_hour")
-        .eq("slug", data.slug)
-        .single()
-
-    if (restoError || !restaurant) throw new Error("Restaurant introuvable pour le slug : " + data.slug)
-    
-    const restaurantId = restaurant.id
-
-    // Mise à jour design resto
-    await supabaseAdmin.from("restaurants").update({
-      brand_color: data.design.brand_color, 
-      primary_color: data.design.primary_color,
-      logo_url: data.design.logo_url,
-    }).eq("id", restaurantId)
-
-    // 4. DÉSACTIVER LES ANCIENS JEUX (AUTOMATIQUE)
-    await supabaseAdmin
-        .from("games")
-        .update({ status: 'ended' }) 
-        .eq("restaurant_id", restaurantId)
-        .eq("status", "active")
-
-    // 5. CRÉER LE NOUVEAU JEU (DIRECTEMENT ACTIF)
-    const { data: game, error: gameError } = await supabaseAdmin.from("games").insert({
-      restaurant_id: restaurantId,
-      name: data.form.name,
-      status: "active",
-      active_action: data.form.active_action,
-      action_url: data.form.action_url,
-      validity_days: data.form.validity_days,
-      // Les DEUX représentations, issues de la même source validée.
-      min_spend: texteDepuisCentimes(minSpendCents),
-      min_spend_cents: minSpendCents,
-      bg_image_url: data.design.bg_image_url,
-      bg_choice: data.design.bg_choice,
-      title_style: data.design.title_style,
-      card_style: data.design.card_style || 'light',
-      wheel_palette: data.design.wheel_palette,
-      wheel_color_1: data.design.wheel_color_1 || null,
-      wheel_color_2: data.design.wheel_color_2 || null,
-      overlay_style: data.design.overlay_style || 'dark',
-      // Conditions (dates / stock / menu)
-      is_stock_limit_active: !!data.form.is_stock_limit_active,
-      // Recharge automatique du stock
-      stock_refill_enabled: !!(data.form.is_stock_limit_active && data.form.stock_refill_enabled),
-      stock_refill_period: data.form.stock_refill_period || 'monthly',
-      requires_menu: !!data.form.requires_menu,
-      requires_review_proof: !!data.form.requires_review_proof,
-      is_date_limit_active: !!data.form.is_date_limit_active,
-      start_date: data.form.start_date ? new Date(data.form.start_date).toISOString() : null,
-      end_date: data.form.end_date ? new Date(data.form.end_date).toISOString() : null,
-      // Config héritée du RESTAURANT (rejouabilité, mode sécurisé, anti-triche)
-      replay_enabled: !!(restaurant as any).replay_enabled,
-      replay_delay_hours: (restaurant as any).replay_delay_hours || 24,
-      action_sequence: (restaurant as any).action_sequence || [],
-      ip_rate_limit_per_hour: (restaurant as any).ip_rate_limit_per_hour || 5,
-      identify_first: !!(restaurant as any).identify_first
-    }).select().single()
-
-    if (gameError) throw new Error("Erreur création jeu: " + gameError.message)
-
-    // Création des lots
-    if (data.prizes && data.prizes.length > 0) {
-        const prizesToInsert = data.prizes.map((p: any) => {
-          // Stock : null = illimité (∞), un nombre = plafond
-          const qty = data.form?.is_stock_limit_active
-            ? (p.quantity === null || p.quantity === undefined || p.quantity === "" ? null : Number(p.quantity))
-            : (p.quantity ?? null)
-          return {
-            game_id: game.id,
-            label: p.label,
-            color: p.color || "#000000",
-            weight: Number(p.weight),
-            quantity: qty,
-            initial_quantity: qty, // repère "stock de départ" pour la recharge automatique
-          }
-        })
-        await supabaseAdmin.from("prizes").insert(prizesToInsert)
+    if (error) {
+      /*
+       * Rien n'a été écrit : la transaction entière est annulée. Les anciens
+       * jeux sont toujours actifs, et le QR imprimé fonctionne toujours.
+       */
+      return { success: false, error: error.message }
     }
 
-    return { success: true, message: "Le jeu a été créé et activé avec succès !" }
+    await tracerAction(garde.appelant, 'jeu.creation', 'Jeu créé', {
+      restaurantId,
+      gameId: (resultat as { game_id?: string } | null)?.game_id ?? null,
+      lots: lots.length,
+    })
 
+    revalidatePath(`/admin/${garde.restaurant.slug}/games`)
+    return { success: true, gameId: (resultat as { game_id?: string } | null)?.game_id ?? null }
   } catch (error: any) {
-    console.error("🚨 ERREUR CRITIQUE:", error.message)
+    console.error("🚨 ERREUR CREATION JEU:", error.message)
     return { success: false, error: error.message }
   }
 }
