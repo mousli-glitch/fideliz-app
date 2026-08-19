@@ -531,9 +531,15 @@ describe("second appel : le préflight décide, il ne refuse plus par défaut", 
 describe("relecture d'existence : seuls les signaux structurés concluent", () => {
   const cas: [string, Record<string, unknown>, boolean][] = [
     ["code user_not_found", { code: "user_not_found", status: 400, message: "" }, true],
-    ["statut 404 sans code", { status: 404, message: "" }, true],
+    /*
+     * Signalé le 19/08/2026 : `status === 404` SEUL était trop large. Un 404
+     * de proxy ou de route mal formée ne prouve rien de l'existence du
+     * compte — conclure « absent » ferait passer une panne pour une
+     * suppression reussie. Seul le code structuré conclut.
+     */
+    ["statut 404 SANS code", { status: 404, message: "" }, false],
+    ["statut 404 avec un AUTRE code", { status: 404, code: "session_not_found" }, false],
     ["message « not found » SEUL", { status: 500, message: "User not found" }, false],
-    ["code session_not_found", { code: "session_not_found", status: 404 }, true],
     ["erreur de transport", { status: 503, message: "service unavailable" }, false],
     ["erreur sans statut ni code", { message: "boom" }, false],
   ];

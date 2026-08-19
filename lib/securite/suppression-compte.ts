@@ -420,8 +420,18 @@ async function relireExistenceAuth(
     };
     if (!error) return data?.user ? "present" : "absent";
 
+    /*
+     * Signalé le 19/08/2026 (tour suivant) : `status === 404` SEUL restait
+     * trop large, et c'est juste. Un 404 peut venir d'un proxy, d'une route
+     * mal formée, d'une passerelle — aucun de ces cas ne dit quoi que ce soit
+     * de l'existence du compte, et conclure « absent » ferait passer une
+     * panne d'infrastructure pour une suppression réussie.
+     *
+     * La version installée expose le code structuré : c'est donc lui, et lui
+     * seul, qui conclut. Un 404 sans `user_not_found` reste indéterminé,
+     * c'est-à-dire un refus.
+     */
     if (error.code === "user_not_found") return "absent";
-    if (error.status === 404) return "absent";
     return "indetermine";
   } catch {
     return "indetermine";
