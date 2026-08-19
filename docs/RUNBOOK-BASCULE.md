@@ -64,9 +64,9 @@ Aucune de ces étapes ne touche la production.
 | 2.5 | **Rejouer 2.4 à l'identique** | mêmes comptes, aucune ligne en double — **c'est R4** |
 | 2.6 | `comptes.ts --appliquer` vers le banc | 3 opérations |
 | 2.7 | Rejouer la sonde R8 sur le banc chargé | vert |
-| 2.8 | Rejouer le témoin de conservation | **189/189** — c'est R5 |
-| 2.9 | Batterie d'isolation avec des comptes réels | aucun restaurant ne voit chez un autre — R6 |
-| 2.10 | Servir les menus depuis le banc | contenu identique à avant — R7 |
+| 2.8 | Rejouer le témoin de conservation | **189/189** — R5. ⚠ `verifier.mjs` vise une application DÉPLOYÉE, et ses fixtures encodent les VRAIS identifiants de restaurant. Sur banc il faut lancer l'application en local (`BASE_CARTIZ=http://localhost:3000`) contre un banc portant ces identifiants et leurs `flyer_pages` |
+| 2.9 | `supabase/tests/isolation-apres-versement.sql` | **R6 — ACQUIS le 19/08** : chaque gérant voit exactement le sien, le compte coupé rien, `anon` bloqué en 42501 |
+| 2.10 | Servir les menus depuis le banc | R7. **Le préalable est déjà prouvé** : `lib/fusion/surface-menu.test.ts` montre que les colonnes lues par le menu et celles écrites par le versement sont DISJOINTES, sauf `theme_json` dont la fusion est un no-op pour les deux clients |
 | 2.11 | Supprimer le banc | il coûte 0,013 $/h |
 
 **Point d'arrêt.** Si 2.5 crée des doublons, le migrateur n'est pas
