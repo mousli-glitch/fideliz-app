@@ -54,9 +54,17 @@ const COUVERT = (page) => /^app\/(admin|super-admin)(\/|$)/.test(page);
  *
  * · /play/[slug] est le jeu lui-même. Le client n'a pas de compte et n'en
  *   aura jamais : lui demander une identité serait supprimer le produit.
- *   Ses trois actions se protègent autrement — limite par IP réglable par
- *   jeu, validation de l'e-mail et du téléphone, tirage et décrément du
- *   stock dans une RPC atomique.
+ *   Ses trois actions se protègent autrement — validation de l'e-mail et du
+ *   téléphone, tirage et décrément du stock dans une RPC atomique, et limite
+ *   par IP réglable par jeu sur les DEUX qui écrivent.
+ *
+ *   La troisième, `checkReplayStatusAction`, n'a pas de limite d'IP et ce
+ *   n'est pas un oubli : le patron des deux autres compte les lignes de
+ *   `winners` qu'elles créent elles-mêmes, et celle-ci n'écrit rien. Le
+ *   transposer donnerait une garde qui ne bloque jamais. Elle est bornée
+ *   autrement — sa RPC ne rend plus le nombre de participations (19/08/2026)
+ *   et l'action ne projette que cinq champs nommés. Voir
+ *   `docs/application-check-replay.md`.
  *
  * · /verify/[id] porte la validation en caisse. Le personnel s'y connecte,
  *   et l'action vérifie elle-même la session, le rôle et l'appartenance du
@@ -68,7 +76,7 @@ const AUTORISEES = {
   "app/play/[slug]/page": {
     combien: 3,
     quoi: "checkReplayStatusAction, playGameAction, registerWinnerAction",
-    pourquoi: "le jeu public — le joueur n'a pas de compte ; limite par IP, validation des saisies, RPC atomique",
+    pourquoi: "le jeu public — le joueur n'a pas de compte ; validation des saisies, RPC atomique, limite par IP sur les deux actions qui écrivent",
   },
   "app/verify/[id]/page": {
     combien: 1,

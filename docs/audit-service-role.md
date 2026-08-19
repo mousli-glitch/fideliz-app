@@ -60,34 +60,48 @@ pas de compte.
 |---|---|---|---|
 | `playGameAction` | RPC `play_game` : tirage serveur, anti-rejeu, stock atomique | **oui**, 5/h réglable | via `harnais-jeu-100-gagnant.sql` |
 | `registerWinnerAction` | RPC `register_win` : lot **borné au jeu** depuis le hotfix du 19/08 | **oui**, 5/h réglable | `harnais-isolation-lot-jeu.sql` |
-| `checkReplayStatusAction` | RPC `get_replay_status` | ⚠️ **aucune** | ⚠️ **aucun** |
+| `checkReplayStatusAction` | RPC `get_replay_status`, dépouillée de `play_count` le 19/08 + projection explicite dans l'action | ⚠️ **aucune** — le patron des sœurs ne transpose pas, voir plus bas | `check-replay.test.ts` (14) |
 | `validateWinAction` | se garde elle-même : session, rôle, appartenance du ticket | s.o. | `validate-win.test.ts` |
 
-#### ⚠️ Ce que j'ai trouvé sur `checkReplayStatusAction`
+#### ⚠️ Ce que j'ai trouvé sur `checkReplayStatusAction` — corrigé le 19/08
 
-C'est la seule des quatre qui n'a **ni limite d'IP, ni test**. Et sa RPC rend
-plus que nécessaire.
-
-`get_replay_status(p_game_id, p_email, p_phone)` répond, à **n'importe qui** :
+C'était la seule des quatre sans limite d'IP **ni test**. Et sa RPC rendait
+plus que nécessaire :
 
 ```
 { replay: true, status: 'too_soon', hours_left: N }   → cette adresse a joué récemment
 { replay: true, status: 'ok', play_count: N, … }      → et elle a joué N fois en tout
 ```
 
-Les identifiants de jeu sont publics — ils sont dans la page. Un visiteur peut
-donc demander, pour une adresse e-mail quelconque, **si cette personne a joué
-chez ce restaurant et combien de fois**. Sans compte, et sans limite de débit.
+Les identifiants de jeu sont publics — ils sont dans la page. Un visiteur
+pouvait donc demander, pour une adresse e-mail quelconque, **si cette personne
+a joué chez ce restaurant et combien de fois**. Sans compte.
 
-**Aujourd'hui, c'est inoffensif** : mesuré, **0 jeu sur 9** a la rejouabilité
-active, et la fonction court-circuite sur `replay: false` avant toute lecture.
-Le défaut s'ouvre le jour où un restaurateur active la rejouabilité.
+**Ce qui a été fait le 19/08** (trace complète :
+`application-check-replay.md`) :
 
-**Et `play_count` n'est utilisé nulle part.** Vérifié : le navigateur ne lit que
-`status`, `hours_left`, `action` et `action_url`. C'est une divulgation
-gratuite.
+- `play_count` retiré de la RPC en production — `300d8bba…` → `1e372cca…`,
+  borné par empreinte, 11/11 sur le banc, persistance reconfirmée hors
+  transaction. Le compteur reste **calculé** : il choisit l'action du moment.
+- La Server Action a cessé de faire `{ ok: true, ...result }`. **C'est ce
+  spread qui publiait le champ** ; il est remplacé par une projection explicite
+  de cinq champs. Les deux barrières sont indépendantes.
+- 14 tests versés, dont un runner négatif — l'action n'en avait aucun.
 
-Correctif préparé, non appliqué — voir plus bas.
+Aucun déploiement n'était requis : vérifié sur tout le dépôt, le navigateur ne
+lit que `status`, `hours_left`, `action` et `action_url`.
+
+**Ce qui reste ouvert — la limite d'IP.** Elle n'a pas été posée, et pas par
+oubli : le patron de ses deux sœurs **ne transpose pas**. `playGameAction` et
+`registerWinnerAction` comptent les lignes de `winners` qu'elles écrivent
+elles-mêmes ; `check-replay` n'écrit rien. Un énumérateur ne créerait aucune
+ligne, et le compteur ne bougerait jamais. Copier le patron aurait donné une
+garde qui ne bloque rien — et une ligne verte de plus dans ce tableau.
+
+Il reste donc une divulgation bornée à un bit par requête (`too_soon` =
+« cette adresse a joué récemment »), **inerte tant que 0 jeu sur 9 n'active la
+rejouabilité**. Les trois options chiffrées et la recommandation sont dans
+`application-check-replay.md` — décision en attente.
 
 ### Zone 2 — cinq modules sans aucun appelant
 
@@ -112,12 +126,13 @@ composant les importe, sans qu'aucune erreur ne s'affiche.
 
 ## Ce qui est prouvé, et ce qui ne l'est pas
 
-**8 des 25 actions à clé de service ont un test qui les exerce.** Les 17 autres
+**9 des 25 actions à clé de service ont un test qui les exerce.** Les 16 autres
 sont gardées — l'inventaire le confirme — mais rien ne le vérifie.
 
 | Action | Test |
 |---|---|
 | `admin-actions` | `suppressions-fail-closed.test.ts` |
+| `check-replay` | `check-replay.test.ts` |
 | `create-game` | `create-game.test.ts` |
 | `delete-restaurant-full` | `delete-restaurant-full.test.ts` |
 | `delete-sales-user` | `suppressions-fail-closed.test.ts` |
@@ -126,11 +141,10 @@ sont gardées — l'inventaire le confirme — mais rien ne le vérifie.
 | `update-game` | `update-game.test.ts` |
 | `validate-win` | `validate-win.test.ts` |
 
-Les dix-sept sans test, par ordre d'exposition :
+Les seize sans test, par ordre d'exposition :
 
 | Action | Garde déclarée | Pourquoi ça compte |
 |---|---|---|
-| `check-replay` | **aucune** | joignable sans compte — voir zone 1 |
 | `play-game` | aucune (par conception) | joignable sans compte, bornée par sa RPC |
 | `register-winner` | aucune (par conception) | idem |
 | `set-subscription` | rôle | change la date de fin d'abonnement d'un restaurant |
@@ -155,18 +169,15 @@ fois sur cinq.
 
 ---
 
-## Le correctif préparé pour `checkReplayStatusAction`
+## Le correctif `checkReplayStatusAction` — état au 19/08/2026
 
-Deux changements, tous deux inertes aujourd'hui puisque aucun jeu n'a la
-rejouabilité active :
+| | |
+|---|---|
+| Retirer `play_count` de la réponse | ✅ **appliqué en production** |
+| Projection explicite dans l'action | ✅ **écrit, testé, non déployé** |
+| Limite d'IP | ❌ **non posée** — le patron des sœurs ne transpose pas |
 
-1. **Retirer `play_count` de la réponse.** Personne ne le lit. Ce qui n'est pas
-   rendu ne fuit pas.
-2. **Aligner la limite d'IP** sur celle de ses deux sœurs publiques —
-   5 par heure, réglable par jeu. `hours_left` reste : c'est la fonctionnalité,
-   le joueur doit savoir quand revenir. Mais l'énumération devient bornée.
-
-Non appliqué : décision de Samy.
+Détail et décision en attente : `application-check-replay.md`.
 
 ---
 
