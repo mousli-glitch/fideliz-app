@@ -37,8 +37,8 @@ abonnement expiré.
 | 7d — `is_active` dans les prédicats | **fermée** | 086 : répétée sur banc neuf, batterie positive et négative, garde éprouvée dans les deux sens, 7/7 empreintes identiques banc↔production |
 | 7e — vocabulaire des rôles | **fermée** | Aucune migration nécessaire : Cartiz est la destination et son CHECK est déjà bon. `lib/roles.ts` porte la traduction, `lib/roles.test.ts` la garde de portage — prouvée sur le vrai code Fideliz, 13 fichiers / 32 lignes attrapées. Le chiffre de ~45 du lot 6 comptait le renommage de clé primaire, chantier qui n'existe pas |
 | 7f — exclusions à acter | **fermée** | `supabase/tests/exclusions-fideliz.sql` : 32 objets nommés, avec contre-épreuve de complétude. Vert sur Cartiz, les 8 blocs détectent sur Fideliz |
-| 7g — le migrateur de données | à faire | rien n'est écrit ; dépend de 7h |
-| 7h — l'annuaire des comptes | **bloquée — décision** | le mapping arbitre 9 restaurants et **zéro compte** |
+| 7g — le migrateur de données | **débloquée** | 7h est fermée. Pré-requis : **087, le schéma d'accueil du jeu** — Cartiz n'a ni `games`, ni `prizes`, ni `winners`, ni `avis`, ni `contacts`. Périmètre mesuré : 3 jeux, 12 lots, 488 gagnants, 752 avis, 488 contacts ≈ 1 743 lignes |
+| 7h — l'annuaire des comptes | **fermée** | `scripts/non-regression/mapping-comptes.json` : les 9 comptes arbitrés par Samy le 19/08. 2 créés, 1 modifié, 6 non versés |
 
 ---
 
@@ -62,9 +62,18 @@ abonnement expiré.
         7d ──► 7e ──► 7f  (indépendants entre eux, tous requis)
 ```
 
-**Un seul point vraiment bloquant : 7h.** Tant que l'annuaire des comptes n'est
-pas arbitré nominativement, le migrateur ne peut pas être écrit — il ne saurait
-pas quel UUID survit pour la-ruche et best-pizza, les deux vrais clients communs.
+**7h est fermée depuis le 19/08.** Le chemin critique passe désormais par le
+schéma d'accueil du jeu :
+
+```
+  087 schéma d'accueil  ──►  7g migrateur  ──►  lot 8 gel  ──►  lot 9 répétition  ──►  bascule
+  (games, prizes,
+   winners, avis,
+   contacts)
+```
+
+Cartiz n'a **aucune** de ces cinq tables. Elles doivent exister, avec leur RLS
+et leurs policies bornées au restaurant, avant qu'une seule ligne ne bouge.
 
 Deux décisions produit secondaires (`P-9` panier moyen, couleurs contre
 `theme_json`) bloquent des tranches, pas l'ensemble.
@@ -80,7 +89,7 @@ aujourd'hui.
 |---|---|---|
 | **R1** | Schéma d'accueil complet | Comparaison automatique entre la liste des colonnes que le migrateur écrit et le schéma vivant de Cartiz : **0 manquante** |
 | **R2** | Aucune décision produit ouverte sur le chemin | Intersection { P-xx ouverts } ∩ { objets versés } = **∅** |
-| **R3** | Annuaire des comptes arbitré nominativement | Un fichier de mapping des comptes, **9 lignes pour 9 comptes**, chacune portant : UUID survivant, adresse canonique, rôle cible, restaurant cible, sort du doublon |
+| **R3** | Annuaire des comptes arbitré nominativement | **ACQUIS** — `mapping-comptes.json`, 9 lignes pour 9 comptes, chacune avec son action et sa justification |
 | **R4** | Migrateur rejouable et idempotent | Sur banc neuf : deux exécutions consécutives donnent des empreintes de contenu **identiques** ; un arrêt au milieu se reprend sans doublon. **⚠ Un banc fraîchement créé est EN RETARD sur son parent** — mesuré le 19/08 : il n'a rejoué que les migrations de version ≤ 20260819190000, laissant 081→085 de côté. Le protocole doit les réappliquer avant toute mesure, sans quoi on éprouve un schéma qui n'est pas celui de la production |
 | **R5** | Témoin de conservation au vert **après versement** | Les 189 points passent sur le banc chargé, pas seulement à vide |
 | **R6** | Isolation entre restaurants prouvée après versement | Batterie d'isolation jouée avec des comptes de test réels : aucun restaurant ne lit ni n'écrit chez un autre, Storage compris |
