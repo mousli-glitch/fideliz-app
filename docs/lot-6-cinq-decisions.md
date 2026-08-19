@@ -9,7 +9,7 @@ Tous les chiffres ci-dessous sont mesurés par moi, pas repris des agents.
 
 ---
 
-## 1 · P-16 — Qui déménage de `/scan/<slug>` ?
+## 1 · P-16 — Qui déménage de `/scan/<slug>` ?  ✅ TRANCHÉE
 
 **La question.** Après fusion sur un seul domaine, `/scan/<slug>` ne peut servir
 qu'un seul produit. Le jeu Fideliz garde-t-il l'URL, le comptoir Cartiz
@@ -28,6 +28,11 @@ trois restaurants réels.
 
 **Coût de se tromper.** Irréversible au sens propre : on ne rappelle pas des
 flyers distribués.
+
+> **Tranchée par Samy le 19/08/2026 : le jeu garde `/scan`, le comptoir déménage.**
+> Coût réel mesuré et plan d'exécution dans `p16-le-comptoir-demenage.md`. Le rayon
+> est plus petit qu'annoncé : les deux vrais clients n'utilisent pas le comptoir,
+> deux applications installées seulement sont à reposer.
 
 ---
 

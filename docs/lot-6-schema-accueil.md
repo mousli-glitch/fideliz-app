@@ -317,7 +317,7 @@ Une ligne, une question fermée, une recommandation. Ce sont des **règles produ
 
 **Marque et QR**
 
-- **P-16** — Le comptoir Cartiz déménage-t-il de `/scan/<slug>`, le jeu gardant l'URL imprimée ? → **Recommandé : oui.** Le comptoir n'a aucun artefact papier : son déplacement coûte une réinstallation de PWA, celui du jeu coûte du papier chez trois restaurants réels.
+- **P-16 ✅ TRANCHÉE le 19/08/2026 — le jeu garde `/scan`, le comptoir déménage vers `/comptoir/<slug>`.** Plan et coût mesuré : `p16-le-comptoir-demenage.md`. *(recommandation d'origine : oui)* Le comptoir n'a aucun artefact papier : son déplacement coûte une réinstallation de PWA, celui du jeu coûte du papier chez trois restaurants réels.
 - **P-17** — Reste-t-on sur deux projets Vercel et deux domaines distincts, plutôt qu'un projet servant deux hôtes ? → **Recommandé : oui tant que P-18 n'est pas levée.** Un projet unique fait servir le même arbre de routes aux deux hôtes, et les deux générateurs de QR fabriquent leurs URLs à partir du Host.
 - **P-18** — Fige-t-on le domaine canonique dans une constante plutôt que dans une variable d'environnement, dans les deux générateurs de QR ? → **Recommandé : oui.** C'est le seul mécanisme qui peut transformer un changement de domaine en QR papier mort, et l'état de la variable n'est pas vérifiable ici.
 - **P-19** — L'ombrelle s'appelle-t-elle « Fidéliz » ou « Cartiz » après fusion ? → **Recommandé : trancher explicitement.** `lib/legal.ts` est le fichier unique qui sert les deux réponses ; la cohabitation est déjà visible du client.
