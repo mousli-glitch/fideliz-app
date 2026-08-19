@@ -21,14 +21,17 @@
  *
  * ─── CE QUI COUPE ENCORE, ET POURQUOI ───
  *
- * `is_blocked` reste. C'est un geste d'administration délibéré — fraude,
- * commerce fermé — et c'est le seul levier d'arrêt immédiat. P-11 parle de
- * l'ÉCHÉANCE ; retirer aussi le blocage priverait Samy de son unique bouton
- * d'urgence sur un QR imprimé, ce qui ne se déduit pas d'une décision qui n'en
- * parle pas.
+ * `is_blocked` reste, et c'est **arbitré** : Samy l'a confirmé le 19/08/2026,
+ * après que la question lui a été posée explicitement.
  *
- * ⚠️ À confirmer avec Samy : lire P-11 au pied de la lettre — « jamais /scan »
- * — supprimerait aussi ce levier.
+ * C'est un geste d'administration délibéré — fraude, commerce fermé, litige —
+ * et c'est le seul levier d'arrêt immédiat sur un QR imprimé. P-11 parle de
+ * l'ÉCHÉANCE, pas du blocage : les deux ne sortent pas du même endroit. L'une
+ * tombe toute seule un matin de facture impayée ; l'autre demande que
+ * quelqu'un décide.
+ *
+ * La distinction tient à ça, et elle suffit : **ce qui éteint un support
+ * papier doit être un acte, jamais une date.**
  *
  * ─── POURQUOI CE MODULE EST FAIL-OPEN, À L'ENVERS DE L'HABITUDE ───
  *

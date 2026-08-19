@@ -51,18 +51,21 @@ Le pire d'un fail-open ici est qu'un jeu tourne un jour de trop. Le pire d'un
 fail-closed est un QR mort chez un client qui a payé. Sur du papier déjà
 distribué, le sens de l'erreur n'est pas discutable.
 
-## ⚠️ Une question que je n'ai pas tranchée à ta place
+## Le blocage survit — arbitré
 
-`is_blocked` **coupe toujours** `/scan`.
+`is_blocked` **coupe toujours** `/scan`. Question posée à Samy, réponse le
+19/08/2026 : **on le garde.**
 
-P-11 parle de l'**échéance**. Mais lue au pied de la lettre — « jamais
-`/scan` » — elle supprimerait aussi le blocage, qui est ton **seul levier
-d'arrêt immédiat** sur un QR imprimé : fraude, commerce fermé, litige.
+P-11 parle de l'**échéance**, pas du blocage, et les deux ne sortent pas du
+même endroit :
 
-J'ai gardé le blocage. Retirer à quelqu'un son unique bouton d'urgence ne se
-déduit pas d'une décision qui n'en parle pas.
+| | D'où ça vient | Ce que ça coupe |
+|---|---|---|
+| Échéance dépassée | **tombe toute seule**, un matin de facture impayée | plus rien sur les parcours imprimés |
+| `is_blocked` | **quelqu'un décide** — fraude, commerce fermé, litige | tout, immédiatement |
 
-**Dis-moi si tu veux qu'il parte aussi.**
+C'est la seule distinction qui compte, et elle suffit :
+**ce qui éteint un support papier doit être un acte, jamais une date.**
 
 ## État
 

@@ -13,7 +13,9 @@ const HIER = new Date(Date.now() - 86_400_000).toISOString();
 const DEMAIN = new Date(Date.now() + 86_400_000).toISOString();
 
 describe("ce qui coupe un parcours servi par un QR imprimé", () => {
-  it("un restaurant bloqué coupe — c'est le levier d'urgence", () => {
+  /* Arbitré par Samy le 19/08/2026 : le blocage survit à P-11. Ce qui éteint
+     un support papier doit être un acte, jamais une date. */
+  it("un restaurant bloqué coupe — c'est le levier d'urgence, et il reste", () => {
     expect(doitCouperLeParcoursImprime({ is_blocked: true })).toBe(true);
   });
 
