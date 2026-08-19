@@ -53,85 +53,121 @@ select pg_advisory_xact_lock(hashtext('hotfix:isolation-lot-jeu'));
 
 do $$
 declare
-  v_src text; v_h text; v_def text; v_new text; v_hnew text;
-  v_sig text; v_secdef boolean; v_config text; v_vol "char"; v_n int;
-
+  v_n int; v_oid oid; v_src text; v_h text; v_def text; v_new text;
+  v_manif text; v_manif2 text;
   c_signature constant text := 'p_game_id uuid, p_prize_id uuid, p_email text, p_phone text, p_first_name text, p_marketing_optin boolean';
   c_preimage  constant text := '374e138285cb2962702ede05c713a62b5c0bbfa797ee6b50d5e5e91da6516cb3';
   c_postimage constant text := '32a3238976acd880c9711aaf04fb4b540ecb1ed055dcebf062828d6e0a988442';
-
-  -- Sens INVERSE : le corrigé redevient l'ancien.
+  c_owner constant text := 'postgres';
+  c_acl   constant text := 'postgres=X/postgres service_role=X/postgres';
   c_lot_apres   constant text := 'select * into v_prize from prizes where id = p_prize_id and game_id = p_game_id;';
   c_lot_avant   constant text := 'select * into v_prize from prizes where id = p_prize_id;';
   c_stock_apres constant text := 'update prizes set quantity = quantity - 1 where id = p_prize_id and game_id = p_game_id and quantity > 0;';
   c_stock_avant constant text := 'update prizes set quantity = quantity - 1 where id = p_prize_id and quantity > 0;';
 begin
-  select p.prosrc, encode(digest(p.prosrc,'sha256'),'hex'), pg_get_functiondef(p.oid),
-         pg_get_function_identity_arguments(p.oid), p.prosecdef,
-         coalesce(array_to_string(p.proconfig,','),''), p.provolatile
-    into v_src, v_h, v_def, v_sig, v_secdef, v_config, v_vol
+  /*
+   * Mêmes préconditions que l'application, et pour la même raison : ce script
+   * ne fait confiance à aucun contrôle qui l'aurait précédé. Le manifeste
+   * entier — signature, propriétaire, ACL, attributs — est relu avant toute
+   * mutation, et confronté à nouveau avant le commit.
+   */
+  select count(*) into v_n
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname='public' and p.proname='register_win'
-    and pg_get_function_identity_arguments(p.oid) = c_signature;
+  where n.nspname = 'public' and p.proname = 'register_win';
+  if v_n = 0 then raise exception 'ROLLBACK REFUSÉ : register_win absente.'; end if;
+  if v_n > 1 then raise exception 'ROLLBACK REFUSÉ : % surcharges de register_win.', v_n; end if;
 
-  if v_src is null then
-    raise exception 'ROLLBACK REFUSÉ : register_win introuvable avec la signature attendue.';
+  select p.oid, p.prosrc, encode(digest(p.prosrc,'sha256'),'hex'), pg_get_functiondef(p.oid),
+         pg_get_function_identity_arguments(p.oid) || ' | owner=' || pg_get_userbyid(p.proowner)
+           || ' | secdef=' || p.prosecdef::text
+           || ' | config=' || coalesce(array_to_string(p.proconfig,','),'')
+           || ' | vol=' || p.provolatile::text
+           || ' | acl=' || coalesce((select string_agg(a, ' ' order by a)
+                                     from unnest(coalesce(p.proacl, array[]::aclitem[])::text[]) a), '(defaut)')
+    into v_oid, v_src, v_h, v_def, v_manif
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'register_win';
+
+  if v_manif is distinct from
+     c_signature || ' | owner=' || c_owner || ' | secdef=true | config=search_path=public | vol=v | acl=' || c_acl then
+    raise exception 'ROLLBACK REFUSÉ : manifeste non conforme.%    observé : %%    attendu : %',
+      chr(10), v_manif, chr(10) || '    ' || c_signature || ' | owner=' || c_owner
+        || ' | secdef=true | config=search_path=public | vol=v | acl=' || c_acl;
   end if;
-  if not v_secdef or v_config is distinct from 'search_path=public' or v_vol <> 'v' then
-    raise exception 'ROLLBACK REFUSÉ : attributs inattendus (SECURITY DEFINER / search_path / volatilité).';
-  end if;
+
+  if not has_function_privilege('service_role', v_oid, 'EXECUTE') then
+    raise exception 'ROLLBACK REFUSÉ : service_role n''a pas EXECUTE.'; end if;
+  if has_function_privilege('anon', v_oid, 'EXECUTE') or has_function_privilege('authenticated', v_oid, 'EXECUTE') then
+    raise exception 'ROLLBACK REFUSÉ : anon ou authenticated peut exécuter register_win.'; end if;
 
   if v_h = c_preimage then
-    raise notice 'ROLLBACK : la fonction est déjà à la préimage — rien à annuler.';
+    raise notice 'ROLLBACK : déjà à la préimage — rien à annuler.';
     return;
   end if;
-
   if v_h <> c_postimage then
-    raise exception 'ROLLBACK REFUSÉ : empreinte % — le corps déployé n''est ni le corrigé exact, ni la préimage. Un état inconnu ne se dépatche pas.', v_h;
+    raise exception 'ROLLBACK REFUSÉ : empreinte % — ni le corrigé exact, ni la préimage. Un état inconnu ne se dépatche pas.', v_h;
   end if;
 
   v_n := (length(v_src) - length(replace(v_src, c_lot_apres, ''))) / length(c_lot_apres);
-  if v_n <> 1 then
-    raise exception 'ROLLBACK REFUSÉ : chargement du lot, % occurrence(s) du prédicat corrigé, 1 exigée.', v_n;
-  end if;
-  -- Le décrément est vérifié LUI AUSSI. Son absence était le défaut signalé.
+  if v_n <> 1 then raise exception 'ROLLBACK REFUSÉ : chargement, % occurrence(s) du prédicat corrigé, 1 exigée.', v_n; end if;
   v_n := (length(v_src) - length(replace(v_src, c_stock_apres, ''))) / length(c_stock_apres);
-  if v_n <> 1 then
-    raise exception 'ROLLBACK REFUSÉ : décrément de stock, % occurrence(s) du prédicat corrigé, 1 exigée.', v_n;
-  end if;
+  if v_n <> 1 then raise exception 'ROLLBACK REFUSÉ : décrément, % occurrence(s) du prédicat corrigé, 1 exigée.', v_n; end if;
 
   v_new := replace(replace(v_def, c_lot_apres, c_lot_avant), c_stock_apres, c_stock_avant);
   execute v_new;
 
-  select encode(digest(p.prosrc,'sha256'),'hex'), p.prosecdef,
-         coalesce(array_to_string(p.proconfig,','),'')
-    into v_hnew, v_secdef, v_config
+  select encode(digest(p.prosrc,'sha256'),'hex'),
+         pg_get_function_identity_arguments(p.oid) || ' | owner=' || pg_get_userbyid(p.proowner)
+           || ' | secdef=' || p.prosecdef::text
+           || ' | config=' || coalesce(array_to_string(p.proconfig,','),'')
+           || ' | vol=' || p.provolatile::text
+           || ' | acl=' || coalesce((select string_agg(a, ' ' order by a)
+                                     from unnest(coalesce(p.proacl, array[]::aclitem[])::text[]) a), '(defaut)')
+    into v_h, v_manif2
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname='public' and p.proname='register_win'
-    and pg_get_function_identity_arguments(p.oid) = c_signature;
+  where n.nspname = 'public' and p.proname = 'register_win';
 
-  if v_hnew is distinct from c_preimage then
-    raise exception 'ROLLBACK REFUSÉ : la préimage restaurée ne correspond pas (% au lieu de %). Transaction annulée.', v_hnew, c_preimage;
+  if v_h is distinct from c_preimage then
+    raise exception 'ROLLBACK REFUSÉ : préimage restaurée incorrecte (% au lieu de %). Transaction annulée.', v_h, c_preimage;
   end if;
-  if not v_secdef or v_config is distinct from 'search_path=public' then
-    raise exception 'ROLLBACK REFUSÉ : attributs altérés pendant la restauration. Transaction annulée.';
+  if v_manif2 is distinct from v_manif then
+    raise exception 'ROLLBACK REFUSÉ : le manifeste a changé pendant la restauration.%    avant : %%    après : %',
+      chr(10), v_manif, chr(10) || '    ' || v_manif2;
   end if;
 
-  raise notice 'ROLLBACK : préimage exacte restaurée (%). LE P0 EST DE NOUVEAU OUVERT.', c_preimage;
+  raise notice 'ROLLBACK : préimage exacte restaurée, manifeste inchangé. LE P0 EST DE NOUVEAU OUVERT.';
 end $$;
 
 revoke all on function public.register_win(uuid, uuid, text, text, text, boolean) from public, anon, authenticated;
 grant execute on function public.register_win(uuid, uuid, text, text, text, boolean) to service_role;
 
 do $$
+declare v_manif text; v_oid oid;
+  c_signature constant text := 'p_game_id uuid, p_prize_id uuid, p_email text, p_phone text, p_first_name text, p_marketing_optin boolean';
+  c_owner constant text := 'postgres';
+  c_acl   constant text := 'postgres=X/postgres service_role=X/postgres';
 begin
-  if not has_function_privilege('service_role',
-       'public.register_win(uuid,uuid,text,text,text,boolean)', 'EXECUTE') then
+  select p.oid,
+         pg_get_function_identity_arguments(p.oid) || ' | owner=' || pg_get_userbyid(p.proowner)
+           || ' | secdef=' || p.prosecdef::text
+           || ' | config=' || coalesce(array_to_string(p.proconfig,','),'')
+           || ' | vol=' || p.provolatile::text
+           || ' | acl=' || coalesce((select string_agg(a, ' ' order by a)
+                                     from unnest(coalesce(p.proacl, array[]::aclitem[])::text[]) a), '(defaut)')
+    into v_oid, v_manif
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'register_win';
+
+  if v_manif is distinct from
+     c_signature || ' | owner=' || c_owner || ' | secdef=true | config=search_path=public | vol=v | acl=' || c_acl then
+    raise exception 'ROLLBACK : manifeste non conforme apres les droits (%). Transaction annulee.', v_manif;
+  end if;
+  if not has_function_privilege('service_role', v_oid, 'EXECUTE') then
     raise exception 'ROLLBACK : service_role a perdu EXECUTE. Transaction annulee.';
   end if;
-  if has_function_privilege('anon',
-       'public.register_win(uuid,uuid,text,text,text,boolean)', 'EXECUTE') then
-    raise exception 'ROLLBACK : anon a acquis EXECUTE. Transaction annulee.';
+  if has_function_privilege('anon', v_oid, 'EXECUTE')
+     or has_function_privilege('authenticated', v_oid, 'EXECUTE') then
+    raise exception 'ROLLBACK : anon ou authenticated a acquis EXECUTE. Transaction annulee.';
   end if;
 end $$;
 

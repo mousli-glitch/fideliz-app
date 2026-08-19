@@ -170,3 +170,79 @@ describe("la procédure ne franchit aucune limite", () => {
     }
   });
 });
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  PROPRIÉTAIRE ET ACL — VÉRIFIÉS AVANT *ET* APRÈS, DANS LA TRANSACTION
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Le script sélectionnait le propriétaire sans jamais le comparer, et ne
+ * confrontait aucun manifeste ACL. Entre le préflight et l'application,
+ * quelques secondes suffisent à ce qu'un changement privilégié de
+ * propriétaire ou une permission supplémentaire apparaisse : le
+ * `revoke`/`grant` l'aurait NORMALISÉE en silence, et le contrôle post ne
+ * l'aurait vue qu'une fois la transaction validée — donc trop tard.
+ *
+ * ⚠️ Ces assertions sont des GARDES STATIQUES : elles prouvent que les
+ * contrôles sont écrits, pas qu'ils refusent. La preuve comportementale est
+ * SQL, jouée sur cible synthétique (voir le rapport).
+ */
+describe("garde statique — le manifeste est comparé des deux côtés de la mutation", () => {
+  for (const [nom, contenu] of [["application", APPLIQUER], ["retour arrière", RETOUR]] as const) {
+    const avant = contenu.slice(0, contenu.indexOf("execute v_new"));
+    const apres = contenu.slice(contenu.indexOf("execute v_new"));
+
+    it(`${nom} : le propriétaire attendu est comparé AVANT la mutation`, () => {
+      expect(avant).toContain("owner=");
+      expect(avant).toContain("'postgres'");
+    });
+
+    it(`${nom} : le manifeste ACL canonique est comparé AVANT la mutation`, () => {
+      expect(avant).toContain("postgres=X/postgres service_role=X/postgres");
+      expect(avant).toContain("proacl");
+    });
+
+    it(`${nom} : les droits négatifs sont exigés AVANT la mutation`, () => {
+      expect(avant).toContain("has_function_privilege('anon'");
+      expect(avant).toContain("has_function_privilege('authenticated'");
+    });
+
+    it(`${nom} : le droit positif de service_role est exigé AVANT la mutation`, () => {
+      expect(avant).toContain("has_function_privilege('service_role'");
+    });
+
+    it(`${nom} : le manifeste complet est reconfronté APRÈS, avant le commit`, () => {
+      expect(apres).toContain("proacl");
+      expect(apres).toContain("postgres=X/postgres service_role=X/postgres");
+      expect(apres).toContain("has_function_privilege('authenticated'");
+      expect(apres.indexOf("commit;")).toBeGreaterThan(apres.indexOf("proacl"));
+    });
+
+    it(`${nom} : zéro fonction et surcharges refusées avant toute mutation`, () => {
+      expect(avant).toMatch(/v_n\s*=\s*0/);
+      expect(avant).toMatch(/v_n\s*>\s*1/);
+    });
+  }
+});
+
+describe("garde statique — aucun script du paquet n'annonce des octets", () => {
+  /*
+   * `length()` compte des CARACTÈRES. Le corps est multioctet : 3600
+   * caractères pour 3604 octets sur le corrigé. Annoncer « octets » à partir
+   * de `length` est faux, et c'est le genre de faux qu'un opérateur reporte
+   * dans un incident.
+   */
+  const paquet: [string, string][] = [
+    ["01-preflight", PREFLIGHT], ["02-appliquer", APPLIQUER],
+    ["03-controles-post", POST], ["04-retour-arriere", RETOUR],
+    ["README", README], ["migration", MIGRATION], ["rollback", ROLLBACK],
+    ["runner", RUNNER],
+  ];
+  for (const [nom, contenu] of paquet) {
+    it(`${nom} : pas de « octets » accolé à une longueur`, () => {
+      // Autorisé : la note qui explique justement la distinction.
+      const suspect = contenu.match(/%s octets|\b3552 octets|\b3600 octets/g) ?? [];
+      expect(suspect, `${nom} annonce des octets à partir de length()`).toEqual([]);
+    });
+  }
+});

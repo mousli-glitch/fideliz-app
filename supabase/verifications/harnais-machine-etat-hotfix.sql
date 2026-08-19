@@ -64,10 +64,12 @@ create or replace function pg_temp.transition_hotfix(p_sens text) returns text
 language plpgsql as $t$
 declare
   v_src text; v_h text; v_def text; v_new text; v_hnew text;
-  v_secdef boolean; v_config text; v_vol "char"; v_n int;
+  v_manif text; v_manif2 text; v_n int; v_oid oid;
   c_sig  constant text := 'p_game_id uuid, p_prize_id uuid, p_email text, p_phone text, p_first_name text, p_marketing_optin boolean';
   c_pre  constant text := '374e138285cb2962702ede05c713a62b5c0bbfa797ee6b50d5e5e91da6516cb3';
   c_post constant text := '32a3238976acd880c9711aaf04fb4b540ecb1ed055dcebf062828d6e0a988442';
+  c_owner constant text := 'postgres';
+  c_acl   constant text := 'postgres=X/postgres service_role=X/postgres';
   c_lot_v constant text := 'select * into v_prize from prizes where id = p_prize_id;';
   c_lot_c constant text := 'select * into v_prize from prizes where id = p_prize_id and game_id = p_game_id;';
   c_stk_v constant text := 'update prizes set quantity = quantity - 1 where id = p_prize_id and quantity > 0;';
@@ -85,15 +87,25 @@ begin
   if v_n = 0 then return 'REFUS : fonction absente'; end if;
   if v_n > 1 then return format('REFUS : %s surcharges', v_n); end if;
 
-  select p.prosrc, encode(digest(p.prosrc,'sha256'),'hex'), pg_get_functiondef(p.oid),
-         p.prosecdef, coalesce(array_to_string(p.proconfig,','),''), p.provolatile
-    into v_src, v_h, v_def, v_secdef, v_config, v_vol
+  select p.oid, p.prosrc, encode(digest(p.prosrc,'sha256'),'hex'), pg_get_functiondef(p.oid),
+         pg_get_function_identity_arguments(p.oid) || ' | owner=' || pg_get_userbyid(p.proowner)
+           || ' | secdef=' || p.prosecdef::text
+           || ' | config=' || coalesce(array_to_string(p.proconfig,','),'')
+           || ' | vol=' || p.provolatile::text
+           || ' | acl=' || coalesce((select string_agg(a,' ' order by a)
+                                     from unnest(coalesce(p.proacl, array[]::aclitem[])::text[]) a),'(defaut)')
+    into v_oid, v_src, v_h, v_def, v_manif
   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-  where n.nspname='public' and p.proname='register_win'
-    and pg_get_function_identity_arguments(p.oid) = c_sig;
-  if v_src is null then return 'REFUS : signature inattendue'; end if;
-  if not v_secdef or v_config is distinct from 'search_path=public' or v_vol <> 'v' then
-    return 'REFUS : attributs inattendus'; end if;
+  where n.nspname='public' and p.proname='register_win';
+  if v_src is null then return 'REFUS : introuvable'; end if;
+  -- Manifeste COMPLET : signature, proprietaire, attributs, ACL canonique.
+  if v_manif is distinct from
+     c_sig || ' | owner=' || c_owner || ' | secdef=true | config=search_path=public | vol=v | acl=' || c_acl then
+    return 'REFUS : manifeste non conforme'; end if;
+  if not has_function_privilege('service_role', v_oid, 'EXECUTE') then
+    return 'REFUS : service_role sans EXECUTE'; end if;
+  if has_function_privilege('anon', v_oid, 'EXECUTE') or has_function_privilege('authenticated', v_oid, 'EXECUTE') then
+    return 'REFUS : anon/authenticated peut executer'; end if;
   if v_h = c_arrivee then return 'NO-OP strict'; end if;
   if v_h <> c_depart then return 'REFUS : empreinte inconnue ' || left(v_h,12) || '...'; end if;
   v_n := (length(v_src) - length(replace(v_src, c_a, ''))) / length(c_a);
@@ -102,10 +114,20 @@ begin
   if v_n <> 1 then return format('REFUS : decrement, %s occurrence(s)', v_n); end if;
   v_new := replace(replace(v_def, c_a, c_b), c_c, c_d);
   execute v_new;
-  select encode(digest(p.prosrc,'sha256'),'hex') into v_hnew from pg_proc p
-  join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='register_win';
+  select encode(digest(p.prosrc,'sha256'),'hex'),
+         pg_get_function_identity_arguments(p.oid) || ' | owner=' || pg_get_userbyid(p.proowner)
+           || ' | secdef=' || p.prosecdef::text
+           || ' | config=' || coalesce(array_to_string(p.proconfig,','),'')
+           || ' | vol=' || p.provolatile::text
+           || ' | acl=' || coalesce((select string_agg(a,' ' order by a)
+                                     from unnest(coalesce(p.proacl, array[]::aclitem[])::text[]) a),'(defaut)')
+    into v_hnew, v_manif2
+  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='public' and p.proname='register_win';
   if v_hnew is distinct from c_arrivee then
     raise exception 'POSTIMAGE inattendu : % au lieu de %', v_hnew, c_arrivee; end if;
+  if v_manif2 is distinct from v_manif then
+    raise exception 'MANIFESTE altere pendant le remplacement'; end if;
   return 'APPLIQUE';
 end $t$;
 

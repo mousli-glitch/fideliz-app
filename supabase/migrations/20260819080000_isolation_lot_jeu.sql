@@ -47,9 +47,13 @@
  * Le patch est donc conservé, mais BORNÉ PAR L'EMPREINTE DU CORPS ENTIER :
  *
  *   PRÉIMAGE  sha256(prosrc) = 374e138285cb2962702ede05c713a62b5c0bbfa797ee6b50d5e5e91da6516cb3
- *             3552 octets — mesurée sur la production le 19/08/2026
+ *             3552 caractères — mesurée sur la production le 19/08/2026
  *   POSTIMAGE sha256(prosrc) = 32a3238976acd880c9711aaf04fb4b540ecb1ed055dcebf062828d6e0a988442
- *             3600 octets — calculée en LECTURE SEULE, sans aucune mutation
+ *             3600 caractères — calculée en LECTURE SEULE, sans aucune mutation
+ *
+ * `length` compte des CARACTÈRES, pas des octets : le corps est multioctet
+ * (3600 caractères pour 3604 octets sur le corrigé). L'autorité sur l'identité
+ * reste le SHA-256, jamais la longueur.
  *
  * L'empreinte porte sur `prosrc` — le corps tel que stocké — et non sur
  * `pg_get_functiondef`, dont le formatage peut varier d'une version de
@@ -85,57 +89,78 @@
 
 do $$
 declare
-  v_src   text;
-  v_h     text;
-  v_def   text;
-  v_new   text;
-  v_hnew  text;
-  v_sig   text;
-  v_secdef boolean;
-  v_config text;
-  v_owner  text;
-  v_vol    "char";
-  v_n     int;
+  v_n      int;
+  v_oid    oid;
+  v_src    text;
+  v_h      text;
+  v_def    text;
+  v_new    text;
+  v_manif  text;
+  v_manif2 text;
 
   c_signature constant text := 'p_game_id uuid, p_prize_id uuid, p_email text, p_phone text, p_first_name text, p_marketing_optin boolean';
   c_preimage  constant text := '374e138285cb2962702ede05c713a62b5c0bbfa797ee6b50d5e5e91da6516cb3';
   c_postimage constant text := '32a3238976acd880c9711aaf04fb4b540ecb1ed055dcebf062828d6e0a988442';
+  c_owner     constant text := 'postgres';
+  c_acl       constant text := 'postgres=X/postgres service_role=X/postgres';
 
   c_lot_avant   constant text := 'select * into v_prize from prizes where id = p_prize_id;';
   c_lot_apres   constant text := 'select * into v_prize from prizes where id = p_prize_id and game_id = p_game_id;';
   c_stock_avant constant text := 'update prizes set quantity = quantity - 1 where id = p_prize_id and quantity > 0;';
   c_stock_apres constant text := 'update prizes set quantity = quantity - 1 where id = p_prize_id and game_id = p_game_id and quantity > 0;';
 begin
-  select p.prosrc,
-         encode(digest(p.prosrc, 'sha256'), 'hex'),
-         pg_get_functiondef(p.oid),
-         pg_get_function_identity_arguments(p.oid),
-         p.prosecdef,
-         coalesce(array_to_string(p.proconfig, ','), ''),
-         pg_get_userbyid(p.proowner),
-         p.provolatile
-    into v_src, v_h, v_def, v_sig, v_secdef, v_config, v_owner, v_vol
-  from pg_proc p
-  join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public'
-    and p.proname = 'register_win'
-    and pg_get_function_identity_arguments(p.oid) = c_signature;
+  /*
+   * ─── PRÉCONDITIONS COMPLÈTES, DANS LA TRANSACTION ───
+   *
+   * Le préflight reste obligatoire, mais ce script NE LUI FAIT PAS CONFIANCE
+   * pour ses préconditions de sécurité. Entre les deux, quelques secondes
+   * suffisent à ce qu'un changement privilégié de propriétaire ou une
+   * permission supplémentaire apparaisse. Sans contrôle ici, le `revoke`/
+   * `grant` la NORMALISERAIT en silence — et le contrôle post ne la verrait
+   * qu'une fois la transaction validée, donc trop tard.
+   *
+   * Le manifeste est donc relu ICI, entier, avant la moindre mutation.
+   */
+  select count(*) into v_n
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'register_win';
 
-  if v_src is null then
+  if v_n = 0 then
     raise exception using errcode = 'P0130',
-      message = 'register_win introuvable avec la signature attendue. Ce n''est pas un patch qui échoue, c''est le point de départ qui manque.';
+      message = 'register_win absente : ce n''est pas un patch qui échoue, c''est la cible qui manque.';
+  end if;
+  if v_n > 1 then
+    raise exception using errcode = 'P0130',
+      message = format('%s fonctions public.register_win (surcharges) : on ne saurait pas laquelle patcher.', v_n);
   end if;
 
-  -- ── Attributs exigés AVANT toute décision ──
-  if not v_secdef then
-    raise exception using errcode = 'P0130', message = 'register_win n''est plus SECURITY DEFINER : correctif refusé.';
-  end if;
-  if v_config is distinct from 'search_path=public' then
+  select p.oid, p.prosrc, encode(digest(p.prosrc,'sha256'),'hex'), pg_get_functiondef(p.oid),
+         pg_get_function_identity_arguments(p.oid) || ' | owner=' || pg_get_userbyid(p.proowner)
+           || ' | secdef=' || p.prosecdef::text
+           || ' | config=' || coalesce(array_to_string(p.proconfig,','),'')
+           || ' | vol=' || p.provolatile::text
+           || ' | acl=' || coalesce((select string_agg(a, ' ' order by a)
+                                     from unnest(coalesce(p.proacl, array[]::aclitem[])::text[]) a), '(defaut)')
+    into v_oid, v_src, v_h, v_def, v_manif
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'register_win';
+
+  -- Le manifeste attendu, en un seul morceau : tout écart lève.
+  if v_manif is distinct from
+     c_signature || ' | owner=' || c_owner || ' | secdef=true | config=search_path=public | vol=v | acl=' || c_acl then
     raise exception using errcode = 'P0130',
-      message = format('search_path inattendu (« %s ») : correctif refusé.', v_config);
+      message = 'Manifeste NON CONFORME avant mutation.' || chr(10)
+             || '    observé : ' || v_manif || chr(10)
+             || '    attendu : ' || c_signature || ' | owner=' || c_owner
+             || ' | secdef=true | config=search_path=public | vol=v | acl=' || c_acl;
   end if;
-  if v_vol <> 'v' then
-    raise exception using errcode = 'P0130', message = 'volatilité inattendue : correctif refusé.';
+
+  -- Droits effectifs : positif ET négatifs, en plus du manifeste.
+  if not has_function_privilege('service_role', v_oid, 'EXECUTE') then
+    raise exception using errcode = 'P0130', message = 'service_role n''a pas EXECUTE : le parcours joueur est déjà cassé.';
+  end if;
+  if has_function_privilege('anon', v_oid, 'EXECUTE') or has_function_privilege('authenticated', v_oid, 'EXECUTE') then
+    raise exception using errcode = 'P0130', message = 'anon ou authenticated peut exécuter register_win.';
   end if;
 
   -- ── Machine d'état : deux empreintes connues, tout le reste refuse ──
@@ -143,52 +168,53 @@ begin
     raise notice 'ISOLATION LOT/JEU : déjà appliqué (empreinte corrigée exacte). Aucune modification.';
     return;
   end if;
-
   if v_h <> c_preimage then
     raise exception using errcode = 'P0130',
-      message = format('Préimage NON AUTORISÉE : empreinte %s (%s octets). Le corps déployé n''est ni la version vulnérable auditée, ni la version corrigée. Correctif refusé — un état inconnu ne se patche pas.',
+      message = format('Préimage NON AUTORISÉE : empreinte %s (%s caractères). Le corps déployé n''est ni la version vulnérable auditée, ni la version corrigée. Correctif refusé — un état inconnu ne se patche pas.',
                        v_h, length(v_src));
   end if;
 
-  -- ── Les deux fragments, chacun présent exactement une fois DANS LE CORPS ──
+  -- ── Les deux fragments, chacun exactement une fois DANS LE CORPS ──
   v_n := (length(v_src) - length(replace(v_src, c_lot_avant, ''))) / length(c_lot_avant);
   if v_n <> 1 then
-    raise exception using errcode = 'P0130',
-      message = format('Chargement du lot : %s occurrence(s), 1 exigée.', v_n);
+    raise exception using errcode = 'P0130', message = format('Chargement du lot : %s occurrence(s), 1 exigée.', v_n);
   end if;
   v_n := (length(v_src) - length(replace(v_src, c_stock_avant, ''))) / length(c_stock_avant);
   if v_n <> 1 then
-    raise exception using errcode = 'P0130',
-      message = format('Décrément de stock : %s occurrence(s), 1 exigée.', v_n);
+    raise exception using errcode = 'P0130', message = format('Décrément de stock : %s occurrence(s), 1 exigée.', v_n);
   end if;
 
   /*
    * Le DDL exécuté est celui que PostgreSQL a lui-même rendu — guillemets,
    * attributs et `search_path` compris — avec les deux seuls remplacements.
-   * On ne réécrit pas l'enveloppe, on n'en touche que l'intérieur.
    */
   v_new := replace(replace(v_def, c_lot_avant, c_lot_apres), c_stock_avant, c_stock_apres);
   execute v_new;
 
-  -- ── Vérification du POSTIMAGE, relu dans le catalogue ──
-  select encode(digest(p.prosrc, 'sha256'), 'hex'),
-         pg_get_function_identity_arguments(p.oid), p.prosecdef,
-         coalesce(array_to_string(p.proconfig, ','), ''), pg_get_userbyid(p.proowner)
-    into v_hnew, v_sig, v_secdef, v_config, v_owner
+  -- ── Postimage : le corps ET le manifeste, relus dans le catalogue ──
+  select encode(digest(p.prosrc,'sha256'),'hex'),
+         pg_get_function_identity_arguments(p.oid) || ' | owner=' || pg_get_userbyid(p.proowner)
+           || ' | secdef=' || p.prosecdef::text
+           || ' | config=' || coalesce(array_to_string(p.proconfig,','),'')
+           || ' | vol=' || p.provolatile::text
+           || ' | acl=' || coalesce((select string_agg(a, ' ' order by a)
+                                     from unnest(coalesce(p.proacl, array[]::aclitem[])::text[]) a), '(defaut)')
+    into v_h, v_manif2
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public' and p.proname = 'register_win'
-    and pg_get_function_identity_arguments(p.oid) = c_signature;
+  where n.nspname = 'public' and p.proname = 'register_win';
 
-  if v_hnew is distinct from c_postimage then
+  if v_h is distinct from c_postimage then
     raise exception using errcode = 'P0130',
-      message = format('Postimage inattendu : %s au lieu de %s. La transaction est annulée, la fonction reste inchangée.', v_hnew, c_postimage);
+      message = format('Postimage inattendu : %s au lieu de %s. Transaction annulée.', v_h, c_postimage);
   end if;
-  if not v_secdef or v_config is distinct from 'search_path=public' then
+  if v_manif2 is distinct from v_manif then
     raise exception using errcode = 'P0130',
-      message = 'Les attributs ont changé pendant l''application : transaction annulée.';
+      message = 'Le manifeste a changé pendant le remplacement.' || chr(10)
+             || '    avant : ' || v_manif || chr(10)
+             || '    après : ' || v_manif2;
   end if;
 
-  raise notice 'ISOLATION LOT/JEU : appliqué. Empreinte % -> %.', c_preimage, c_postimage;
+  raise notice 'ISOLATION LOT/JEU : appliqué. Empreinte % -> %, manifeste inchangé.', c_preimage, c_postimage;
 end $$;
 
 /*
