@@ -109,7 +109,7 @@ témoin. Les quatre libellés de ticket (`DÉJÀ UTILISÉ`, `DÉLAI DÉPASSÉ`,
 | Isolation lot/jeu | un lot d'un autre restaurant est refusé | **PROUVÉ** | hotfix du 19/08, appliqué en production, attaque mesurée avant/après |
 | `service_role` sous garde | aucune action ouverte sans autorisation | **PROUVÉ** partiellement | `inventaire-destructif.md` — 4 fichiers dormants durcis ailleurs |
 | Archivage des tickets | `archive_redeemed_winners(90, 5000)` | **PROUVÉ** | `harnais-taches-planifiees.sql` — 25/25, bords à 89 et 91 jours |
-| Anonymisation | `anonymize_expired_data()` | **PROUVÉ** | idem — les deux fenêtres, 24 et 36 mois, distinguées |
+| Anonymisation | `anonymize_expired_data()` — **archives comprises depuis le 19/08** | **PROUVÉ** | idem, + 6/6 sur le cas de l'archive de 30 mois |
 | Tables de sauvegarde | 4 tables, 133 lignes | ⚠️ **DÉCISION** | instruite : `decision-tables-de-sauvegarde.md` |
 
 ---
@@ -206,10 +206,20 @@ stricte gagne, et la branche `consumed` de la fonction d'archivage est morte.
 Inoffensif tant que personne ne « range » en supprimant la stricte, qu'il
 croira redondante.
 
-**La dette des tâches reste entière**, et c'est une décision, pas un correctif :
-trois tâches d'archivage identiques à `0 3 * * *`, une quatrième à `10 3 * * *`.
-Ce qu'il faut conserver est l'effet, pas la quadruple exécution — mais
-dédupliquer touche la production.
+**Les deux découvertes ont été traitées le jour même**, sur autorisation de
+Samy — trace dans `application-anonymisation-et-crons.md` :
+
+- `anonymize_expired_data` couvre désormais `winners_archive`, même fenêtre de
+  24 mois. **0 ligne change aujourd'hui** : le plus ancien ticket archivé a
+  11 mois. Le correctif est inerte à l'arrivée et correct pour toujours.
+  Anonymiser les 37 lignes *maintenant* aurait été une autre décision —
+  détruire avant l'échéance — et elle n'a pas été prise.
+- Les cinq tâches sont passées à **deux** : une anonymisation à `0 3`, un
+  archivage à `10 3`. Le choix de garder celle de `10 3` déduplique *et*
+  sépare les deux traitements, qui se disputaient les mêmes lignes.
+
+La contradiction sur `winners.status` reste, elle, en l'état : inoffensive tant
+que personne ne supprime la contrainte stricte en la croyant redondante.
 
 ### Trou n°5 — instruit le 19/08, décision toujours attendue
 
