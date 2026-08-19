@@ -57,7 +57,8 @@ Aucune de ces étapes ne touche la production.
 | # | Geste | Vérification |
 |---|---|---|
 | 2.1 | Créer un banc Cartiz | ⚠ **toujours créer, jamais `reset`** : `reset_branch` rejoue depuis l'instantané de création, pas depuis le registre courant |
-| 2.2 | Y réappliquer 081 → 088 | ⚠ un banc neuf est **en retard** : mesuré le 19/08, il ne rejoue que les versions ≤ 20260819190000 |
+| 2.1bis | **Attendre que le décompte des migrations se stabilise** | ⚠ le banc annonce `ACTIVE_HEALTHY` **pendant que ses migrations rejouent encore**. Mesuré le 19/08 : 17 migrations à la première lecture, 90 à la seconde. Mesurer une seule fois mène à conclure que la création est non déterministe — elle ne l'est pas, elle est asynchrone. |
+| 2.2 | Y réappliquer 083 → 088 | ⚠ un banc neuf est **en retard** : mesuré deux fois le 19/08, il s'arrête à 90 migrations, version 20260819190000. 081 et 082 ne sont pas nécessaires au migrateur — il ne lit ni `habilitations` ni la fonction d'anonymisation — mais un banc pleinement fidèle les porterait aussi. |
 | 2.3 | Y verser la sauvegarde du Storage | chaque chemin retrouve son contenu |
 | 2.4 | `migrer.ts --appliquer` vers le banc | « VERSEMENT CONFORME » |
 | 2.5 | **Rejouer 2.4 à l'identique** | mêmes comptes, aucune ligne en double — **c'est R4** |
