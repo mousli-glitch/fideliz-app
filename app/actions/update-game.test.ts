@@ -127,10 +127,16 @@ describe("P0 : le tenant vient de la garde, jamais du corps de la requête", () 
     expect(appelRpc()?.p_restaurant).toBeTruthy();
   });
 
-  it("seuls DEUX champs du restaurant sont transmis — whitelist", async () => {
+  it("seuls DEUX champs du restaurant peuvent être transmis — whitelist", async () => {
+    /*
+     * Ce test exigeait les DEUX clés, ce qui figeait le défaut : l'action les
+     * fabriquait toujours avec `?? null`, donc un `logo_url` absent partait à
+     * null et effaçait le logo. La whitelist porte sur ce qui est AUTORISÉ,
+     * pas sur ce qui est envoyé de force.
+     */
     await updateGameAction("jeu-1", {
       ...CHARGE,
-      design: { ...CHARGE.design, slug: "vole", is_blocked: true, subscription: "pro" },
+      design: { primary_color: "#000000", logo_url: "l.png", slug: "vole", is_blocked: true, subscription: "pro" },
     });
     expect(Object.keys(appelRpc()?.p_restaurant ?? {}).sort()).toEqual(["logo_url", "primary_color"]);
   });
@@ -292,5 +298,52 @@ describe("charge malformée : on ne fabrique pas de lots", () => {
     const r = await updateGameAction("jeu-1", { ...CHARGE, prizes: "pas un tableau" });
     expect(appelRpc()?.p_lots).toEqual([]);
     expect(typeof r.success).toBe("boolean");
+  });
+});
+
+/*
+ * ─── UNE ABSENCE N'EST PAS UNE VALEUR ───
+ *
+ * Signalé le 19/08/2026. La RPC distingue bien « clé absente » (conserver) de
+ * « clé à null » (effacer) — mais l'action construisait toujours les deux clés
+ * avec `?? null`. Un `design` sans `logo_url` transmettait donc
+ * `logo_url: null` et EFFAÇAIT le logo. La garantie annoncée était vraie côté
+ * SQL et fausse côté action : exactement le genre d'écart qu'un test
+ * action → RPC attrape et qu'une relecture du SQL seul ne voit pas.
+ */
+describe("whitelist restaurant : omission, null explicite et valeur", () => {
+  it("champ OMIS : la clé n'est pas transmise du tout", async () => {
+    await updateGameAction("jeu-1", { ...CHARGE, design: { primary_color: "#abcdef" } });
+    const r = appelRpc()?.p_restaurant ?? {};
+    expect(Object.keys(r)).toEqual(["primary_color"]);
+    expect("logo_url" in r, "une clé absente doit rester absente").toBe(false);
+  });
+
+  it("null EXPLICITE : la clé est transmise, à null — l'effacement reste possible", async () => {
+    await updateGameAction("jeu-1", { ...CHARGE, design: { primary_color: "#abcdef", logo_url: null } });
+    const r = appelRpc()?.p_restaurant ?? {};
+    expect("logo_url" in r).toBe(true);
+    expect(r.logo_url).toBeNull();
+  });
+
+  it("valeur : elle passe telle quelle", async () => {
+    await updateGameAction("jeu-1", {
+      ...CHARGE,
+      design: { primary_color: "#abcdef", logo_url: "https://exemple.invalid/l.png" },
+    });
+    expect(appelRpc()?.p_restaurant.logo_url).toBe("https://exemple.invalid/l.png");
+  });
+
+  it("`design` absent : aucun champ restaurant n'est transmis", async () => {
+    await updateGameAction("jeu-1", { ...CHARGE, design: undefined });
+    expect(appelRpc()?.p_restaurant).toEqual({});
+  });
+
+  it("les champs hors whitelist ne passent jamais, même présents", async () => {
+    await updateGameAction("jeu-1", {
+      ...CHARGE,
+      design: { primary_color: "#abcdef", slug: "vole", is_blocked: true },
+    });
+    expect(Object.keys(appelRpc()?.p_restaurant ?? {})).toEqual(["primary_color"]);
   });
 });

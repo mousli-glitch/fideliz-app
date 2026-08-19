@@ -34,6 +34,25 @@ function brut(v: unknown): string | null {
 }
 
 /*
+ * Les deux seuls champs restaurant que cette action a le droit d'écrire, et
+ * uniquement ceux que l'appelant a réellement fournis.
+ *
+ * `?? null` aurait suffi à tout casser : la clé aurait toujours existé, donc
+ * un `design` sans `logo_url` aurait transmis `logo_url: null` — et la RPC,
+ * qui distingue « clé absente » de « clé à null », aurait effacé le logo. Une
+ * absence n'est pas une valeur.
+ */
+function champsRestaurant(design: any): Record<string, unknown> {
+  const champs: Record<string, unknown> = {}
+  for (const cle of ["primary_color", "logo_url"] as const) {
+    if (design && Object.prototype.hasOwnProperty.call(design, cle)) {
+      champs[cle] = design[cle]
+    }
+  }
+  return champs
+}
+
+/*
  * ═══════════════════════════════════════════════════════════════════════════
  *  ENREGISTRER UN JEU
  * ═══════════════════════════════════════════════════════════════════════════
@@ -139,11 +158,12 @@ export async function updateGameAction(gameId: string, data: any) {
     const { error: eEnregistrement } = await supabaseAdmin.rpc("enregistrer_jeu_et_lots", {
       p_game_id: gameId,
       p_restaurant_id: restaurantId,
-      // Whitelist stricte : ces deux champs, pas un de plus.
-      p_restaurant: {
-        primary_color: data.design?.primary_color ?? null,
-        logo_url: data.design?.logo_url ?? null,
-      },
+      // Whitelist stricte : ces deux champs, pas un de plus — et seulement
+      // s'ils sont RÉELLEMENT présents. Signalé le 19/08/2026 : avec
+      // `?? null`, la clé existait toujours, donc un `design` sans `logo_url`
+      // transmettait `logo_url: null` et EFFAÇAIT le logo. La RPC conserve
+      // bien les clés omises ; c'était l'action qui n'en omettait jamais.
+      p_restaurant: champsRestaurant(data.design),
       p_jeu: {
         name: data.form?.name,
         active_action: data.form?.active_action,

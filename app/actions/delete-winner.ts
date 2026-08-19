@@ -32,11 +32,24 @@ export async function deleteWinnerAction(winnerIds: string[], slug: string) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  // Chaque ticket visé appartient-il bien à ce restaurant ?
-  const { data: vises } = await supabase
+  /*
+   * Chaque ticket visé appartient-il bien à ce restaurant ?
+   *
+   * Signalé le 19/08/2026 : l'`error` de cette lecture n'était pas lue. Le
+   * chemin restait fail-closed — `data` nul donne une longueur de 0, donc
+   * l'égalité des longueurs échoue, donc refus — mais la sécurité tenait à un
+   * EFFET DE BORD du contrôle de cardinalité, pas à une décision écrite. Le
+   * jour où quelqu'un assouplit ce contrôle, la panne de lecture devient une
+   * suppression.
+   */
+  const { data: vises, error: eLecture } = await supabase
     .from("winners")
     .select("id, games!inner(restaurant_id)")
     .in("id", winnerIds)
+
+  if (eLecture) {
+    return { success: false, error: "Vérification des tickets impossible : suppression annulée." }
+  }
 
   const lignes = (vises ?? []) as unknown as { id: string; games: { restaurant_id: string } }[]
   const etrangers = lignes.filter((l) => l.games?.restaurant_id !== garde.restaurant!.id)
