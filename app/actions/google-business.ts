@@ -369,20 +369,65 @@ export async function syncGoogleReviews(restaurantId: string, opts: { force?: bo
     if (upErr) return { success: false, error: upErr.message }
   }
 
-  // Réconciliation des suppressions : on retire les avis que Google ne renvoie plus.
-  // UNIQUEMENT si le fetch était complet, pour ne jamais supprimer sur un fetch partiel.
+  /*
+   * ─── RÉCONCILIATION DES SUPPRESSIONS ───
+   *
+   * On retire les avis que Google ne renvoie plus. UNIQUEMENT si le fetch
+   * était complet : sur un fetch partiel, « absent de la réponse » ne veut
+   * pas dire « supprimé chez Google ».
+   *
+   * ─── DEUX DÉFAUTS CORRIGÉS LE 19/08/2026 ───
+   *
+   * 1. LE PRÉDICAT ÉTAIT CONSTRUIT PAR CONCATÉNATION À PARTIR DE DONNÉES
+   *    EXTERNES. La version précédente écrivait le filtre à la main :
+   *
+   *        del.not("review_id", "in", `(${ids.map(id => `"${id}"`).join(",")})`)
+   *
+   *    `review_id` vient de l'API Google. Un identifiant contenant un
+   *    guillemet, une virgule ou une parenthèse produisait un filtre
+   *    différent de celui qu'on croyait écrire — sur un DELETE à la clé de
+   *    service. Le pire cas restait borné au restaurant (le `eq` tient), mais
+   *    « borné » n'est pas « voulu » : c'était tous les avis de ce
+   *    restaurant.
+   *
+   *    La liste des avis à retirer est désormais calculée ICI, et la
+   *    suppression vise les clés primaires — des identifiants que NOUS
+   *    produisons. Plus aucune donnée externe n'entre dans un prédicat.
+   *
+   * 2. L'ERREUR DU DELETE ÉTAIT IGNORÉE (`await del` sans lire `error`), tout
+   *    comme celle de la mise à jour des métriques. Un sync annonçait
+   *    `success` alors que la réconciliation n'avait pas eu lieu.
+   */
   if ((res as any).complete) {
-    const currentIds = rows.map((r) => r.review_id)
-    let del = supabaseAdmin.from("avis").delete().eq("restaurant_id", restaurantId)
-    if (currentIds.length > 0) {
-      // supprime tout ce qui n'est pas dans la liste actuelle
-      del = del.not("review_id", "in", `(${currentIds.map((id) => `"${id}"`).join(",")})`)
+    const { data: existants, error: eLecture } = await supabaseAdmin
+      .from("avis")
+      .select("id, review_id")
+      .eq("restaurant_id", restaurantId)
+
+    if (eLecture) {
+      return { success: false, error: "Réconciliation impossible (lecture) : " + eLecture.message }
     }
-    await del
+
+    const vivants = new Set(rows.map((r) => r.review_id))
+    const aRetirer = ((existants as { id: string; review_id: string }[] | null) ?? [])
+      .filter((a) => !vivants.has(a.review_id))
+      .map((a) => a.id)
+
+    if (aRetirer.length > 0) {
+      const { error: eSuppression } = await supabaseAdmin
+        .from("avis")
+        .delete()
+        .eq("restaurant_id", restaurantId)   // ceinture : la borne de tenant reste
+        .in("id", aRetirer)
+
+      if (eSuppression) {
+        return { success: false, error: "Réconciliation impossible (suppression) : " + eSuppression.message }
+      }
+    }
   }
 
-  // Synthèse (note moyenne + total réels de Google) sur le resto
-  await supabaseAdmin
+  // Synthèse (note moyenne + total réels de Google) sur le resto.
+  const { error: eMetriques } = await supabaseAdmin
     .from("restaurants")
     .update({
       google_reviews_avg: (res as any).averageRating || null,
@@ -390,6 +435,11 @@ export async function syncGoogleReviews(restaurantId: string, opts: { force?: bo
       google_reviews_synced_at: new Date().toISOString(),
     })
     .eq("id", restaurantId)
+
+  if (eMetriques) {
+    // Les avis sont à jour, pas les métriques : ce n'est pas un succès complet.
+    return { success: false, error: "Métriques non enregistrées : " + eMetriques.message }
+  }
 
   return { success: true, count: rows.length, complete: !!(res as any).complete }
 }
