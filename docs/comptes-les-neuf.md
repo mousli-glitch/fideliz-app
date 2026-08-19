@@ -9,6 +9,42 @@
 > Aucune adresse, aucun identifiant n'y figure : les comparaisons sont faites
 > par empreinte, seul le verdict est écrit. Relevé le 19/08/2026.
 
+## ⚠ CORRECTION DU 19/08/2026 — Cartiz n'est pas commercialisé
+
+Samy l'a précisé après la première version de ce document : **tous les comptes
+Cartiz sont des comptes de test, les siens.** Aucun restaurateur ne se
+connecte à Cartiz. Le compte `best-pizza` de Cartiz qui s'est connecté le
+06/08, c'était lui.
+
+Ne pas confondre deux choses qui cohabitent :
+
+| | En service ? | Preuve |
+|---|---|---|
+| Les **menus** de best-pizza et la-ruche | **oui** | 98 et 266 scans de QR |
+| Les **comptes** Cartiz | **non** | ce sont ceux de Samy |
+
+**Conséquence : mes recommandations F1 et F2 ci-dessous étaient inversées.**
+Elles reposaient sur l'idée que le compte Cartiz de best-pizza appartenait au
+restaurateur, et disaient « garder le Cartiz, il ne change rien pour lui ».
+Faux : ce compte est celui de Samy. **L'identité réelle d'un restaurateur est
+toujours celle de Fideliz.**
+
+Recommandations rectifiées :
+
+| # | Compte | Recommandation corrigée |
+|---|---|---|
+| F1 | best-pizza | **verser le compte Fideliz** ; le compte de test Cartiz est supprimé |
+| F2 | la-ruche | **verser le compte Fideliz** ; idem. La question « les deux adresses sont-elles la même personne » **disparaît** — l'adresse Cartiz est celle de Samy |
+
+Et la suppression des comptes de test est possible : les 5 restaurants Cartiz
+ont tous `created_by` = le compte admin de Samy, jamais un compte de test. Le
+verrou NO ACTION vers `auth.users` ne se déclenchera pas.
+
+**Il ne reste donc qu'une vraie question**, en fin de document : le mot de
+passe des restaurateurs après la bascule.
+
+---
+
 ## Ce que la mesure a corrigé
 
 **Une seule collision d'adresse sur 9 × 5 : best-pizza.** Le plan du lot 6
@@ -52,7 +88,12 @@ elles avaient toutes les deux raison, sur un restaurant chacune.
 
 ## Les trois décisions qui restent à toi
 
-### D-1 · la-ruche : les deux adresses sont-elles la même personne ?
+### ~~D-1 · la-ruche : les deux adresses sont-elles la même personne ?~~ — SANS OBJET
+
+L'adresse côté Cartiz est celle de Samy, pas celle d'un restaurateur. La
+seule adresse réelle est celle de Fideliz. Rien à arbitrer.
+
+<details><summary>Formulation initiale, conservée pour mémoire</summary>
 
 Côté Cartiz une adresse d'un fournisseur, côté Fideliz une autre. Si c'est la
 même personne, la recommandation tient : on garde l'UUID Cartiz, on lui met
@@ -61,6 +102,8 @@ première connexion. Si ce sont **deux personnes différentes**, la question
 change entièrement et il faut décider laquelle est le gérant.
 
 **Je ne peux pas trancher : c'est un fait que seul toi connais.**
+
+</details>
 
 ### D-2 · les trois orphelins : ne pas verser, ou verser coupés ?
 
@@ -73,7 +116,26 @@ Ils ne portent rien et ne sont référencés nulle part. Deux options :
 Ma recommandation : **ne pas verser**. Trois comptes sans restaurant dans un
 annuaire, c'est trois occasions de se tromper plus tard.
 
-### D-3 · best-pizza : confirmer que le compte Cartiz survit
+### ~~D-3 · best-pizza : confirmer que le compte Cartiz survit~~ — INVERSÉE
+
+C'est le compte **Fideliz** qui survit : le compte Cartiz est un compte de
+test. Voir la correction en tête de document.
+
+### D-3bis · le mot de passe des restaurateurs après la bascule
+
+Les restaurateurs de best-pizza, la-ruche et soukara se connecteront avec leur
+compte Fideliz. Deux options :
+
+- **garder leur mot de passe actuel** — rien à faire, rien à leur annoncer ;
+- **réémettre un mot de passe provisoire**, avec `doit_changer_mdp` posé, à
+  changer à la première connexion.
+
+La première ne dérange personne. La seconde est plus propre si tu veux
+marquer le passage à la nouvelle application. **Attention dans les deux cas :**
+`doit_changer_mdp` ne s'applique qu'aux comptes créés avec le drapeau — une
+réémission qui l'oublie rend les mots de passe provisoires permanents.
+
+<details><summary>Formulation initiale de D-3, conservée pour mémoire</summary>
 
 Les deux portent la même adresse, et dans un seul projet Supabase deux lignes
 `auth.users` ne peuvent pas la partager. L'un des deux doit disparaître.
@@ -84,6 +146,8 @@ restaurateur : même adresse, même mot de passe.
 
 Garder le Fideliz obligerait à recréer le rattachement et à réémettre un mot
 de passe. **Recommandation : le Cartiz survit.** À confirmer.
+
+</details>
 
 ## Ce que le versement doit conserver
 
