@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Gamepad2 } from "lucide-react";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
+import { doitCouperLeParcoursImprime } from "@/lib/coupure-jeu";
 
 export default async function SmartScanPage({
   params,
@@ -47,12 +48,16 @@ export default async function SmartScanPage({
     );
   }
 
-  // Abonnement expiré = jeu arrêté (traité comme un blocage, message neutre)
-  const subEnd = (restaurant as any).subscription_end
-  const isExpired = subEnd ? new Date(subEnd) < new Date() : false
-
-  // ✅ Si bloqué OU abonnement expiré : message neutre (pas de nom, pas de slug)
-  if ((restaurant as any).is_blocked === true || isExpired) {
+  /*
+   * Décision P-11 (19/08/2026) : une échéance d'abonnement dépassée coupe le
+   * DASHBOARD, jamais un parcours servi par un QR imprimé. Ce chemin en est
+   * un — la-ruche, best-pizza et soukara ont des cartons sur les tables.
+   *
+   * `subscription_end` coupait ici jusqu'à cette date. La règle et son test
+   * vivent dans `lib/coupure-jeu.ts` : la condition ne doit plus jamais être
+   * réécrite à la main dans une page.
+   */
+  if (doitCouperLeParcoursImprime(restaurant as any)) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
         <div className="w-20 h-20 bg-white rounded-full shadow-sm flex items-center justify-center mb-6">
