@@ -98,19 +98,27 @@ délibéré, pas un effet de bord.
 
 ## Phase 4 · Retour arrière
 
-À écrire **avant** de jouer la phase 3, pas après. Aujourd'hui il n'existe
-pas, et c'est la moitié manquante de R9.
+**Écrit** le 19/08/2026 — `scripts/fusion/defaire.ts`. Non éprouvé : comme le
+reste, il attend un banc.
 
-Ce qu'il devra couvrir :
+    node scripts/fusion/defaire.ts etat-avant-restaurants-AAAA-MM-JJ.json
+    FUSION_DEFAIRE_JE_CONFIRME=oui node scripts/fusion/defaire.ts … --appliquer
 
-- **Les données versées** : chaque ligne porte son identifiant Fideliz, donc
-  un `delete` borné à ces identifiants les retire sans toucher au reste.
-  À écrire et à éprouver sur banc.
-- **Les comptes** : deux créations et un changement d'adresse. Le changement
-  est le plus délicat — l'adresse d'avant doit être notée avant de l'écraser.
-- **Le Storage** : la sauvegarde de 1.2, re-téléversée.
-- **Le schéma** : `supabase/rollback/083` à `088`, tous bornés, tous refusant
-  de s'exécuter si des données sont écrites.
+Le mot de confirmation diffère de celui du versement : avoir autorisé l'un
+n'autorise pas l'autre.
+
+| # | Geste | Vérification |
+|---|---|---|
+| 4.1 | `defaire.ts <etat-avant.json>` | le plan liste ce qui sera retiré, et refuse si une ligne a bougé depuis |
+| 4.2 | `… --appliquer` | « RETOUR ARRIÈRE COMPLET », ou le compte des lignes nées chez Cartiz et conservées |
+| 4.3 | Les comptes, **à la main** | le script les liste ; supprimer un compte est irréversible et emporte son profil |
+| 4.4 | Le Storage, si besoin | re-téléverser la sauvegarde de 1.2 |
+| 4.5 | Le schéma, si besoin | `supabase/rollback/088` → `083`, dans cet ordre, tous bornés |
+
+**Le migrateur relève l'état d'avant** des colonnes qu'il va écrire, dans
+`etat-avant-restaurants-AAAA-MM-JJ.json`, **avant** la première modification.
+C'est ce fichier qui rend 4.2 possible : sans lui, rendre une colonne à NULL
+serait une supposition, pas une annulation. **Le garder.**
 
 ---
 
