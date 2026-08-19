@@ -8,14 +8,25 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Normalise un montant saisi par le gérant : accepte "5,90" ou "5.90", garde les centimes.
-// Renvoie une chaîne propre ("5.9") car la colonne min_spend est de type texte.
-function normalizeAmount(value: any): string {
-  if (value === null || value === undefined || value === "") return "0"
-  const n = parseFloat(String(value).replace(",", ".").trim())
-  if (!isFinite(n) || n < 0) return "0"
-  return String(Math.round(n * 100) / 100) // 2 décimales max
-}
+/*
+ * ─── `normalizeAmount` A ÉTÉ RETIRÉE, ET C'EST LE POINT ───
+ *
+ * Elle faisait exactement ce qu'on reproche à la coercition des stocks :
+ *
+ *     parseFloat("abc")  -> NaN   -> !isFinite -> "0"
+ *     parseFloat("-3")   -> -3    -> n < 0     -> "0"
+ *     parseFloat("5abc") -> 5                  -> "5"
+ *
+ * Une saisie fautive ne produisait pas une erreur : elle produisait une
+ * VALEUR MÉTIER. « abc » devenait « aucun minimum », et « 5abc » devenait un
+ * minimum de 5 € que personne n'avait demandé. Le gérant n'en savait rien.
+ *
+ * Et elle rendait « 5.9 » pour une saisie « 5,90 » — la forme précise que
+ * `play_game` refuse et remplace par zéro.
+ *
+ * Le montant part donc BRUT, et `centimes_depuis_saisie` tranche dans la
+ * transaction : illisible = refus de l'agrégat entier, jamais un repli.
+ */
 
 /*
  * La saisie, TELLE QUELLE.
@@ -169,7 +180,8 @@ export async function updateGameAction(gameId: string, data: any) {
         active_action: data.form?.active_action,
         action_url: data.form?.action_url,
         validity_days: data.form?.validity_days,
-        min_spend: normalizeAmount(data.form?.min_spend),
+        // BRUT : c'est la base qui valide, et qui refuse.
+        min_spend: brut(data.form?.min_spend),
         is_date_limit_active: !!data.form?.is_date_limit_active,
         start_date: data.form?.is_date_limit_active && data.form?.start_date
           ? new Date(data.form.start_date).toISOString() : null,

@@ -8,12 +8,34 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Normalise un montant saisi par le gérant : accepte "5,90" ou "5.90", garde les centimes.
-function normalizeAmount(value: any): string {
-  if (value === null || value === undefined || value === "") return "0"
-  const n = parseFloat(String(value).replace(",", ".").trim())
-  if (!isFinite(n) || n < 0) return "0"
-  return String(Math.round(n * 100) / 100) // 2 décimales max
+/*
+ * ─── `normalizeAmount` A ÉTÉ RETIRÉE ───
+ *
+ * Elle transformait une saisie fautive en VALEUR MÉTIER, sans rien signaler :
+ *
+ *     parseFloat("abc")  -> NaN  -> "0"   (« aucun minimum »)
+ *     parseFloat("-3")   -> -3   -> "0"
+ *     parseFloat("5abc") -> 5    -> "5"   (un minimum inventé)
+ *
+ * La grammaire monétaire vit désormais en UN seul endroit,
+ * `public.centimes_depuis_saisie` — la recopier ici garantirait qu'un jour
+ * les deux divergent. On l'appelle, on ne la duplique pas.
+ */
+
+/** La saisie telle quelle : vide/absent -> null, jamais une conversion. */
+function brut(v: unknown): string | null {
+  if (v === null || v === undefined) return null
+  const t = String(v).trim()
+  return t === "" ? null : t
+}
+
+/**
+ * La forme textuelle d'un montant, DÉRIVÉE des centimes — arithmétique
+ * entière uniquement, aucun flottant : `590 -> "5.90"`, `1200 -> "12"`.
+ */
+function texteDepuisCentimes(centimes: number): string {
+  if (centimes % 100 === 0) return String(centimes / 100)
+  return `${Math.floor(centimes / 100)}.${String(centimes % 100).padStart(2, "0")}`
 }
 
 /*
@@ -38,6 +60,22 @@ export async function createGameAction(data: any) {
     if (!data.form.name || data.form.name.trim() === "") throw new Error("Le nom du jeu est obligatoire.")
     if (!data.form.action_url || data.form.action_url.trim() === "") throw new Error("Le lien d'action (URL) est manquant.")
     if (data.form.validity_days < 1) throw new Error("La durée de validité doit être d'au moins 1 jour.")
+
+    /*
+     * LE MONTANT, VALIDÉ AVANT LA MOINDRE ÉCRITURE.
+     *
+     * Ce chemin n'est pas encore transactionnel — c'est un P0 distinct, non
+     * traité ici — mais une saisie illisible doit au moins refuser AVANT que
+     * quoi que ce soit ne bouge, plutôt que d'être silencieusement convertie
+     * en « aucun minimum ».
+     */
+    const { data: centimesBruts, error: eMontant } = await supabaseAdmin
+      .rpc("centimes_depuis_saisie", { p_saisie: brut(data.form?.min_spend) })
+
+    if (eMontant) {
+      return { success: false, error: eMontant.message }
+    }
+    const minSpendCents: number = centimesBruts ?? 0
 
     // Trouver le restaurant
     const { data: restaurant, error: restoError } = await supabaseAdmin
@@ -72,7 +110,9 @@ export async function createGameAction(data: any) {
       active_action: data.form.active_action,
       action_url: data.form.action_url,
       validity_days: data.form.validity_days,
-      min_spend: normalizeAmount(data.form.min_spend),
+      // Les DEUX représentations, issues de la même source validée.
+      min_spend: texteDepuisCentimes(minSpendCents),
+      min_spend_cents: minSpendCents,
       bg_image_url: data.design.bg_image_url,
       bg_choice: data.design.bg_choice,
       title_style: data.design.title_style,

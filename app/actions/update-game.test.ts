@@ -279,13 +279,54 @@ describe("les dates : elles ne partent que si la limite est active", () => {
   });
 });
 
-describe("le montant minimum reste normalisé", () => {
-  for (const [saisi, attendu] of [["5,90", "5.9"], ["5.90", "5.9"], ["", "0"], ["-3", "0"], ["abc", "0"]]) {
-    it(`« ${saisi} » devient « ${attendu} »`, async () => {
-      await updateGameAction("jeu-1", { ...CHARGE, form: { ...CHARGE.form, min_spend: saisi } });
-      expect(appelRpc()?.p_jeu.min_spend).toBe(attendu);
+describe("le montant part BRUT — plus aucune coercition en amont", () => {
+  /*
+   * Ces tests figeaient exactement le défaut. L'ancien `normalizeAmount`
+   * faisait :
+   *
+   *     parseFloat("abc")  -> NaN  -> "0"   (« aucun minimum »)
+   *     parseFloat("-3")   -> -3   -> "0"
+   *     parseFloat("5abc") -> 5    -> "5"   (un minimum inventé)
+   *
+   * Une saisie fautive ne produisait pas une erreur : elle produisait une
+   * VALEUR MÉTIER, et le gérant n'en savait rien. Et « 5,90 » devenait
+   * « 5.9 » — la forme précise que `play_game` refuse et remplace par zéro.
+   *
+   * On exige désormais l'inverse : la saisie passe TELLE QUELLE, et c'est
+   * `centimes_depuis_saisie` qui tranche, dans la transaction.
+   */
+  for (const saisie of ["5,90", "5.90", "5.9", "12", "0", "abc", "-3", "5abc", "1e3", "5.999"]) {
+    it(`« ${saisie} » est transmis tel quel`, async () => {
+      await updateGameAction("jeu-1", { ...CHARGE, form: { ...CHARGE.form, min_spend: saisie } });
+      expect(appelRpc()?.p_jeu.min_spend).toBe(saisie);
     });
   }
+
+  it("une saisie VIDE devient null — « rien de saisi », pas « zéro »", async () => {
+    for (const vide of ["", "   ", null, undefined]) {
+      journal = [];
+      await updateGameAction("jeu-1", { ...CHARGE, form: { ...CHARGE.form, min_spend: vide } });
+      expect(appelRpc()?.p_jeu.min_spend).toBeNull();
+    }
+  });
+
+  it("aucune valeur invalide n'est convertie en 0 avant l'appel", async () => {
+    // Le cœur du défaut : « 0 » ici voudrait dire « aucun minimum », et la
+    // saisie fautive aurait disparu sans que personne ne le voie.
+    for (const saisie of ["abc", "-3", "1e3", "NaN", "Infinity"]) {
+      journal = [];
+      await updateGameAction("jeu-1", { ...CHARGE, form: { ...CHARGE.form, min_spend: saisie } });
+      expect(appelRpc()?.p_jeu.min_spend).not.toBe("0");
+      expect(appelRpc()?.p_jeu.min_spend).not.toBeNull();
+    }
+  });
+
+  it("un refus de la base n'est jamais présenté comme un succès", async () => {
+    echecs["rpc:enregistrer_jeu_et_lots"] = { message: "Montant invalide : « abc »." };
+    const r = await updateGameAction("jeu-1", { ...CHARGE, form: { ...CHARGE.form, min_spend: "abc" } });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain("Montant invalide");
+  });
 });
 
 describe("charge malformée : on ne fabrique pas de lots", () => {

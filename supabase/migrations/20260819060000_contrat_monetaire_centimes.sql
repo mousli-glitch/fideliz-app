@@ -154,15 +154,38 @@ comment on column public.winners.min_spend_cents_snapshot is
  * balayage ni verrou long sur une table en service. La validation viendra
  * après le backfill, dans un lot séparé.
  */
+/*
+ * La détection est bornée à la TABLE, pas au seul nom.
+ *
+ * Signalé le 19/08/2026, et c'est juste : dans PostgreSQL un nom de contrainte
+ * est unique par table, pas globalement. Un `conname = '…'` non qualifié
+ * trouve donc une homonyme posée sur une AUTRE table — ou dans un autre
+ * schéma — conclut « elle existe déjà », et saute silencieusement l'ALTER.
+ * La borne n'est alors jamais posée, et rien ne le signale.
+ *
+ * C'est exactement la leçon du harnais de cascade, où une garde reconnaissait
+ * un nom au lieu d'une sémantique. Elle vaut ici aussi.
+ */
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'games_min_spend_cents_borne') then
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.games'::regclass
+      and contype  = 'c'
+      and conname  = 'games_min_spend_cents_borne'
+  ) then
     alter table public.games
       add constraint games_min_spend_cents_borne
       check (min_spend_cents is null or (min_spend_cents >= 0 and min_spend_cents <= 99999900))
       not valid;
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'winners_min_spend_cents_borne') then
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.winners'::regclass
+      and contype  = 'c'
+      and conname  = 'winners_min_spend_cents_borne'
+  ) then
     alter table public.winners
       add constraint winners_min_spend_cents_borne
       check (min_spend_cents_snapshot is null or (min_spend_cents_snapshot >= 0 and min_spend_cents_snapshot <= 99999900))

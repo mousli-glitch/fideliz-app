@@ -132,66 +132,155 @@ group by decision
 order by decision;
 
 -- ─── 3. L'écriture, JOUÉE puis ANNULÉE : on prouve le résultat, on ne le garde pas
+--
+-- Signalé le 19/08/2026, et c'est juste : la version précédente vérifiait
+-- « combien de tickets consommés portent un snapshot », c'est-à-dire un état
+-- GLOBAL, et non les lignes que CETTE exécution a écrites. Deux conséquences,
+-- et la seconde est la vraie :
+--
+--   — faux positif garanti à terme : dès que le code écrira le snapshot à
+--     l'émission, un ticket légitimement figé puis consommé ferait lever le
+--     verdict alors que le migrateur n'aurait touché à rien. Le migrateur
+--     deviendrait injouable au moment précis où le système fonctionne ;
+--
+--   — surtout, l'assertion ne mesurait PAS le comportement du migrateur. Elle
+--     tombait juste par coïncidence, parce qu'aucun ticket consommé ne porte
+--     de snapshot aujourd'hui. Une coïncidence n'est pas une preuve.
+--
+-- `UPDATE … RETURNING` capture donc les lignes RÉELLEMENT écrites, et les
+-- assertions portent sur ce seul ensemble.
 
-create temp table _avant_apres (etape text, valeur text) on commit drop;
+create temp table _jeux_touches    (id uuid, centimes int) on commit drop;
+create temp table _tickets_touches (id uuid, centimes int, consomme boolean,
+                                    supprime boolean, expire boolean) on commit drop;
+create temp table _mesures (etape text, valeur text) on commit drop;
 
-insert into _avant_apres values ('snapshots_avant',
-  (select count(*)::text from public.winners where min_spend_cents_snapshot is not null));
+-- Manifeste canonique AVANT : ce que portent les deux colonnes, pas un compte.
+insert into _mesures values ('manifeste_avant', (
+  select coalesce(md5(string_agg(src || ':' || cle::text || '=' || coalesce(val::text,'NULL'), '|'
+                                 order by src, cle)), 'vide')
+  from (
+    select 'g' as src, id as cle, min_spend_cents as val from public.games
+    union all
+    select 'w', id, min_spend_cents_snapshot from public.winners
+  ) t));
 
 /*
  * Les jeux d'abord : le champ canonique est calculé depuis le texte
  * historique, et une valeur illisible est LAISSÉE À NULL au lieu de devenir
  * zéro. C'est tout l'objet du contrat.
  */
-update public.games g
-   set min_spend_cents = public.minimum_effectif_centimes(null, null, g.min_spend)
- where g.min_spend_cents is null;
+with maj as (
+  update public.games g
+     set min_spend_cents = public.minimum_effectif_centimes(null, null, g.min_spend)
+   where g.min_spend_cents is null
+     and public.minimum_effectif_centimes(null, null, g.min_spend) is not null
+  returning g.id, g.min_spend_cents
+)
+insert into _jeux_touches select id, min_spend_cents from maj;
 
 /*
  * Les tickets ensuite, et UNIQUEMENT ceux que la règle de Samy désigne :
  * encore valides, non consommés, non supprimés, non expirés. Le minimum figé
- * est celui qui était AFFICHÉ.
+ * est celui qui était AFFICHÉ au client.
  */
-update public.winners w
-   set min_spend_cents_snapshot = public.minimum_effectif_centimes(null, null, g.min_spend)
-  from public.games g
- where g.id = w.game_id
-   and w.min_spend_cents_snapshot is null
-   and w.status = 'available'
-   and w.redeemed_at is null
-   and w.consumed_at is null
-   and w.deleted_at is null
-   and (w.expires_at is null or w.expires_at > now())
-   and public.minimum_effectif_centimes(null, null, g.min_spend) is not null;
+with maj as (
+  update public.winners w
+     set min_spend_cents_snapshot = public.minimum_effectif_centimes(null, null, g.min_spend)
+    from public.games g
+   where g.id = w.game_id
+     and w.min_spend_cents_snapshot is null
+     and w.status = 'available'
+     and w.redeemed_at is null
+     and w.consumed_at is null
+     and w.deleted_at is null
+     and (w.expires_at is null or w.expires_at > now())
+     and public.minimum_effectif_centimes(null, null, g.min_spend) is not null
+  returning w.id, w.min_spend_cents_snapshot,
+            (w.status = 'redeemed' or w.redeemed_at is not null or w.consumed_at is not null),
+            (w.deleted_at is not null),
+            (w.expires_at is not null and w.expires_at <= now())
+)
+insert into _tickets_touches select * from maj;
 
-insert into _avant_apres values ('snapshots_apres',
-  (select count(*)::text from public.winners where min_spend_cents_snapshot is not null));
-insert into _avant_apres values ('tickets_consommes_touches',
-  (select count(*)::text from public.winners
-    where min_spend_cents_snapshot is not null
-      and (status = 'redeemed' or redeemed_at is not null or consumed_at is not null)));
+insert into _mesures values ('jeux_ecrits',    (select count(*)::text from _jeux_touches));
+insert into _mesures values ('tickets_ecrits', (select count(*)::text from _tickets_touches));
 
--- ─── 4. VERDICT — la règle de Samy est-elle tenue ?
+-- ─── 3bis. IDEMPOTENCE : un second passage ne doit RIEN écrire
+
+create temp table _second_passage (id uuid) on commit drop;
+
+with maj as (
+  update public.winners w
+     set min_spend_cents_snapshot = public.minimum_effectif_centimes(null, null, g.min_spend)
+    from public.games g
+   where g.id = w.game_id
+     and w.min_spend_cents_snapshot is null
+     and w.status = 'available'
+     and w.redeemed_at is null
+     and w.consumed_at is null
+     and w.deleted_at is null
+     and (w.expires_at is null or w.expires_at > now())
+     and public.minimum_effectif_centimes(null, null, g.min_spend) is not null
+  returning w.id
+)
+insert into _second_passage select id from maj;
+
+insert into _mesures values ('second_passage_ecrits', (select count(*)::text from _second_passage));
+
+insert into _mesures values ('manifeste_apres', (
+  select coalesce(md5(string_agg(src || ':' || cle::text || '=' || coalesce(val::text,'NULL'), '|'
+                                 order by src, cle)), 'vide')
+  from (
+    select 'g' as src, id as cle, min_spend_cents as val from public.games
+    union all
+    select 'w', id, min_spend_cents_snapshot from public.winners
+  ) t));
+
+-- ─── 4. VERDICT — la règle de Samy est-elle tenue, sur les lignes ÉCRITES ?
 
 do $$
 declare
-  v_consommes_touches int;
+  v_n int;
+  v_second int;
 begin
-  select valeur::int into v_consommes_touches
-  from _avant_apres where etape = 'tickets_consommes_touches';
-
-  /*
-   * L'invariant qui compte : AUCUN ticket consommé ne doit avoir reçu de
-   * snapshot. Si ce compte n'est pas nul, le migrateur a réécrit le passé et
-   * il ne doit jamais être appliqué en l'état.
-   */
-  if v_consommes_touches <> 0 then
-    raise exception 'MIGRATEUR REFUSÉ : % ticket(s) consommé(s) auraient reçu un snapshot. La règle est « inchangé » pour eux.', v_consommes_touches;
+  -- (a) Aucun ticket consommé, supprimé ou expiré n'a été écrit.
+  select count(*) into v_n from _tickets_touches where consomme or supprime or expire;
+  if v_n <> 0 then
+    raise exception 'MIGRATEUR REFUSÉ : % ticket(s) consommé(s), supprimé(s) ou expiré(s) ont été ÉCRITS. La règle est « inchangé » pour eux.', v_n;
   end if;
-  raise notice 'MIGRATEUR : aucun ticket consommé touché. Règle tenue.';
+
+  -- (b) Aucune écriture à NULL : on ne fige pas une condition qu'on ne sait
+  --     pas lire. Illisible reste illisible.
+  select count(*) into v_n from _tickets_touches where centimes is null;
+  if v_n <> 0 then
+    raise exception 'MIGRATEUR REFUSÉ : % ticket(s) figé(s) à NULL — une valeur illisible ne doit pas être écrite.', v_n;
+  end if;
+  select count(*) into v_n from _jeux_touches where centimes is null;
+  if v_n <> 0 then
+    raise exception 'MIGRATEUR REFUSÉ : % jeu(x) écrit(s) à NULL.', v_n;
+  end if;
+
+  -- (c) Chaque ticket écrit porte EXACTEMENT le minimum affiché par son jeu.
+  select count(*) into v_n
+  from _tickets_touches t
+  join public.winners w on w.id = t.id
+  join public.games g   on g.id = w.game_id
+  where t.centimes is distinct from public.minimum_effectif_centimes(null, null, g.min_spend);
+  if v_n <> 0 then
+    raise exception 'MIGRATEUR REFUSÉ : % ticket(s) figé(s) sur une valeur qui n''est pas le minimum affiché.', v_n;
+  end if;
+
+  -- (d) IDEMPOTENCE : rejouer n'écrit rien de plus.
+  select valeur::int into v_second from _mesures where etape = 'second_passage_ecrits';
+  if v_second <> 0 then
+    raise exception 'MIGRATEUR REFUSÉ : un second passage a écrit % ligne(s). Le migrateur n''est pas idempotent.', v_second;
+  end if;
+
+  raise notice 'MIGRATEUR : règle tenue sur les lignes écrites, et rejeu sans effet.';
 end $$;
 
-select etape, valeur from _avant_apres order by etape;
+select etape, valeur from _mesures order by etape;
 
 /*
  * ANNULATION INCONDITIONNELLE. Ce fichier ne laisse rien derrière lui, même
