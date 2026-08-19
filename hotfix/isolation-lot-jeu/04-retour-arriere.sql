@@ -90,9 +90,18 @@ begin
 
   if v_manif is distinct from
      c_signature || ' | owner=' || c_owner || ' | secdef=true | config=search_path=public | vol=v | acl=' || c_acl then
-    raise exception 'ROLLBACK REFUSÉ : manifeste non conforme.%    observé : %%    attendu : %',
-      chr(10), v_manif, chr(10) || '    ' || c_signature || ' | owner=' || c_owner
-        || ' | secdef=true | config=search_path=public | vol=v | acl=' || c_acl;
+    /*
+     * Message construit par CONCATÉNATION, pas par les paramètres de RAISE.
+     * Un double signe pourcent n'est pas un paramètre : c'est un pourcent
+     * littéral. La version
+     * précédente fournissait donc trois arguments pour deux emplacements, et
+     * PostgreSQL refusait le bloc À LA COMPILATION (42601) — le rollback ne
+     * démarrait même pas.
+     */
+    raise exception 'ROLLBACK REFUSÉ : manifeste non conforme.%',
+      chr(10) || '    observé : ' || v_manif || chr(10)
+      || '    attendu : ' || c_signature || ' | owner=' || c_owner
+      || ' | secdef=true | config=search_path=public | vol=v | acl=' || c_acl;
   end if;
 
   if not has_function_privilege('service_role', v_oid, 'EXECUTE') then
@@ -131,8 +140,8 @@ begin
     raise exception 'ROLLBACK REFUSÉ : préimage restaurée incorrecte (% au lieu de %). Transaction annulée.', v_h, c_preimage;
   end if;
   if v_manif2 is distinct from v_manif then
-    raise exception 'ROLLBACK REFUSÉ : le manifeste a changé pendant la restauration.%    avant : %%    après : %',
-      chr(10), v_manif, chr(10) || '    ' || v_manif2;
+    raise exception 'ROLLBACK REFUSÉ : le manifeste a changé pendant la restauration.%',
+      chr(10) || '    avant : ' || v_manif || chr(10) || '    après : ' || v_manif2;
   end if;
 
   raise notice 'ROLLBACK : préimage exacte restaurée, manifeste inchangé. LE P0 EST DE NOUVEAU OUVERT.';

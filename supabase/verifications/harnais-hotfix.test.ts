@@ -246,3 +246,73 @@ describe("garde statique — aucun script du paquet n'annonce des octets", () =>
     });
   }
 });
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  CHAQUE `RAISE` DOIT COMPILER — SINON LE SCRIPT NE DÉMARRE MÊME PAS
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Dans `RAISE`, le paramètre est `%` et `%%` est un POURCENT LITTÉRAL, pas un
+ * emplacement. Le rollback livré écrivait :
+ *
+ *     raise exception '… non conforme.%    observé : %%    attendu : %',
+ *       chr(10), v_manif, <attendu>;
+ *
+ * Deux emplacements, trois arguments : PostgreSQL refuse le bloc À LA
+ * COMPILATION (`42601 too many parameters specified for RAISE`). Le fichier ne
+ * s'exécutait donc pas du tout — il n'atteignait jamais ses préconditions, et
+ * un rollback qui ne démarre pas est un rollback qui n'existe pas.
+ *
+ * Ce défaut a survécu à toutes les preuves précédentes parce qu'elles
+ * exerçaient une RÉIMPLÉMENTATION de la machine d'état, jamais les fichiers
+ * livrés. Ces deux gardes-ci comptent les emplacements et les arguments de
+ * chaque `RAISE` de chaque fichier du paquet.
+ */
+describe("chaque RAISE a autant d'arguments que d'emplacements", () => {
+  const paquet: [string, string][] = [
+    ["01-preflight", PREFLIGHT], ["02-appliquer", APPLIQUER],
+    ["03-controles-post", POST], ["04-retour-arriere", RETOUR],
+    ["migration", MIGRATION], ["rollback", ROLLBACK], ["runner", RUNNER],
+  ];
+
+  /** Compte les `%` qui consomment un argument (donc hors `%%`). */
+  function emplacements(message: string): number {
+    return (message.match(/(?<!%)%(?!%)/g) ?? []).length;
+  }
+
+  /** Compte les arguments de premier niveau après la virgule. */
+  function arguments_(suite: string): number {
+    if (!suite.trim().startsWith(",")) return 0;
+    let profondeur = 0, n = 1;
+    for (const c of suite.trim().slice(1)) {
+      if (c === "(" || c === "[") profondeur++;
+      else if (c === ")" || c === "]") profondeur--;
+      else if (c === "," && profondeur === 0) n++;
+    }
+    return n;
+  }
+
+  for (const [nom, contenu] of paquet) {
+    it(`${nom} : aucun RAISE mal formé`, () => {
+      const ecarts: string[] = [];
+      const motif = /raise\s+(?:exception|notice)\s+'((?:[^']|'')*)'((?:\s*,[^;]*)?);/gi;
+      for (const m of contenu.matchAll(motif)) {
+        const nbEmpl = emplacements(m[1]);
+        const nbArgs = arguments_(m[2] ?? "");
+        if (nbEmpl !== nbArgs) {
+          const ligne = contenu.slice(0, m.index).split("\n").length;
+          ecarts.push(`ligne ${ligne} : ${nbEmpl} emplacement(s), ${nbArgs} argument(s)`);
+        }
+      }
+      expect(ecarts, `${nom} : RAISE mal formé — le bloc ne compilerait pas`).toEqual([]);
+    });
+
+    it(`${nom} : aucun \`%%\` dans un message de RAISE`, () => {
+      // Volontairement strict : `%%` est licite en SQL mais c'est le piège
+      // exact qui a rendu le rollback inexécutable. On l'interdit ici.
+      const motif = /raise\s+(?:exception|notice)\s+'((?:[^']|'')*)'/gi;
+      const fautifs = [...contenu.matchAll(motif)].filter((m) => m[1].includes("%%"));
+      expect(fautifs.map((m) => m[1].slice(0, 60))).toEqual([]);
+    });
+  }
+});
