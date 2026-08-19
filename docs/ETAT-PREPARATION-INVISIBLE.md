@@ -132,6 +132,25 @@ déploiement du code ; et le rollback de l'étape 2 **supprime les colonnes**,
 donc les conditions figées de tous les tickets émis depuis (il est hors du
 paquet, voir `DANGER-retour-arriere-contrat.md`).
 
+### Trouvé et corrigé dans la foulée : l'interrupteur qui ne retirait rien
+
+Éteindre « Minimum de commande » sur une fiche existante masquait le champ à
+l'écran et **laissait le montant en base** : `updateGameAction` ne lisait
+jamais `has_min_spend`. Le restaurateur croyait avoir retiré la condition, son
+client se la voyait encore opposée en caisse.
+
+La règle existait pourtant — la fiche de *création* tranchait déjà au moment de
+l'appel. Elle vivait dans une page et pas dans l'autre.
+
+Corrigé des deux côtés le 19/08 : `e14ba98` en production
+(`lib/montant-formulaire.ts`, une seule règle, du côté qui écrit) et `4841f58`
+sur cette branche, où les **deux** actions portaient le défaut. Le corriger
+seulement en production l'aurait fait revenir à la fusion.
+
+`=== false` et non `!has_min_spend` : un champ absent n'est pas un refus, et
+transformer une information manquante en décision métier serait le `else 0`
+réintroduit par la porte de service.
+
 ### Point ouvert, mineur
 
 La grammaire accepte `« 999999,99 »` → 99 999 999 centimes, au-dessus de la
