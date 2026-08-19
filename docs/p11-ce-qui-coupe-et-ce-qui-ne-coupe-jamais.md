@@ -67,11 +67,28 @@ même endroit :
 C'est la seule distinction qui compte, et elle suffit :
 **ce qui éteint un support papier doit être un acte, jamais une date.**
 
-## État
+## Déployé en production le 19/08/2026
 
-Corrigé sur la branche `candidat/baseline-acl`. **Pas déployé en production** —
-Fideliz déploie depuis `main`, et un déploiement demande ton feu, comme pour le
-lot 3 et check-replay.
+**Déploiement isolé**, construit depuis `origin/main` = `e14ba98` — le commit
+réellement en production — et **jamais** depuis `candidat/baseline-acl`.
 
-Rien ne presse : aucune échéance n'est dépassée aujourd'hui. Mais ça presserait
-le jour d'un impayé, et ce jour-là personne ne ferait le lien.
+L'écart entre les deux est de **116 commits et 186 fichiers**. Fusionner la
+branche déploierait tout le chantier de fusion, dont six RPC qui n'existent pas
+en production : la création et la modification d'un jeu casseraient
+immédiatement, chez de vrais restaurants.
+
+| | |
+|---|---|
+| Commit déployé | `05c7ca4` |
+| Fichiers | `app/scan/[slug]/page.tsx`, `lib/coupure-jeu.ts`, `lib/coupure-jeu.test.ts` |
+| Dépendances ajoutées | **aucune** — le correctif est une fonction pure, zéro appel RPC dans le diff |
+| Vérifié avant de pousser | 188 tests, build, porte `npm run securite` |
+| **Retour arrière** | `dpl_3DDmMMKp93SwNuizmMo6WoXr2XfW` — `fideliz-72iw0f3su-fidelizs-projects.vercel.app`, commit `e14ba98` |
+
+### Une divergence trouvée en portant le correctif
+
+La page `/scan` de `main` importe `createClient as createSupabaseAdmin` ; celle
+de la branche de fusion importe `createClient`. Mon ancre a échoué, et c'est
+tant mieux : elle a montré que les deux versions du fichier ont déjà divergé
+au-delà de P-11. Transposer un diff plutôt que de le réappliquer sur la vraie
+base aurait pu passer inaperçu.
