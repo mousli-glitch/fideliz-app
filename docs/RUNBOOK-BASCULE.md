@@ -59,15 +59,31 @@ Aucune de ces étapes ne touche la production.
 | 2.1 | Créer un banc Cartiz | ⚠ **toujours créer, jamais `reset`** : `reset_branch` rejoue depuis l'instantané de création, pas depuis le registre courant |
 | 2.1bis | **Attendre que le décompte des migrations se stabilise** | ⚠ le banc annonce `ACTIVE_HEALTHY` **pendant que ses migrations rejouent encore**. Mesuré le 19/08 : 17 migrations à la première lecture, 90 à la seconde. Mesurer une seule fois mène à conclure que la création est non déterministe — elle ne l'est pas, elle est asynchrone. |
 | 2.2 | Y réappliquer 083 → 088 | ⚠ un banc neuf est **en retard** : mesuré deux fois le 19/08, il s'arrête à 90 migrations, version 20260819190000. 081 et 082 ne sont pas nécessaires au migrateur — il ne lit ni `habilitations` ni la fonction d'anonymisation — mais un banc pleinement fidèle les porterait aussi. |
-| 2.3 | Y verser la sauvegarde du Storage | chaque chemin retrouve son contenu |
+| 2.3 | `ensemencer-banc.ts` | **automatisé le 20/08** — c'était le dernier geste manuel de la phase 2. Il copie les 2 restaurants exigés par le plan et leurs 16 pages depuis la production, crée un gérant par restaurant **plus un coupé**, et refuse si sa clé est celle de production ou si `chez-samy` apparaît |
 | 2.4 | `migrer.ts --appliquer` vers le banc | « VERSEMENT CONFORME » |
 | 2.5 | **Rejouer 2.4 à l'identique** | mêmes comptes, aucune ligne en double — **c'est R4** |
-| 2.6 | `comptes.ts --appliquer` vers le banc | 3 opérations |
+| 2.6 | `comptes.ts --appliquer` vers le banc | 3 opérations au premier passage ; **au second, 0 faite / 3 reprises et AUCUN fichier écrit** — c'est la reprise, et c'est ce qu'il faut vérifier |
 | 2.7 | Rejouer la sonde R8 sur le banc chargé | vert |
 | 2.8 | Rejouer le témoin de conservation | **R5 — ACQUIS le 19/08 : 189/189, 0 rouge, en 19,2 s.** Recette éprouvée ci-dessous |
 | 2.9 | `supabase/tests/isolation-apres-versement.sql` | **R6 — ACQUIS le 19/08** : chaque gérant voit exactement le sien, le compte coupé rien, `anon` bloqué en 42501 |
 | 2.10 | Servir les menus depuis le banc | R7. **Le préalable est déjà prouvé** : `lib/fusion/surface-menu.test.ts` montre que les colonnes lues par le menu et celles écrites par le versement sont DISJOINTES, sauf `theme_json` dont la fusion est un no-op pour les deux clients |
-| 2.11 | Supprimer le banc | il coûte 0,013 $/h |
+| 2.11 | Supprimer le banc | il coûte 0,013 $/h — **et il porte des adresses réelles** dès que 2.6 est jouée |
+
+### Tout cela en une commande
+
+De 2.3 à 2.6, plus le retour arrière et le reversement, `repetition-generale.ts`
+enchaîne et chronomètre :
+
+    BANC_URL=https://<ref>.supabase.co BANC_KEY=<clé du banc> \
+      SAUVEGARDE=<dossier de sauvegarde Storage> \
+      node scripts/fusion/repetition-generale.ts
+
+Dix étapes, ~15 s. Elle refuse de démarrer si `BANC_URL` désigne la
+production. **Elle ne fait pas 2.1 et 2.2** — créer une branche et y appliquer
+des migrations passe par la console.
+
+Restent ensuite, à la main, les trois contrôles qui ne passent pas par la
+ligne de commande : R8 et R6 (console SQL) et R5 (serveur local).
 
 **Point d'arrêt.** Si 2.5 crée des doublons, le migrateur n'est pas
 idempotent et la bascule est reportée. Aucune exception.
@@ -78,11 +94,12 @@ idempotent et la bascule est reportée. Aucune exception.
 VRAIS identifiants de restaurant — les URL du Storage public en dépendent. Un
 banc synthétique ne peut pas y répondre. La recette :
 
-1. Ensemencer le banc avec les **vrais identifiants** de `best-pizza` et
-   `la-ruche`, leur `theme_json`, `vue_defaut`, `vue_premier`,
-   `horaires_actifs`, **et leurs 16 lignes `flyer_pages`** — positions
-   comprises, y compris le trou à la position 10 de la-ruche, que la fixture
-   documente comme un orphelin.
+1. Ensemencer le banc — `node scripts/fusion/ensemencer-banc.ts`, ou
+   l'étape 2.3 de la répétition, qui l'appelle. Il copie les **vrais
+   identifiants** de `best-pizza` et `la-ruche` avec toutes leurs colonnes,
+   **et leurs 16 lignes `flyer_pages`** — positions comprises, y compris le
+   trou à la position 10 de la-ruche, que la fixture documente comme un
+   orphelin.
 2. Poser l'état d'après versement (les colonnes que le migrateur écrit).
 3. Lancer l'application en local **avec les variables du banc en surcharge** :
    Next donne la priorité aux variables déjà présentes dans l'environnement,
@@ -100,6 +117,13 @@ Résultat du 19/08 : **189 assertions vertes, 0 rouge**, dont « 4 pages de
 carte sont servies », « les pages s'affichent dans le bon ordre, aucune perdue
 ni ajoutée » et « chaque page garde son mode d'affichage ».
 
+Refait le 20/08, deux fois, contre un banc ayant traversé la répétition
+**entière** — ensemencement, versement, rejeu, retour arrière, reversement,
+comptes créés : **189/189 à chaque fois.** Le discriminant a été revérifié
+après coup : `/m/chez-samy` → 404, les deux menus réels → 200. À noter,
+`/m/soukara` répond 404 lui aussi, et c'est voulu : le versement le laisse en
+`publie = false` jusqu'à l'étape 3.8.
+
 ---
 
 ## Phase 3 · La bascule
@@ -112,12 +136,32 @@ explicite de Samy au moment de la jouer.**
 | 3.1 | Activer le gel de bascule côté Fideliz | les écritures Fideliz sont refusées |
 | 3.2 | Refaire une sauvegarde du Storage et de la base | vérifiée |
 | 3.3 | `FUSION_JE_CONFIRME=oui migrer.ts --appliquer` | « VERSEMENT CONFORME » |
-| 3.4 | `FUSION_JE_CONFIRME=oui comptes.ts --appliquer` | 3 opérations, fichier de mots de passe en 600 |
+| 3.4 | `FUSION_JE_CONFIRME=oui comptes.ts --appliquer` | 3 opérations, fichier de mots de passe en 600. **S'il échoue au milieu, RELANCER la même commande** : depuis le 20/08 il se reprend, ne recrée rien et **ne réémet aucun mot de passe déjà transmis**. Une reprise n'écrit aucun fichier et le dit |
 | 3.5 | Sonde R8 sur la production chargée | vert |
 | 3.6 | Témoin de conservation | 189/189 |
 | 3.7 | `npm run qr:verifier` + les 5 menus | **inchangés** |
 | 3.8 | Publier `soukara` (`publie = true`) | son menu répond |
 | 3.9 | Transmettre les mots de passe, **puis supprimer le fichier** | fichier absent |
+
+> ### ⚠ Avant 3.3 — vérifier qu'aucun relevé de répétition ne traîne
+>
+> Le versement écrit `etat-avant-restaurants-<base>-<date>.json`, et **ne
+> l'écrase jamais** : le premier relevé est le seul qui décrive l'origine.
+>
+> Jusqu'au 20/08 le nom n'était daté que du jour. Répétition et bascule
+> tombant par construction le **même jour**, le versement réel réutilisait le
+> relevé de la répétition, et le retour arrière de la production aurait
+> restauré des valeurs prises sur un banc. Ce n'est pas une hypothèse : la
+> répétition du 20 a réellement réutilisé celle du 19.
+>
+> Le nom porte désormais la base, et `defaire.ts` refuse un relevé qui n'est
+> pas de la base qu'il défait. Le geste reste néanmoins :
+>
+>     ls etat-avant-restaurants-*.json
+>
+> Il ne doit rien rester d'une répétition. Ces fichiers sont dans
+> `.gitignore` — comme le fichier de mots de passe, qui n'y était pas non
+> plus avant le 20/08.
 
 **Le versement laisse `soukara` en `publie = false`.** Un restaurant versé
 n'apparaît pas au public avant qu'on l'ait regardé — 3.8 est un geste
@@ -127,8 +171,12 @@ délibéré, pas un effet de bord.
 
 ## Phase 4 · Retour arrière
 
-**Écrit** le 19/08/2026 — `scripts/fusion/defaire.ts`. Non éprouvé : comme le
-reste, il attend un banc.
+**Écrit** le 19/08/2026, **éprouvé sur banc le 20/08** — joué dans la
+répétition générale, suivi d'un reversement complet derrière lui.
+
+Il refuse un relevé qui n'est pas de la base qu'il défait, et un relevé au
+format ancien (celui d'avant le 20/08, qui ne dit pas d'où il vient). Les deux
+refus sont prouvés par contre-épreuve.
 
     node scripts/fusion/defaire.ts etat-avant-restaurants-AAAA-MM-JJ.json
     FUSION_DEFAIRE_JE_CONFIRME=oui node scripts/fusion/defaire.ts … --appliquer

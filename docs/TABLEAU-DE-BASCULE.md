@@ -5,7 +5,7 @@
 > intuition déguisée en mesure. Ici : ce qui est fermé, ce qui reste, ce qui
 > bloque quoi, et à quelles conditions exactes on peut basculer.
 >
-> Dernière mise à jour : 19/08/2026.
+> Dernière mise à jour : 20/08/2026, après la répétition générale.
 
 ---
 
@@ -44,63 +44,96 @@ abonnement expiré.
 
 ## 3. Lots restants
 
-| Lot | Objet |
-|---|---|
-| **8** | Répétition du gel, séquence complète chronométrée |
-| **9** | Répétition générale de bout en bout sur banc, versement compris |
-| **10** | Dossier `READY_FOR_MIGRATION` constitué et signé |
+| Lot | Objet | État |
+|---|---|---|
+| **8** | Répétition du gel, séquence complète chronométrée | **reste** — le gel est écrit et installé inactif ; il n'a jamais été activé puis levé en séquence |
+| **9** | Répétition générale de bout en bout sur banc, versement compris | **FERMÉE le 20/08** — 10 étapes en 14,9 s, puis R8, R6 et R5 sur le banc chargé |
+| **10** | Dossier `READY_FOR_MIGRATION` constitué et signé | **reste** — il manque R1 et R2, tous deux à la main de Samy |
 
 ---
 
-## 4. Chemin critique
+## 4. Chemin critique — au 20/08/2026
+
+Tout ce qui était technique sur le chemin est fermé. Ce qui reste tient en
+deux décisions et une répétition.
 
 ```
-  7h  arbitrage des comptes  ──┐
-  P-9 unité du panier moyen  ──┼──►  7g migrateur  ──►  lot 9 répétition  ──►  bascule
-  P-x couleurs / theme_json  ──┘            ▲
-                                            │
-        7d ──► 7e ──► 7f  (indépendants entre eux, tous requis)
+  083→088 appliquées ──► 7g migrateur ──► lot 9 répétition générale ──┐
+       (FERMÉ)             (FERMÉ)              (FERMÉ le 20/08)       │
+                                                                       ▼
+                              P-9  panier moyen   ──┐            lot 8  GEL
+                              #68  limite d'IP     ──┼──────────►  (reste)
+                                   (décisions Samy)  │                 │
+                                                     ▼                 ▼
+                                              READY_FOR_MIGRATION ──► bascule
 ```
 
-**7h est fermée depuis le 19/08.** Le chemin critique passe désormais par le
-schéma d'accueil du jeu :
+**Le chemin ne passe plus par du code.** Il passe par :
 
-```
-  087 schéma d'accueil  ──►  7g migrateur  ──►  lot 8 gel  ──►  lot 9 répétition  ──►  bascule
-  (games, prizes,
-   winners, avis,
-   contacts)
-```
+1. **Deux décisions produit** — `P-9` (unité du panier moyen) et `#68`
+   (limite d'IP sur `check-replay`). Elles seules tiennent `R2`.
+2. **Le lot 8, le gel** — écrit et installé inactif, jamais activé puis levé
+   en séquence. C'est le dernier chantier technique, et il ne peut se
+   répéter que sur un banc.
 
-Cartiz n'a **aucune** de ces cinq tables. Elles doivent exister, avec leur RLS
-et leurs policies bornées au restaurant, avant qu'une seule ligne ne bouge.
-
-Deux décisions produit secondaires (`P-9` panier moyen, couleurs contre
-`theme_json`) bloquent des tranches, pas l'ensemble.
+Les huit autres critères sont acquis et rejouables en une commande.
 
 ---
 
 ## 5. Critères de `READY_FOR_MIGRATION`
 
-Chacun est un fait vérifiable, pas une appréciation. Aucun n'est acquis
-aujourd'hui.
+Chacun est un fait vérifiable, pas une appréciation.
+
+**Huit sur dix sont acquis.** Les deux qui restent — R1 et R2 — ne se
+prouvent pas par du code : ils attendent une décision de Samy.
 
 | # | Critère | Comment il se prouve |
 |---|---|---|
-| **R1** | Schéma d'accueil complet | Comparaison automatique entre la liste des colonnes que le migrateur écrit et le schéma vivant de Cartiz : **0 manquante** |
-| **R2** | Aucune décision produit ouverte sur le chemin | Intersection { P-xx ouverts } ∩ { objets versés } = **∅** |
+| **R1** | Schéma d'accueil complet | **À MOITIÉ.** 087 et 088 posent les 5 tables et le migrateur écrit sans manque — mesuré : 3 jeux, 12 lots, 489 gagnants, 752 avis, 488 contacts versés sans erreur. Reste à trancher les colonnes délibérément écartées (`games.min_spend` en texte, les 3 jetons OAuth) |
+| **R2** | Aucune décision produit ouverte sur le chemin | **NON.** Deux restent ouvertes et touchent des objets versés : **P-9** (unité du panier moyen) et **#68** (limite d'IP sur `check-replay`). Ce sont les deux derniers verrous, et ils sont à Samy |
 | **R3** | Annuaire des comptes arbitré nominativement | **ACQUIS** — `mapping-comptes.json`, 9 lignes pour 9 comptes, chacune avec son action et sa justification |
-| **R4** | Migrateur rejouable et idempotent — **ACQUIS le 19/08** | Sur banc neuf : deux exécutions consécutives donnent des empreintes de contenu **identiques** ; un arrêt au milieu se reprend sans doublon. **⚠ Un banc fraîchement créé est EN RETARD sur son parent** — mesuré le 19/08 : il n'a rejoué que les migrations de version ≤ 20260819190000, laissant 081→085 de côté. Le protocole doit les réappliquer avant toute mesure, sans quoi on éprouve un schéma qui n'est pas celui de la production |
-| **R5** | Témoin de conservation au vert **après versement** | **ACQUIS le 19/08** — 189 assertions vertes, 0 rouge, en 19,2 s, contre un banc dans l'état d'après versement, l'application servie en local. Recette dans le runbook §2.8 |
-| **R6** | Isolation entre restaurants prouvée après versement | **ACQUIS le 19/08** — `supabase/tests/isolation-apres-versement.sql`, sur 1 743 lignes versées, RLS intacte, éprouvée dans les deux sens : elle rougit et nomme la fuite quand on rend une policy permissive |
+| **R4** | Migrateur rejouable et idempotent | **ACQUIS le 19/08, reconfirmé le 20/08** | Sur banc neuf : deux exécutions consécutives donnent des empreintes de contenu **identiques** ; un arrêt au milieu se reprend sans doublon. **⚠ Un banc fraîchement créé est EN RETARD sur son parent** — mesuré le 19/08 : il n'a rejoué que les migrations de version ≤ 20260819190000, laissant 081→085 de côté. Le protocole doit les réappliquer avant toute mesure, sans quoi on éprouve un schéma qui n'est pas celui de la production |
+| **R5** | Témoin de conservation au vert **après versement** | **ACQUIS le 19/08, RENFORCÉ le 20/08** — 189 vertes / 0 rouge, deux fois, contre un banc ayant traversé la répétition ENTIÈRE : ensemencement, versement, rejeu, retour arrière, reversement. Le discriminant tient (`/m/chez-samy` → 404, les deux menus réels → 200). Recette au runbook §2.8 |
+| **R6** | Isolation entre restaurants prouvée après versement | **ACQUIS le 19/08, ÉLARGI le 20/08** — mesuré sur **quatre** acteurs et non deux : `soukara` en fait désormais partie, son compte existant depuis que l'étape 3.4 est jouée. Un gérant coupé (`is_active = false`) est ensemencé exprès sur un restaurant qui a des données : sans lui, la batterie ne mesurait jamais la branche posée par 086 |
 | **R7** | QR imprimés intacts | **Préalable ACQUIS le 19/08** — `lib/fusion/surface-menu.test.ts` prouve exhaustivement que le versement n'écrit dans aucune colonne que le menu lit. Reste `npm run qr:verifier` après le versement réel : GO 189/189 avant, à refaire après |
-| **R8** | Rien de Fideliz ne s'active à tort | **Sonde écrite et éprouvée** : `supabase/tests/exclusions-fideliz.sql`, 32 objets nominatifs, contre-épreuve de complétude incluse. Vert sur Cartiz aujourd'hui ; **à rejouer après le versement**, c'est là qu'elle compte |
-| **R9** | Sauvegarde et retour arrière éprouvés | Une sauvegarde datée de Cartiz **restaurée avec succès** sur un banc, procédure de retour arrière écrite et **jouée**. Storage inclus — 130 Mo, 2 buckets publics, **aujourd'hui sans aucune procédure** |
-| **R10** | Répétition générale jouée | De bout en bout, gel compris, chronométrée, avec journal des écarts |
+| **R8** | Rien de Fideliz ne s'active à tort | **ACQUIS le 20/08** — la sonde a été rejouée là où elle compte : **sur un banc chargé, après versement**. 32 objets nominatifs absents, contre-épreuve de complétude verte. Reste à la rejouer une dernière fois après le versement réel |
+| **R9** | Sauvegarde et retour arrière éprouvés | **ACQUIS le 19/08** — archive Storage de 82 Mo (36 contenus dédupliqués sur 46 objets) déposée hors site, **retéléchargée et revérifiée** : 0 corrompu, 0 orphelin. Retour arrière écrit ET joué sur banc, avec reversement derrière |
+| **R10** | Répétition générale jouée | **ACQUIS le 20/08** — `scripts/fusion/repetition-generale.ts`, 10 étapes chronométrées, jouée trois fois. Elle a trouvé trois défauts qu'aucune brique isolée ne voyait (voir §6). **Le gel n'en fait pas partie** : c'est le lot 8, et il reste entier |
 
 ---
 
-## 6. Constats ouverts, relevés en chemin
+## 6. Ce que la répétition générale a trouvé — 20/08/2026
+
+Trois défauts, tous invisibles brique par brique, tous révélés par
+l'enchaînement. Ils sont corrigés ; ils sont ici parce qu'ils disent ce
+qu'une répétition sert à trouver.
+
+| # | Le défaut | Ce qu'il aurait coûté |
+|---|---|---|
+| 1 | **L'ensemencement du banc était en prose**, fait à la main | Deux bancs n'étaient jamais tout à fait le même. La répétition n'était générale qu'à partir de l'étape 2.4 — tout ce qui précède reposait sur des gestes non tracés |
+| 2 | **L'étape 3.4 n'était jamais jouée** : la répétition planifiait les comptes sans les créer. En la jouant, `comptes.ts` s'est révélé **non reprenable** — 422 au second passage, APRÈS avoir réinitialisé un mot de passe | Un échec partiel le jour J laissait l'opérateur sans issue : relancer invalidait un secret déjà transmis, et ne finissait pas les opérations restantes. Sur une opération d'authentification, qui « se répare en téléphonant à un restaurateur » |
+| 3 | **Le relevé d'état d'avant n'était daté que du jour.** La répétition du 20 a réellement réutilisé celui du 19, relevé sur un AUTRE banc | Le plus grave. Répétition et bascule tombant par construction le même jour, le retour arrière de la **production** aurait restauré des valeurs relevées sur un **banc** — c'est-à-dire écrasé des données réelles avec des données de répétition, en croyant réparer |
+
+Le fichier porte désormais sa base dans son nom et dans son contenu.
+`migrer.ts` refuse d'en réutiliser un d'une autre base, `defaire.ts` refuse
+d'en appliquer un d'une autre base ou au format ancien — les deux refus sont
+prouvés par contre-épreuve.
+
+Au passage : ni le fichier de mots de passe ni le relevé n'étaient dans
+`.gitignore`. Un `git add -A` aurait commité des secrets et des adresses
+réelles. Ils y sont.
+
+### Un fait mesuré, qui n'est pas un défaut
+
+Entre deux versements espacés de quarante minutes, le décompte des tickets
+est passé de 488 à 489. Vérifié plutôt que supposé : **Soukara a émis
+4 tickets dans la nuit du 19 au 20**. Fideliz vit pendant qu'on prépare la
+migration. C'est exactement ce que le gel de l'étape 3.1 arrête, et la
+répétition vient d'en donner la démonstration par accident.
+
+---
+
+## 7. Constats ouverts, relevés en chemin
 
 - **`_peut_agir_sur` n'accepte que le rôle `root`, pas `admin`.** Vérifié
   empiriquement sur banc le 19/08 : le compte du fondateur y est refusé,
@@ -117,10 +150,11 @@ aujourd'hui.
 
 ---
 
-## 7. Ce qui n'a jamais été touché, et qu'il faudra ouvrir
+## 8. Ce qui n'a jamais été touché, et qu'il faudra ouvrir
 
-- **Le Storage** — 130 Mo dans `flyer-pages`, deux buckets publics, aucune
-  procédure de sauvegarde. C'est le dernier angle mort complet (`R9`).
+- **Le gel de bascule** — écrit, installé inactif, jamais activé puis levé en
+  séquence chronométrée. C'est le lot 8, et c'est désormais **le dernier
+  chantier technique** avant la bascule.
 - **Les 4 tables de sauvegarde Fideliz** — 133 lignes, 116 adresses. En attente.
 - **`email_contact`, `telephone`, `abonnement_*`, `created_by`** sont lisibles
   publiquement sur `restaurants`. Antérieur à la fusion, non corrigé (085 ne
