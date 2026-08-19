@@ -30,14 +30,20 @@ compilait pas alors que je le déclarais prouvé) ; elle est désormais tenue.
 Neuf migrations `20260819*`, chacune avec son rollback, toutes jouées sur la
 branche synthétique, **aucune en production**.
 
-## Décision en attente de Samy — la seule qui bloque
+## Hotfix P0 — appliqué en production le 19 août 2026
 
-**La faille permettant à un joueur de présenter le lot d'un autre restaurant
-est toujours ouverte en production.** Le correctif est prêt et testé ; il ne
-modifiera aucune donnée métier existante.
+La faille permettant à un joueur de présenter le lot d'un autre restaurant est
+**fermée en production**. Samy l'a autorisée explicitement, pour ce seul
+correctif ; les trois étapes du paquet `hotfix/isolation-lot-jeu/` ont été
+jouées dans l'ordre, avec le contenu exécutable des fichiers livrés.
 
-Paquet : `hotfix/isolation-lot-jeu/`. Procédure en trois étapes dans son
-README. Rien d'autre n'est couvert par cette autorisation.
+Préflight vert, application commitée, contrôles post verts. Empreinte
+`374e1382…` → `32a32389…`, manifeste et droits effectifs inchangés, aucune
+donnée métier touchée. Trace complète et point ouvert (la migration n'est pas
+inscrite au journal de production) : `hotfix/isolation-lot-jeu/APPLICATION-PRODUCTION.md`.
+
+C'est **la seule opération réelle** menée en production à ce jour. Toutes les
+autres migrations `20260819*` restent sur la branche synthétique.
 
 ## Non commencé — ce qu'il reste
 
@@ -71,5 +77,6 @@ producteur et chaque lecteur.
   d'atomicité sont fermées et prouvées ; les lecteurs, la conservation, le
   migrateur complet, la répétition générale et le dossier opératoire ne le
   sont pas.
-- **Avant mise en service complète : ~25 %.** Aucune opération réelle n'a été
-  faite, et le hotfix P0 n'est pas appliqué.
+- **Avant mise en service complète : ~25 %.** Le hotfix P0 est appliqué, mais
+  c'est la seule opération réelle : ni migration de données, ni gel, ni
+  bascule visible.
