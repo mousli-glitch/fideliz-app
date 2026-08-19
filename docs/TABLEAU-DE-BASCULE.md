@@ -35,8 +35,8 @@ abonnement expiré.
 | 7b — droits par colonne | **fermée** | 084 appliquée : menu public 200 inchangé, 3 colonnes sensibles en 401, prouvé par appel `anon` réel |
 | 7c — `profiles.is_active` | **fermée** | 085 + `lib/compte-coupe.ts` ; 214 tests, typecheck et build verts |
 | 7d — `is_active` dans les prédicats | **fermée** | 086 : répétée sur banc neuf, batterie positive et négative, garde éprouvée dans les deux sens, 7/7 empreintes identiques banc↔production |
-| 7e — vocabulaire des rôles | à faire | `restaurant` → `restaurateur` : 54 sites TS + ~45 prédicats SQL. Le trigger `handle_new_user_profile` est l'écrivain autoritaire |
-| 7f — exclusions à acter | à faire | `crm_notes`, `sales_restaurants`, `restaurants.is_active`, les 8 policies Storage Fideliz, `on_auth_user_created`, `tr_on_commercial_deleted` |
+| 7e — vocabulaire des rôles | **fermée** | Aucune migration nécessaire : Cartiz est la destination et son CHECK est déjà bon. `lib/roles.ts` porte la traduction, `lib/roles.test.ts` la garde de portage — prouvée sur le vrai code Fideliz, 13 fichiers / 32 lignes attrapées. Le chiffre de ~45 du lot 6 comptait le renommage de clé primaire, chantier qui n'existe pas |
+| 7f — exclusions à acter | **fermée** | `supabase/tests/exclusions-fideliz.sql` : 32 objets nommés, avec contre-épreuve de complétude. Vert sur Cartiz, les 8 blocs détectent sur Fideliz |
 | 7g — le migrateur de données | à faire | rien n'est écrit ; dépend de 7h |
 | 7h — l'annuaire des comptes | **bloquée — décision** | le mapping arbitre 9 restaurants et **zéro compte** |
 
@@ -85,7 +85,7 @@ aujourd'hui.
 | **R5** | Témoin de conservation au vert **après versement** | Les 189 points passent sur le banc chargé, pas seulement à vide |
 | **R6** | Isolation entre restaurants prouvée après versement | Batterie d'isolation jouée avec des comptes de test réels : aucun restaurant ne lit ni n'écrit chez un autre, Storage compris |
 | **R7** | QR imprimés intacts | `npm run qr:verifier` au vert **et** comparaison du contenu servi avant/après sur les 4 QR imprimés + `/m/<slug>` |
-| **R8** | Rien de Fideliz ne s'active à tort | Sonde sur banc vérifiant l'absence nominative des objets non importés (les 6 de la tranche 7f) |
+| **R8** | Rien de Fideliz ne s'active à tort | **Sonde écrite et éprouvée** : `supabase/tests/exclusions-fideliz.sql`, 32 objets nominatifs, contre-épreuve de complétude incluse. Vert sur Cartiz aujourd'hui ; **à rejouer après le versement**, c'est là qu'elle compte |
 | **R9** | Sauvegarde et retour arrière éprouvés | Une sauvegarde datée de Cartiz **restaurée avec succès** sur un banc, procédure de retour arrière écrite et **jouée**. Storage inclus — 130 Mo, 2 buckets publics, **aujourd'hui sans aucune procédure** |
 | **R10** | Répétition générale jouée | De bout en bout, gel compris, chronométrée, avec journal des écarts |
 
