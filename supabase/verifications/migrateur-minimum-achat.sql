@@ -206,9 +206,36 @@ insert into _tickets_touches select * from maj;
 insert into _mesures values ('jeux_ecrits',    (select count(*)::text from _jeux_touches));
 insert into _mesures values ('tickets_ecrits', (select count(*)::text from _tickets_touches));
 
--- ─── 3bis. IDEMPOTENCE : un second passage ne doit RIEN écrire
+-- Manifeste APRÈS le premier passage : c'est lui qu'on confrontera à celui
+-- d'après le second. Sans ce point intermédiaire, l'idempotence ne repose que
+-- sur des compteurs.
+insert into _mesures values ('manifeste_apres_premier', (
+  select coalesce(md5(string_agg(src || ':' || cle::text || '=' || coalesce(val::text,'NULL'), '|'
+                                 order by src, cle)), 'vide')
+  from (
+    select 'g' as src, id as cle, min_spend_cents as val from public.games
+    union all
+    select 'w', id, min_spend_cents_snapshot from public.winners
+  ) t));
 
-create temp table _second_passage (id uuid) on commit drop;
+-- ─── 3bis. IDEMPOTENCE : un second passage COMPLET ne doit RIEN écrire
+--
+-- Signalé le 19/08/2026 : le second passage ne rejouait que les tickets. Une
+-- non-idempotence côté JEUX serait donc passée inaperçue. Et les manifestes
+-- étaient calculés sans jamais être confrontés — un manifeste affiché mais
+-- non comparé n'est pas une preuve, c'est un ornement.
+
+create temp table _second_jeux    (id uuid) on commit drop;
+create temp table _second_tickets (id uuid) on commit drop;
+
+with maj as (
+  update public.games g
+     set min_spend_cents = public.minimum_effectif_centimes(null, null, g.min_spend)
+   where g.min_spend_cents is null
+     and public.minimum_effectif_centimes(null, null, g.min_spend) is not null
+  returning g.id
+)
+insert into _second_jeux select id from maj;
 
 with maj as (
   update public.winners w
@@ -224,9 +251,10 @@ with maj as (
      and public.minimum_effectif_centimes(null, null, g.min_spend) is not null
   returning w.id
 )
-insert into _second_passage select id from maj;
+insert into _second_tickets select id from maj;
 
-insert into _mesures values ('second_passage_ecrits', (select count(*)::text from _second_passage));
+insert into _mesures values ('second_passage_jeux',    (select count(*)::text from _second_jeux));
+insert into _mesures values ('second_passage_tickets', (select count(*)::text from _second_tickets));
 
 insert into _mesures values ('manifeste_apres', (
   select coalesce(md5(string_agg(src || ':' || cle::text || '=' || coalesce(val::text,'NULL'), '|'
@@ -243,6 +271,8 @@ do $$
 declare
   v_n int;
   v_second int;
+  v_man_1 text;
+  v_man_2 text;
 begin
   -- (a) Aucun ticket consommé, supprimé ou expiré n'a été écrit.
   select count(*) into v_n from _tickets_touches where consomme or supprime or expire;
@@ -271,10 +301,29 @@ begin
     raise exception 'MIGRATEUR REFUSÉ : % ticket(s) figé(s) sur une valeur qui n''est pas le minimum affiché.', v_n;
   end if;
 
-  -- (d) IDEMPOTENCE : rejouer n'écrit rien de plus.
-  select valeur::int into v_second from _mesures where etape = 'second_passage_ecrits';
+  -- (d) IDEMPOTENCE, des DEUX côtés : rejouer n'écrit rien de plus.
+  select valeur::int into v_second from _mesures where etape = 'second_passage_jeux';
   if v_second <> 0 then
-    raise exception 'MIGRATEUR REFUSÉ : un second passage a écrit % ligne(s). Le migrateur n''est pas idempotent.', v_second;
+    raise exception 'MIGRATEUR REFUSÉ : un second passage a réécrit % jeu(x). Le migrateur n''est pas idempotent.', v_second;
+  end if;
+  select valeur::int into v_second from _mesures where etape = 'second_passage_tickets';
+  if v_second <> 0 then
+    raise exception 'MIGRATEUR REFUSÉ : un second passage a réécrit % ticket(s). Le migrateur n''est pas idempotent.', v_second;
+  end if;
+
+  /*
+   * (e) LE MANIFESTE EST COMPARÉ, pas seulement affiché. C'est la preuve de
+   * l'idempotence qui ne dépend d'aucun compteur : l'état des deux colonnes
+   * après le premier passage doit être exactement celui d'après le second.
+   */
+  select valeur into v_man_1 from _mesures where etape = 'manifeste_apres_premier';
+  select valeur into v_man_2 from _mesures where etape = 'manifeste_apres';
+  if v_man_1 is null or v_man_2 is null then
+    raise exception 'MIGRATEUR REFUSÉ : manifeste manquant (premier=%, second=%) — la comparaison n''a pas eu lieu, donc rien n''est prouvé.',
+      coalesce(v_man_1,'NULL'), coalesce(v_man_2,'NULL');
+  end if;
+  if v_man_1 is distinct from v_man_2 then
+    raise exception 'MIGRATEUR REFUSÉ : le manifeste a changé entre le premier et le second passage (% -> %).', v_man_1, v_man_2;
   end if;
 
   raise notice 'MIGRATEUR : règle tenue sur les lignes écrites, et rejeu sans effet.';

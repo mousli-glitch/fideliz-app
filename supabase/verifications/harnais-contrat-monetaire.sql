@@ -47,13 +47,31 @@
 
 begin;
 
+/*
+ * ─── GARDE DE CIBLE : IDENTIFICATION, PAS PLAFOND ───
+ *
+ * La version précédente acceptait « moins de 500 restaurants ». Ça ne prouve
+ * rien : une base RÉELLE mais jeune passe ce test sans difficulté, et ce
+ * harnais insère des fixtures et injecte des fautes. Un plafond n'identifie
+ * pas une cible, il exprime un espoir.
+ *
+ * On exige donc une base VIERGE — aucun utilisateur Auth, aucun profil, aucun
+ * restaurant — et l'absence préalable des identifiants synthétiques, pour
+ * qu'une exécution concurrente ou un résidu ne passe pas inaperçu.
+ */
 do $$
-declare v_u int; v_r int;
+declare v_u int; v_p int; v_r int; v_collision int;
 begin
   select count(*) into v_u from auth.users;
+  select count(*) into v_p from public.profiles;
   select count(*) into v_r from public.restaurants;
-  if v_u > 0 or v_r > 500 then
-    raise exception 'HARNAIS REFUSÉ : cible non synthétique (% users, % restos). Aucune mutation.', v_u, v_r;
+  if v_u <> 0 or v_p <> 0 or v_r <> 0 then
+    raise exception 'HARNAIS REFUSÉ : cible non vierge (% utilisateurs Auth, % profils, % restaurants). Ce fichier insère des fixtures : il ne doit jamais s''exécuter sur une base porteuse de données.', v_u, v_p, v_r;
+  end if;
+  select count(*) into v_collision from public.restaurants
+   where slug in ('resto-mon','dw','neg-resto','neg2-resto','attaquant','victime');
+  if v_collision <> 0 then
+    raise exception 'HARNAIS REFUSÉ : des objets synthétiques existent déjà — résidu ou exécution concurrente.';
   end if;
 end $$;
 
