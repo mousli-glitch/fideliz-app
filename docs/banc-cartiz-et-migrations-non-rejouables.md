@@ -117,21 +117,49 @@ Premier essai annulé : mon message explicatif contenait le mot
 `pg_get_functiondef`, et le contrôle « plus aucune dérivation » l'a donc vu
 subsister. Reformulé. Rien n'avait été écrit.
 
-### Ce qui reste ouvert, et que je ne maquille pas
+### Prouvé par le rejeu — parité parfaite
 
-**La preuve par le rejeu n'est pas obtenue.** Une réinitialisation de la
-branche est repartie et s'est arrêtée au même endroit — 41 migrations sur 89 —
-et son registre s'arrête **avant** les entrées neutralisées : elle n'a donc pas
-relu le registre corrigé. Une branche fraîche, elle, le lit à sa création : une
-a été recréée pour trancher.
+`081` et `082` ont ensuite été enregistrées, avec un garde-fou nécessaire :
+la planification `pg_cron` de `082` est devenue **conditionnelle**, `pg_cron`
+étant absente des branches. La fonction, elle, est posée partout — c'est elle
+qu'on veut éprouver.
 
-Tant que ce rejeu n'a pas atteint la fin, la phrase juste est : **le registre
-est réparé, la réparation n'est pas encore prouvée.**
+Banc reconstruit **entièrement depuis l'historique**, comparé à la production :
 
-**`081` et `082` ne sont toujours pas enregistrées.** Le garde-fou nécessaire a
-été posé côté fichier — la planification `pg_cron` de `082` est devenue
-conditionnelle, `pg_cron` étant absente des branches — mais l'enregistrement
-lui-même reste à faire.
+| | Production | Banc |
+|---|---|---|
+| migrations rejouées | 91 | **91** |
+| tables | 29 | **29** |
+| fonctions | 40 | **40** |
+| policies | 50 | **50** |
+| `habilitations` | oui | **oui** |
+| `anonymiser_donnees_expirees` | oui | **oui** |
+| **empreinte des 8 fonctions** | `2ffa7364…` | **`2ffa7364…`** |
+| données | réelles | **0 restaurant, 0 compte** |
+
+Les huit fonctions que la canonique déclare sont **identiques au bit près**.
+L'historique reconstruit le schéma de production, sans les personnes.
+
+### Un comportement de plateforme, mesuré deux fois
+
+**`reset_branch` ne relit pas le registre du parent** : il rejoue depuis
+l'instantané pris à la création. Deux réinitialisations sont restées bloquées
+au même endroit alors que le registre était déjà corrigé. Seule une **création
+fraîche** lit le registre tel qu'il est.
+
+C'est à savoir avant de conclure qu'un correctif de registre n'a pas marché.
+
+### Le banc en service
+
+| | |
+|---|---|
+| Branche | `banc-cartiz` |
+| Coût | 0,01344 $/h — ~0,32 $/jour |
+| Contenu | schéma complet, **aucune donnée** |
+
+⚠️ `pg_cron` n'y est pas. Les tâches planifiées ne s'y éprouvent pas — c'est la
+même limite que `fusion-tests-2` côté Fideliz, et le harnais des tâches le
+documente déjà.
 
 ## Trois chemins, à trancher
 
