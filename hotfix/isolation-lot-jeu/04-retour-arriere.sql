@@ -35,8 +35,21 @@
  * Le rollback restaure donc la PRÉIMAGE EXACTE — vérifiée par empreinte après
  * exécution — pas « deux lignes ressemblantes ».
  *
+ * ─── TRANSACTION EXPLICITE ───
+ *
+ * Le fichier ouvre la sienne : il ne dépend pas de l'outil qui l'exécute.
+ * Tout échec avant le `commit` restaure l'état précédent, ACL comprises —
+ * sans quoi une interruption entre le `revoke` et le `grant` laisserait la
+ * fonction sans droit d'exécution.
+ *
  * USAGE : script manuel. Ne jamais appliquer via `supabase db push`.
  */
+
+begin;
+
+set local lock_timeout = '5s';
+set local statement_timeout = '30s';
+select pg_advisory_xact_lock(hashtext('hotfix:isolation-lot-jeu'));
 
 do $$
 declare
@@ -110,4 +123,18 @@ end $$;
 revoke all on function public.register_win(uuid, uuid, text, text, text, boolean) from public, anon, authenticated;
 grant execute on function public.register_win(uuid, uuid, text, text, text, boolean) to service_role;
 
+do $$
+begin
+  if not has_function_privilege('service_role',
+       'public.register_win(uuid,uuid,text,text,text,boolean)', 'EXECUTE') then
+    raise exception 'ROLLBACK : service_role a perdu EXECUTE. Transaction annulee.';
+  end if;
+  if has_function_privilege('anon',
+       'public.register_win(uuid,uuid,text,text,text,boolean)', 'EXECUTE') then
+    raise exception 'ROLLBACK : anon a acquis EXECUTE. Transaction annulee.';
+  end if;
+end $$;
+
 notify pgrst, 'reload schema';
+
+commit;

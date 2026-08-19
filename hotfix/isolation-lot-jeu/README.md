@@ -24,10 +24,14 @@ appel avec le jeu de A et le lot de B :
 
 ## Empreintes
 
-| | SHA-256 de `prosrc` | octets |
+| | SHA-256 de `prosrc` | caractères |
 |---|---|---|
 | Préimage vulnérable | `374e138285cb2962702ede05c713a62b5c0bbfa797ee6b50d5e5e91da6516cb3` | 3552 |
 | Postimage corrigé | `32a3238976acd880c9711aaf04fb4b540ecb1ed055dcebf062828d6e0a988442` | 3600 |
+
+Les tailles sont en **caractères** (`length`), pas en octets : le corps est multioctet —
+3600 caractères pour 3604 octets sur le corrigé. L'autorité sur l'identité du corps est
+le SHA-256, pas la longueur.
 
 Mesurées sur la production **en lecture seule**, sans aucune mutation. Le corps de la
 fonction n'a jamais été affiché ni recopié hors de la base.
@@ -55,14 +59,31 @@ possibles.
 
 1. **`01-preflight-production.sql`** — lecture seule. Si une seule colonne rend autre
    chose que `OK`, **arrêt immédiat**. Ne pas continuer.
-2. Relever les comptages métier de `03-controles-post.sql` (dernier bloc) **avant**
-   l'application, pour pouvoir les comparer après.
-3. **`02-appliquer.sql`** — fail-closed. Refuse si l'empreinte n'est pas la préimage
-   autorisée. Ne touche aucune donnée.
-4. **`03-controles-post.sql`** — lecture seule. L'empreinte doit être le postimage, les
-   attributs et les droits inchangés, et **les comptages métier identiques** à l'étape 2.
-5. Vérifier le parcours joueur nominal sur un vrai restaurant : la roue tourne, le ticket
-   s'émet, le libellé est le bon.
+2. **`02-appliquer.sql`** — atomique et fail-closed. Ouvre sa propre transaction, refuse
+   si l'empreinte n'est pas la préimage autorisée, revérifie les droits **avant** le
+   commit. Ne touche aucune donnée.
+3. **`03-controles-post.sql`** — lecture seule, lève au premier écart. L'empreinte doit
+   être le postimage, la signature, les attributs, le propriétaire et l'ACL inchangés, et
+   `service_role` doit conserver `EXECUTE`.
+
+**Il n'y a pas d'étape 4.** Le comportement fonctionnel est déjà prouvé sur la cible
+synthétique fidèle — même préimage bit-à-bit que la production. Vérifier le parcours
+joueur sur un vrai restaurant créerait un ticket réel, un contact, un mouvement de stock
+et potentiellement une donnée personnelle : c'est une **mutation de donnée métier**, qui
+ne fait pas partie de l'autorisation d'appliquer un correctif de fonction. Elle demande
+une **autorisation distincte et explicite** de Samy.
+
+## Sur les comptages métier
+
+`03-controles-post.sql` affiche des totaux (jeux, lots, tickets). Ils **ne prouvent rien**
+sur une production active : de vrais joueurs et de vrais restaurateurs les font varier
+légitimement entre deux lectures, et deux variations opposées se compensent. Ils sont là
+pour l'œil de l'opérateur, **jamais comme critère**.
+
+La preuve que ce hotfix ne touche aucune donnée est ailleurs, et elle est plus solide :
+le script ne contient aucun DML sur une table métier, il s'exécute dans une transaction
+bornée, il ne lit que des métadonnées de fonction, et son comportement est prouvé sur
+cible synthétique.
 
 ## En cas d'écart
 
@@ -83,12 +104,16 @@ correctif précis.
 
 ## Preuves jouées sur cible synthétique
 
-- chaîne `appliquer → rejouer → annuler → rejouer → appliquer`, avec vérification
-  d'empreinte à chaque étape ;
+- `supabase/verifications/harnais-machine-etat-hotfix.sql` — **11 transitions**, dont les
+  quatre états anormaux (chargement corrigé seul, décrément corrigé seul, corps inconnu,
+  fonction absente) **refusés par la migration ET par le rollback** ;
 - retour à la **préimage exacte** après rollback, ACL et attributs identiques ;
-- les **deux** états partiels injectés sont refusés par la migration *et* par le rollback ;
-- oracle d'attaque unique, joué dans les deux polarités : **2/5 sur la préimage**
-  (l'attaque passe), **5/5 sur le corrigé**.
+- `supabase/verifications/harnais-isolation-lot-jeu.sql` — oracle d'attaque unique joué
+  dans les deux polarités : **2/5 sur la préimage** (l'attaque passe), **5/5 sur le
+  corrigé** ;
+- `supabase/verifications/harnais-hotfix.test.ts` — garde que le paquet ne diverge pas du
+  dépôt : substance canonique, constantes partagées, transaction explicite, préflight
+  fail-closed.
 
 ## Commande qui attend l'autorisation de Samy
 

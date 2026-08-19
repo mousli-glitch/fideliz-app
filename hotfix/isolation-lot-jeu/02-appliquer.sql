@@ -1,87 +1,59 @@
 /*
  * ═══════════════════════════════════════════════════════════════════════════
- *  P0 — UN JOUEUR POUVAIT RÉCLAMER LE LOT D'UN AUTRE RESTAURANT
+ *  HOTFIX ISOLATION LOT/JEU — APPLICATION, ATOMIQUE ET FAIL-CLOSED
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * ─── LE DÉFAUT, PROUVÉ SUR CIBLE SYNTHÉTIQUE ───
+ * ⚠️ NE PAS EXÉCUTER SANS L'ACCORD EXPLICITE DE SAMY, ET SANS UN PRÉFLIGHT
+ *    (`01-preflight-production.sql`) ENTIÈREMENT VERT.
  *
- * `register_win(p_game_id, p_prize_id, …)` chargeait le lot ainsi :
+ * ─── POURQUOI UNE TRANSACTION EXPLICITE ───
  *
- *     select * into v_prize from prizes where id = p_prize_id;
+ * La version précédente enchaînait le bloc `DO`, les `REVOKE`, le `GRANT` et
+ * le `NOTIFY` sans transaction englobante. Elle DÉPENDAIT donc du
+ * comportement de l'outil qui l'exécute — éditeur SQL, `psql`, `execute_sql`.
+ * Une interruption entre le `REVOKE` et le `GRANT` laissait la fonction
+ * corrigée mais SANS DROIT D'EXÉCUTION : le parcours joueur cassé, en
+ * production, par un correctif de sécurité.
  *
- * Sans jamais vérifier que ce lot appartient au jeu passé en paramètre. Le
- * décrément de stock héritait du même défaut.
+ * Ce fichier ne dépend plus de rien : il ouvre sa propre transaction. Tout
+ * échec avant le `commit` restaure l'état précédent, ACL comprises.
  *
- * `registerWinnerAction` est l'action publique du parcours joueur — sans
- * garde de rôle, à raison : un client anonyme enregistre son gain. Elle
- * transmet `data.prize_id` VERBATIM depuis le navigateur, à la clé de
- * service. La fonction n'est exécutable ni par `anon` ni par `authenticated`,
- * ce qui ne protège rien : la Server Action est la porte.
+ * ─── POURQUOI DES DÉLAIS BORNÉS ───
  *
- * Mesuré, deux restaurants synthétiques, lot à stock limité chez chacun,
- * appel avec le jeu de A et le lot de B :
+ * `create or replace function` prend un verrou sur la fonction. Sur une
+ * production active, attendre indéfiniment derrière une transaction longue,
+ * c'est bloquer le parcours joueur pendant tout ce temps. Le hotfix REFUSE
+ * plutôt que d'attendre.
  *
- *     appel accepte ............................ true
- *     stock du confrere .................... 3 -> 2
- *     libelle fige sur le ticket ....... « MAGNUM DE CHAMPAGNE (lot de B) »
- *     le ticket appartient au restaurant ....... A
+ * ─── POURQUOI UN VERROU CONSULTATIF ───
  *
- * ─── POURQUOI UN PATCH DYNAMIQUE, ET PAS UNE DÉFINITION COMPLÈTE ───
+ * Deux applications concurrentes liraient toutes deux la préimage, et la
+ * seconde échouerait à la vérification de postimage — sans dégât, mais avec
+ * une erreur incompréhensible. Le verrou consultatif les sérialise
+ * proprement : la seconde attend, voit le postimage, et sort en no-op.
  *
- * Signalé, à raison : la version précédente de ce fichier ne vérifiait que
- * l'unicité de deux sous-chaînes. Ça ne prouve RIEN du reste du corps — la
- * même migration pouvait produire des fonctions différentes selon
- * l'environnement.
+ * ─── CE QU'IL NE FAIT PAS ───
  *
- * J'ai écarté l'autre option proposée — inscrire ici la définition complète
- * et canonique — et voici pourquoi. Une définition complète ÉCRASE ce qui est
- * déployé. Si la production porte le moindre écart avec ce que j'ai audité,
- * un `create or replace` intégral remplace silencieusement son comportement
- * par le mien, sur une fonction qui porte le rejeu, les quotas, les stocks,
- * les contacts et les séquences d'action. Le mode d'échec d'un patch borné,
- * lui, est un REFUS.
- *
- * Sur une fonction de ce calibre, en production, je préfère un correctif qui
- * refuse de s'appliquer à un correctif qui écrase.
- *
- * Le patch est donc conservé, mais BORNÉ PAR L'EMPREINTE DU CORPS ENTIER :
- *
- *   PRÉIMAGE  sha256(prosrc) = 374e138285cb2962702ede05c713a62b5c0bbfa797ee6b50d5e5e91da6516cb3
- *             3552 octets — mesurée sur la production le 19/08/2026
- *   POSTIMAGE sha256(prosrc) = 32a3238976acd880c9711aaf04fb4b540ecb1ed055dcebf062828d6e0a988442
- *             3600 octets — calculée en LECTURE SEULE, sans aucune mutation
- *
- * L'empreinte porte sur `prosrc` — le corps tel que stocké — et non sur
- * `pg_get_functiondef`, dont le formatage peut varier d'une version de
- * serveur à l'autre. Elle est donc stable et vérifiable partout.
- *
- * ─── MACHINE D'ÉTAT : DEUX ÉTATS CONNUS, TOUT LE RESTE REFUSE ───
- *
- *     empreinte = PRÉIMAGE   -> vulnérable exact  -> on applique
- *     empreinte = POSTIMAGE  -> corrigé exact     -> no-op strict
- *     toute autre empreinte  -> inconnu           -> REFUS, sans modification
- *
- * Un état partiel, mixte ou dupliqué n'a par construction ni l'une ni l'autre
- * empreinte : il tombe dans « inconnu » et se fait refuser. C'est ce que le
- * comptage de fragments ne savait pas faire.
- *
- * Les attributs sont vérifiés séparément, avant ET après : signature,
- * `SECURITY DEFINER`, `search_path`, volatilité, propriétaire. Le corps n'est
- * pas la fonction.
- *
- * ─── ⚠️ APRÈS MISE EN PRODUCTION, NE PAS ROLLBACK À L'AVEUGLE ───
- *
- * Le rollback restaure exactement la préimage — donc RÉOUVRE LE P0, exposant
- * de nouveau les clients. Une fois ce correctif en service, la bonne réponse
- * à un problème est une correction FORWARD, ou la neutralisation temporaire
- * du parcours d'enregistrement, pas un retour en arrière.
- *
- * ⚠️ ARRÊT DEMANDÉ PAR SAMY : préparer et prouver, puis ATTENDRE son accord
- * avant toute application réelle.
- *
- * MIGRATION ADDITIVE au sens des données : aucune table, aucune colonne,
- * aucune ligne touchée. Seul le corps d'une fonction change.
+ * Aucun `insert`, `update`, `delete` sur une table métier. Aucune donnée :
+ * ni jeu, ni lot, ni ticket, ni contact, ni compte. Seul le corps d'une
+ * fonction change, plus ses droits — qui sont reposés à l'identique.
  */
+
+begin;
+
+/*
+ * Délais bornés. `lock_timeout` : on refuse plutôt que d'attendre derrière
+ * une transaction longue. `statement_timeout` : filet de sécurité global.
+ * `set local` : ne survit pas à la transaction.
+ */
+set local lock_timeout = '5s';
+set local statement_timeout = '30s';
+
+/*
+ * Verrou consultatif transactionnel : sérialise deux applications
+ * concurrentes. Relâché automatiquement au commit ou au rollback.
+ */
+select pg_advisory_xact_lock(hashtext('hotfix:isolation-lot-jeu'));
 
 do $$
 declare
@@ -200,3 +172,43 @@ revoke all on function public.register_win(uuid, uuid, text, text, text, boolean
 grant execute on function public.register_win(uuid, uuid, text, text, text, boolean) to service_role;
 
 notify pgrst, 'reload schema';
+
+/*
+ * VÉRIFICATION FINALE, DANS LA MÊME TRANSACTION.
+ *
+ * Les droits sont relus APRÈS le `grant` : si `service_role` avait perdu
+ * `EXECUTE`, ou si `anon` en avait acquis un, on lève — et le `commit`
+ * n'arrive jamais. C'est le scénario que l'absence de transaction rendait
+ * possible.
+ */
+do $$
+declare v_n int; v_h text;
+begin
+  select count(*) into v_n from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'register_win';
+  if v_n <> 1 then
+    raise exception 'HOTFIX : % fonction(s) register_win apres application, 1 attendue.', v_n;
+  end if;
+
+  select encode(digest(p.prosrc,'sha256'),'hex') into v_h
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'register_win';
+  if v_h <> '32a3238976acd880c9711aaf04fb4b540ecb1ed055dcebf062828d6e0a988442' then
+    raise exception 'HOTFIX : postimage inattendu (%). Transaction annulee.', v_h;
+  end if;
+
+  if not has_function_privilege('service_role',
+       'public.register_win(uuid,uuid,text,text,text,boolean)', 'EXECUTE') then
+    raise exception 'HOTFIX : service_role a PERDU EXECUTE. Transaction annulee — le parcours joueur serait casse.';
+  end if;
+  if has_function_privilege('anon',
+       'public.register_win(uuid,uuid,text,text,text,boolean)', 'EXECUTE')
+     or has_function_privilege('authenticated',
+       'public.register_win(uuid,uuid,text,text,text,boolean)', 'EXECUTE') then
+    raise exception 'HOTFIX : anon ou authenticated a acquis EXECUTE. Transaction annulee.';
+  end if;
+
+  raise notice 'HOTFIX : postimage et droits verifies dans la transaction.';
+end $$;
+
+commit;
