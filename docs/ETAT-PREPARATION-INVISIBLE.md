@@ -189,12 +189,13 @@ parseur et se fait rejeter par la contrainte, avec un message opaque au lieu du
 d'erreur, sur une saisie absurde. Le comportement actuel est figé par un test
 pour qu'une correction soit un choix et non un accident.
 
-## Pourcentages, sans arrondi flatteur
+## Avancement — voir `TABLEAU-DE-BASCULE.md`
 
-- **Préparation invisible : ~65 %.** Les fondations de sécurité et
-  d'atomicité sont fermées et prouvées, le contrat monétaire l'est de bout en
-  bout ; la conservation, le migrateur complet, la répétition générale et le
-  dossier opératoire ne le sont pas.
-- **Avant mise en service complète : ~25 %.** Le hotfix P0 est appliqué, mais
-  c'est la seule opération réelle : ni migration de données, ni gel, ni
-  bascule visible.
+Les pourcentages qui figuraient ici sont retirés le 19/08/2026, à la demande
+de Samy et parce qu'ils mentaient : un pourcentage sur un chantier dont la
+moitié des inconnues n'est pas encore ouverte est une intuition déguisée en
+mesure.
+
+`docs/TABLEAU-DE-BASCULE.md` porte désormais l'état stable : lots fermés,
+lots restants, chemin critique, et les dix critères vérifiables de
+`READY_FOR_MIGRATION`.
