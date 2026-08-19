@@ -90,19 +90,38 @@ intacte.
 
 ---
 
-## ⚠️ Ce qui n'est PAS encore corrigé
+## Le code, déployé le même jour
 
-**Le scanner du restaurateur affiche toujours « Minimum de commande : Aucun »
-sur un minimum décimal.** Cet écran lit le code déployé, qui porte encore
-`/^[0-9]+$/`. La base est corrigée, l'interface ne l'est pas.
+Samy a autorisé le déploiement dans la foulée. Il n'a **pas** été fait en
+fusionnant `candidat/baseline-acl` : cette branche est à 95 commits et
+162 fichiers de `main`, et son code appelle **six RPC qui n'existent pas en
+production** — `creer_jeu_et_lots`, `enregistrer_jeu_et_lots`,
+`ouvrir_`/`fermer_`/`forcer_fermeture_fenetre`, `get_my_role`. La création et
+la modification d'un jeu auraient cassé immédiatement.
 
-Ce qui est acquis dès maintenant, en revanche : **chaque ticket émis à partir
-de ce `commit` porte sa condition figée**, correctement calculée. Cet acquis ne
-dépend plus d'aucun déploiement.
+Un déploiement **isolé** a donc été construit depuis `origin/main = 5094af3`,
+le commit réellement en production, avec les onze fichiers du lot 3 et rien
+d'autre :
 
-Pour que l'écran suive, il faut déployer le code du lot 3 (commit `bbef844`).
-L'ordre est désormais dans le bon sens : la base est en avance, le code peut
-partir quand Samy le décide.
+```
+commit         f655267
+11 fichiers    924 insertions, 34 suppressions
+RPC appelées   identiques à celles de main — aucune dépendance ajoutée
+tsc            code 0
+tests          164 verts, dont les 58 de parité écran ↔ base
+build          vert, dans l'environnement réel
+```
+
+Point de retour arrière relevé **avant** la poussée : déploiement
+`dpl_BfQoR9AzxUQWtx3VexbaD1XNUhkL`, commit `5094af3`, marqué
+`isRollbackCandidate` par Vercel.
+
+### Un supplément assumé
+
+`app/verify/[id]/page.tsx` emporte aussi le retrait d'un UUID root codé en dur
+dans un `OR` d'autorisation. Mesuré comme neutre — ce compte porte déjà
+`role = 'root'`, déjà présent dans `authorizedRoles`. Le scinder aurait demandé
+une édition à la main, plus risquée que de le prendre.
 
 ---
 
