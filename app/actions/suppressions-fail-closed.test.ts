@@ -62,6 +62,8 @@ let relectureAuth: "present" | "absent" | "erreur" | "brut" = "present";
 let erreurBruteGetUser: Record<string, unknown> = {};
 /* Comptages rendus par un `select ... head:true`, par clé `table:select`. */
 let comptages: Record<string, number | null> = {};
+/* Le jeton que la fonction d'ouverture est censée rendre. */
+const JETON_SIMULE = "jeton-de-cette-operation";
 /* Ce que le préflight lit dans `profiles` pour la cible. */
 let profilCible: unknown = { etat: "present", role: "sales" };
 
@@ -108,10 +110,14 @@ function clientSimule() {
      * elles, l'ordre séquentiel du fichier serait la seule protection contre
      * un rattachement concurrent, et ce n'en est pas une.
      */
-    rpc: async (nom: string) => {
+    rpc: async (nom: string, params?: Record<string, unknown>) => {
       journal.push(`rpc:${nom}`);
+      operations.push({ cle: `rpc:${nom}`, payload: params });
       const e = echecs[`rpc:${nom}`];
-      return { data: null, error: e ?? null };
+      // `ouvrir_fenetre_suppression` rend le JETON de l'opération : la
+      // fermeture doit présenter celui-là, pas un autre.
+      const data = nom === "ouvrir_fenetre_suppression" && !e ? JETON_SIMULE : null;
+      return { data, error: e ?? null };
     },
     auth: {
       admin: {
@@ -677,5 +683,67 @@ describe("dernier contrôle : plus aucune référence à la cible", () => {
     for (const colonne of ["user_id", "owner_id", "created_by"]) {
       expect(filtre, `${colonne} doit entrer dans le contrôle`).toContain(colonne);
     }
+  });
+});
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LE JETON — une fenêtre appartient à UNE opération
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Signalé le 19/08/2026 : la barrière fermait la course écrivain ↔ suppression,
+ * pas suppression ↔ suppression. Deux suppressions du même compte passaient
+ * toutes deux le préflight, ouvraient la même fenêtre (`on conflict do
+ * update`), et la première à finir refermait celle de l'autre — rouvrant les
+ * rattachements avant l'irréversible de la seconde.
+ *
+ * Côté SQL, c'est le jeton qui ferme ça (P0105 à l'ouverture concurrente,
+ * P0106 à la fermeture étrangère), et c'est prouvé par
+ * `supabase/verifications/harnais-fenetre-suppression.sql`. Ici, on vérifie
+ * ce que le code TypeScript doit faire : présenter SON jeton, et ne jamais
+ * fermer à l'aveugle.
+ */
+describe("le jeton de l'opération", () => {
+  it("la fermeture présente le jeton rendu par l'ouverture", async () => {
+    await masterDeleteUser("cible");
+    const fermeture = operations.find((o) => o.cle === "rpc:fermer_fenetre_suppression");
+    expect((fermeture?.payload as { p_jeton?: string })?.p_jeton).toBe("jeton-de-cette-operation");
+  });
+
+  it("elle le présente aussi sur le chemin d'échec", async () => {
+    echecs["restaurants:update:user_id"] = { message: "panne" };
+    await masterDeleteUser("cible");
+    const fermeture = operations.find((o) => o.cle === "rpc:fermer_fenetre_suppression");
+    expect((fermeture?.payload as { p_jeton?: string })?.p_jeton).toBe("jeton-de-cette-operation");
+  });
+
+  it("ouverture refusée (une autre opération tient la fenêtre) : aucune mutation", async () => {
+    // C'est le SQLSTATE P0105 côté base. Poursuivre en parallèle serait
+    // exactement la course qu'on ferme.
+    echecs["rpc:ouvrir_fenetre_suppression"] = { message: "Une suppression de ce compte est déjà en cours" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect(journal).toEqual(["rpc:ouvrir_fenetre_suppression"]);
+  });
+
+  it("échec ET fenêtre non refermée : état DISTINCT, pas un échec ordinaire", async () => {
+    /*
+     * Un marqueur oublié interdit tout rattachement futur à ce compte. Rendre
+     * un échec ordinaire reviendrait à prétendre implicitement que la fenêtre
+     * a été refermée.
+     */
+    echecs["restaurants:update:user_id"] = { message: "panne" };
+    echecs["rpc:fermer_fenetre_suppression"] = { message: "indisponible" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(false);
+    expect((r as { etat?: string }).etat).toBe("FENETRE_NON_REFERMEE");
+    expect(r.error).toMatch(/rattachement/i);
+  });
+
+  it("succès ET fenêtre non refermée : succès conservé, mais dit, et orienté vers la voie gardée", async () => {
+    echecs["rpc:fermer_fenetre_suppression"] = { message: "indisponible" };
+    const r = await masterDeleteUser("cible");
+    expect(r.success).toBe(true);
+    expect((r as { avertissement?: string }).avertissement).toMatch(/libererFenetreSuppression/);
   });
 });

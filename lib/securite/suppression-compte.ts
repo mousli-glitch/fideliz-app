@@ -114,7 +114,14 @@ export type ResultatSuppression =
    * avant.
    */
   | { success: true; idempotent?: boolean; avertissement?: string }
-  | { success: false; error: string; ambigu?: false }
+  /*
+   * `etat: "FENETRE_NON_REFERMEE"` — l'opération a échoué ET son marqueur de
+   * suppression n'a pas pu être retiré. Distinct d'un échec ordinaire : tant
+   * que le marqueur est là, plus aucun restaurant ne peut être rattaché à ce
+   * compte. Le marqueur est durable (il survit au processus) et réparable par
+   * `libererFenetreSuppressionAction`, gardée root et tracée.
+   */
+  | { success: false; error: string; ambigu?: false; etat?: "FENETRE_NON_REFERMEE" }
   /*
    * État distinct, et non un échec ordinaire : l'appel Auth a échoué ET la
    * relecture d'existence n'a pas pu trancher. On ne sait donc pas si le
@@ -222,11 +229,17 @@ export async function supprimerCompteEtReattribuer(
    * L'échec est un refus : sans la fenêtre, l'ordre séquentiel de ce fichier
    * est la seule protection, et il n'en est pas une.
    */
-  const { error: eFenetre } = await admin.rpc("ouvrir_fenetre_suppression", {
+  const { data: jeton, error: eFenetre } = await admin.rpc("ouvrir_fenetre_suppression", {
     p_user_id: userId,
     p_demandeur: demandeur ?? null,
   });
   if (eFenetre) {
+    /*
+     * Deux raisons possibles, et les deux se refusent : la fonction manque
+     * (migration non appliquée), ou une AUTRE suppression du même compte
+     * tient déjà la fenêtre (`P0105`). Dans le second cas, poursuivre en
+     * parallèle est précisément la course qu'on ferme.
+     */
     return {
       success: false,
       error:
@@ -235,11 +248,40 @@ export async function supprimerCompteEtReattribuer(
     };
   }
 
-  // Toute sortie après ce point referme la fenêtre, SAUF quand l'issue est
-  // indéterminée : là, le marqueur doit rester, il protège un compte dont on
-  // ne sait pas s'il va disparaître.
+  /*
+   * Le JETON de l'opération. La fenêtre n'appartient pas au compte, elle
+   * appartient à CETTE suppression : sans lui, une opération pouvait refermer
+   * la fenêtre d'une autre encore en cours, et rouvrir les rattachements
+   * avant son irréversible.
+   */
+  const monJeton = jeton as string | null;
+
+  /*
+   * Toute sortie après ce point referme la fenêtre, SAUF quand l'issue est
+   * indéterminée : là, le marqueur doit rester, il protège un compte dont on
+   * ne sait pas s'il va disparaître.
+   *
+   * L'échec de la fermeture n'est plus avalé : il produit un état distinct.
+   * Un marqueur oublié interdit tout rattachement futur à ce compte — le
+   * taire reviendrait à rendre un échec ordinaire qui prétend implicitement
+   * avoir tout remis en place.
+   */
   const echouer = async (error: string): Promise<ResultatSuppression> => {
-    await admin.rpc("fermer_fenetre_suppression", { p_user_id: userId });
+    const { error: eFermeture } = await admin.rpc("fermer_fenetre_suppression", {
+      p_user_id: userId,
+      p_jeton: monJeton,
+    });
+    if (eFermeture) {
+      return {
+        success: false,
+        etat: "FENETRE_NON_REFERMEE",
+        error:
+          error +
+          " — de plus, la fenêtre de suppression n'a pas pu être refermée (" +
+          eFermeture.message +
+          "). Tout rattachement de restaurant à ce compte reste refusé jusqu'à sa libération.",
+      };
+    }
     return { success: false, error };
   };
 
@@ -250,13 +292,17 @@ export async function supprimerCompteEtReattribuer(
    * identifiant. On le dit.
    */
   const terminer = async (r: { success: true; idempotent?: boolean }): Promise<ResultatSuppression> => {
-    const { error } = await admin.rpc("fermer_fenetre_suppression", { p_user_id: userId });
+    const { error } = await admin.rpc("fermer_fenetre_suppression", {
+      p_user_id: userId,
+      p_jeton: monJeton,
+    });
     if (!error) return r;
     return {
       ...r,
       avertissement:
         "Compte supprimé, mais la fenêtre de suppression n'a pas pu être refermée : " +
-        error.message + " — retirer la ligne de `comptes_en_suppression` à la main.",
+        error.message +
+        " — la libérer par `libererFenetreSuppressionAction`, qui trace ce qu'elle retire.",
     };
   };
 
