@@ -310,7 +310,7 @@ Une ligne, une question fermée, une recommandation. Ce sont des **règles produ
 
 **Gating**
 
-- **P-11** — Une échéance d'abonnement dépassée coupe-t-elle le dashboard et les traitements de fond, **sans jamais couper `/m`, `/c` ni `/verify`** ? → **Recommandé : oui.** Les QR imprimés et les passes déjà installés sont l'interdit explicite du `CLAUDE.md` ; les crons expirés, eux, sont facturés à Samy.
+- **P-11 ✅ TRANCHÉE le 19/08/2026 — coupe le dashboard, jamais `/m`, `/c`, `/verify` ni `/scan`.** ⚠️ `/scan` coupait bel et bien : corrigé, règle extraite dans `lib/coupure-jeu.ts` avec 7 tests. Non déployé. Voir `p11-ce-qui-coupe-et-ce-qui-ne-coupe-jamais.md`. *(recommandation d'origine : oui)* Les QR imprimés et les passes déjà installés sont l'interdit explicite du `CLAUDE.md` ; les crons expirés, eux, sont facturés à Samy.
 - **P-12 ✅ TRANCHÉE le 19/08/2026 — une table `restaurant × module`, écriture réservée au vendeur.** Forme proposée et carte des 32 écrans : `p12-habilitation-par-module.md`. Mesuré au passage : un restaurateur peut aujourd'hui réécrire ses propres dates d'abonnement. *(recommandation d'origine : oui)* `subscription_plan` n'est qu'un libellé d'affichage ; `is_retention_alert_enabled` est le seul précédent existant du bon modèle.
 - **P-13 ✅ TRANCHÉE le 19/08/2026 — oui, refus par défaut et backfill déduit de l'usage.** Migration écrite (`cartiz/081`), non appliquée. Matrice et pièges : `p13-deny-by-default-et-backfill.md`. *(recommandation d'origine : oui)* `NULL` = « tout permis » des deux côtés aujourd'hui ; sans backfill, l'unification ouvre tout le parc.
 - **P-14** — Un admin en impersonation voit-il tout, gating ignoré ? → **Recommandé : oui**, sinon la garde ferme la console de dépannage de Samy.
