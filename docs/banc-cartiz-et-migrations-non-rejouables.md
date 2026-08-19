@@ -82,6 +82,57 @@ et savoir.
 sur le rejeu des migrations, **elle ne fonctionne pas**. Ce document n'a pas été
 relu sous cet angle — c'est un trou nommé, pas mesuré.
 
+## Le correctif appliqué — chemin A
+
+**Tranché par Samy : « rends l'historique rejouable ».** Appliqué au registre de
+production le 19/08/2026, dans une transaction bornée.
+
+### Le registre a corrigé ma carte
+
+Je travaillais depuis le dépôt. **Le dépôt n'est pas ce qui tourne.** Le
+registre a montré cinq entrées dérivantes, dont **deux que le dépôt ne
+montrait pas** — `brancher_paliers_sur_caisse` et
+`brancher_paliers_sur_ajustement_v2` — et **une que je croyais dérivante et qui
+ne l'est pas** (`silence_22h_9h`, 592 caractères).
+
+C'est une garde qui l'a dit, pas moi : la transaction a refusé de s'exécuter
+sur « 2 des 3 contiennent une dérivation ». Elle m'a empêché de réécrire la
+mauvaise entrée.
+
+### Ce qui a été fait
+
+| | |
+|---|---|
+| **5 entrées neutralisées** | `20260808112500`, `20260808124721`, `20260809145249`, `20260809145349`, `20260812193556` — remplacées par un `select` qui dit pourquoi et renvoie à la canonique |
+| **1 entrée canonique** | `20260819190000`, **engendrée depuis la production elle-même** : 23 instructions déclarant 8 fonctions avec leurs droits |
+| **Catalogue** | fonctions, tables et policies empreintées avant/après — **identiques**. On n'a réécrit qu'un journal. |
+
+Sur-déclarer les 8 plutôt que les 5 strictement nécessaires est délibéré : la
+canonique clôt la chaîne, donc ce qu'elle déclare devient l'état final — par
+construction celui de la production.
+
+### Une garde qui a trébuché sur ma prose
+
+Premier essai annulé : mon message explicatif contenait le mot
+`pg_get_functiondef`, et le contrôle « plus aucune dérivation » l'a donc vu
+subsister. Reformulé. Rien n'avait été écrit.
+
+### Ce qui reste ouvert, et que je ne maquille pas
+
+**La preuve par le rejeu n'est pas obtenue.** Une réinitialisation de la
+branche est repartie et s'est arrêtée au même endroit — 41 migrations sur 89 —
+et son registre s'arrête **avant** les entrées neutralisées : elle n'a donc pas
+relu le registre corrigé. Une branche fraîche, elle, le lit à sa création : une
+a été recréée pour trancher.
+
+Tant que ce rejeu n'a pas atteint la fin, la phrase juste est : **le registre
+est réparé, la réparation n'est pas encore prouvée.**
+
+**`081` et `082` ne sont toujours pas enregistrées.** Le garde-fou nécessaire a
+été posé côté fichier — la planification `pg_cron` de `082` est devenue
+conditionnelle, `pg_cron` étant absente des branches — mais l'enregistrement
+lui-même reste à faire.
+
 ## Trois chemins, à trancher
 
 | | Ce que ça donne | Ce que ça coûte |
