@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { createClient as createAuthClient } from "@/utils/supabase/server"
+import { formaterEuros, lireMinimum } from "@/lib/monetaire"
 import { Card } from "@/components/ui/card"
 import { XCircle } from "lucide-react"
 import VerifyClient from "./verify-client"
@@ -35,10 +36,16 @@ export default async function VerifyPage({
       // ✅ AJOUT restaurant
       const authorizedRoles = ['admin','owner','staff','root','restaurant']
 
-      if (
-        authorizedRoles.includes(profile.role) ||
-        user.id === '04eb7091-6876-41e0-84c6-5891658a5768'
-      ) {
+      /*
+       * L'autorisation vient du RÔLE, jamais d'un identifiant privilégié.
+       *
+       * Une clause `|| user.id === '<uuid root>'` figurait ici. Mesuré avant
+       * retrait : ce compte porte déjà `role = 'root'`, et `'root'` est déjà
+       * dans `authorizedRoles`. Elle n'ouvrait donc aucun accès supplémentaire
+       * — elle offrait seulement un second chemin, hors du système de rôles,
+       * qu'il aurait fallu penser à surveiller.
+       */
+      if (authorizedRoles.includes(profile.role)) {
         isStaff = true
       }
     }
@@ -50,7 +57,7 @@ export default async function VerifyPage({
     .select(`
       *,
       prizes ( label, color ),
-      games ( min_spend, validity_days )
+      games ( min_spend, min_spend_cents, validity_days )
     `)
     .eq('id', id)
     .single()
@@ -108,8 +115,20 @@ export default async function VerifyPage({
       ? prenom
       : `${prenom[0].toUpperCase()}.`
 
-  const minSpendRaw = winner.games?.min_spend
-  const minSpend = minSpendRaw ? parseFloat(minSpendRaw.toString()) : 0
+  /*
+   * `parseFloat(min_spend)` se trouvait ici. Il lisait « 5,90 » comme 5 —
+   * la virgule française arrête `parseFloat` net — et « abc » comme NaN, que
+   * la comparaison `minSpend > 0` transformait ensuite en « aucune condition ».
+   *
+   * Même ordre de lecture que partout ailleurs, et le snapshot du ticket
+   * d'abord : cette page affiche la condition d'UN ticket précis, pas l'état
+   * courant du jeu.
+   */
+  const minimum = lireMinimum(
+    (winner as any).min_spend_cents_snapshot,
+    winner.games?.min_spend_cents,
+    winner.games?.min_spend
+  )
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
@@ -132,7 +151,8 @@ export default async function VerifyPage({
           prizeLabel={prizeLabel}
           isExpired={isExpired}
           expirationDateString={expirationDateString}
-          minSpend={minSpend}
+          minimumEtat={minimum.etat}
+          minSpendAffichage={formaterEuros(minimum.centimes)}
           isStaff={isStaff}
         />
 

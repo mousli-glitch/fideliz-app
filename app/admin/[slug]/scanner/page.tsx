@@ -146,16 +146,30 @@ export default function ScannerPage() {
             <p className="text-slate-500 font-medium">Client : <span className="font-bold text-slate-800">{review.firstName}</span></p>
             <p className="text-2xl font-black text-slate-900 mt-1">{review.prizeLabel}</p>
 
-            {review.status !== "redeemed" && !review.expired && review.minSpend > 0 && (
+            {review.status !== "redeemed" && !review.expired && review.minimumEtat === "montant" && (
               <p className="mt-3 text-sm font-bold text-amber-600 flex items-center justify-center gap-1">
-                <AlertTriangle size={15} /> À vérifier : commande ≥ {review.minSpend} €
+                <AlertTriangle size={15} /> À vérifier : commande ≥ {review.minSpendAffichage}
+              </p>
+            )}
+
+            {/*
+              Une condition existe mais reste illisible : le staff doit le
+              savoir. Écrire « Aucun » ici reviendrait à transformer « je ne
+              sais pas » en « servez sans vérifier » — la faute même que ce
+              lot corrige côté base.
+            */}
+            {review.status !== "redeemed" && !review.expired && review.minimumEtat === "illisible" && (
+              <p className="mt-3 text-sm font-bold text-red-600 flex items-center justify-center gap-1">
+                <AlertTriangle size={15} /> Minimum d&apos;achat illisible : vérifier la fiche du jeu
               </p>
             )}
 
             <div className="mt-4 bg-slate-50 rounded-xl p-4 text-left text-sm space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Minimum de commande</span>
-                <span className="font-bold text-slate-800">{review.minSpend > 0 ? `${review.minSpend} €` : "Aucun"}</span>
+                <span className={`font-bold ${review.minimumEtat === "illisible" ? "text-red-600" : "text-slate-800"}`}>
+                  {review.minSpendLibelle}
+                </span>
               </div>
               {review.expiresAt && (
                 <div className="flex items-center justify-between">

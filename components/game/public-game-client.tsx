@@ -5,6 +5,7 @@ import { registerWinnerAction } from "@/app/actions/register-winner"
 import { checkReplayStatusAction } from "@/app/actions/check-replay"
 import { validateEmail, validatePhone } from "@/utils/contact-validation"
 import { playGameAction } from "@/app/actions/play-game"
+import { formaterEuros, lireMinimum } from "@/lib/monetaire"
 import { Instagram, PenTool, ExternalLink, Download, Share2, Facebook, Ruler, Clock, AlertTriangle, CalendarDays, Mail, Loader2, User, Phone, ArrowRight } from "lucide-react"
 import confetti from "canvas-confetti"
 import { motion, AnimatePresence, Variants, useAnimation } from "framer-motion"
@@ -48,8 +49,15 @@ type Props = {
     id: string; 
     active_action: string; 
     action_url: string; 
-    validity_days: number; 
-    min_spend: number;
+    validity_days: number;
+    /*
+     * `min_spend` est un TEXTE en base — la colonne est de type `text`, et
+     * elle porte des valeurs comme « 5,90 ». La déclarer `number` ici était
+     * une fiction confortable qui a survécu à `parseFloat`. La référence est
+     * `min_spend_cents` ; ce champ n'est plus qu'un repli historique.
+     */
+    min_spend: string | number | null;
+    min_spend_cents?: number | null;
     title_style?: string;
     bg_choice?: number;
     bg_image_url?: string;
@@ -1083,10 +1091,24 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
                           </div>
 
                           {(() => {
-                            // Montant minimum formaté à la française : 4.9 -> "4,90 €" ; 10 -> "10 €"
-                            const n = parseFloat(String(game.min_spend ?? 0).replace(',', '.'))
-                            const montant = isFinite(n) && n > 0
-                              ? (Number.isInteger(n) ? `${n} €` : `${n.toFixed(2).replace('.', ',')} €`)
+                            /*
+                             * Montant minimum, lu par le contrat canonique.
+                             *
+                             * Un `parseFloat` se trouvait ici. Il tombait juste
+                             * sur « 5,90 » — la virgule était remplacée avant —
+                             * mais c'était une quatrième grammaire, à côté des
+                             * trois autres. Une règle écrite quatre fois finit
+                             * par se contredire : c'est ce qui a produit le
+                             * défaut. Le champ en centimes prime désormais, et
+                             * le texte historique n'est plus qu'un repli.
+                             */
+                            const minimum = lireMinimum(
+                              null,
+                              (game as any).min_spend_cents,
+                              game.min_spend == null ? null : String(game.min_spend)
+                            )
+                            const montant = minimum.etat === 'montant'
+                              ? formaterEuros(minimum.centimes)
                               : null
 
                             // Formulations courtes : évitent les retours à la ligne bancals sur mobile

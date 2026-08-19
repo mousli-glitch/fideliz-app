@@ -14,7 +14,16 @@ interface VerifyClientProps {
   prizeLabel: string
   isExpired: boolean
   expirationDateString: string
-  minSpend: number
+  /*
+   * Le montant arrive DÉJÀ formaté, et son état arrive à part.
+   *
+   * Auparavant cette page recevait un nombre et écrivait `{minSpend}€`. Deux
+   * défauts en une ligne : « 5.9€ » au lieu de « 5,90 € », et surtout la
+   * condition qui disparaissait quand le nombre valait 0 — y compris lorsque
+   * ce 0 venait d'un `parseFloat` qui n'avait pas su lire.
+   */
+  minimumEtat: 'aucun' | 'montant' | 'illisible'
+  minSpendAffichage: string | null
   // AJOUT : Nouvelle prop
   isStaff: boolean
 }
@@ -23,11 +32,12 @@ export default function VerifyClient({
   winnerId,
   initialStatus,
   initialRedeemedDate,
-  isExpired, 
-  expirationDateString, 
-  minSpend,
+  isExpired,
+  expirationDateString,
+  minimumEtat,
+  minSpendAffichage,
   // AJOUT : Récupération de la prop
-  isStaff 
+  isStaff
 }: VerifyClientProps) {
 
   const [isLoading, setIsLoading] = useState(false)
@@ -127,14 +137,29 @@ export default function VerifyClient({
   return (
     <div>
         {/* VOS CONDITIONS D'AFFICHAGE (Code INCHANGÉ) */}
-        {minSpend > 0 && (
+        {minimumEtat === 'montant' && (
           <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6 rounded-r-lg shadow-sm">
             <div className="flex items-center mb-1">
               <AlertTriangle className="text-amber-600 w-5 h-5 mr-2" />
               <span className="font-bold text-amber-800 uppercase text-sm">Condition Requise</span>
             </div>
             <p className="text-amber-900 text-sm pl-7">
-              Minimum d'achat : <strong className="text-lg text-amber-950">{minSpend}€</strong>
+              Minimum d&apos;achat : <strong className="text-lg text-amber-950">{minSpendAffichage}</strong>
+            </p>
+          </div>
+        )}
+
+        {/* Une condition existe, mais elle est illisible : le dire, plutôt que
+            de laisser croire qu'il n'y en a pas. */}
+        {minimumEtat === 'illisible' && (
+          <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded-r-lg shadow-sm">
+            <div className="flex items-center mb-1">
+              <AlertTriangle className="text-red-600 w-5 h-5 mr-2" />
+              <span className="font-bold text-red-800 uppercase text-sm">Condition à vérifier</span>
+            </div>
+            <p className="text-red-900 text-sm pl-7">
+              Le minimum d&apos;achat de ce jeu est illisible. Vérifiez la fiche du jeu
+              avant de valider.
             </p>
           </div>
         )}
