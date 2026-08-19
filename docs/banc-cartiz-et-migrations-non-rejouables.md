@@ -149,13 +149,30 @@ fraîche** lit le registre tel qu'il est.
 
 C'est à savoir avant de conclure qu'un correctif de registre n'a pas marché.
 
-### Le banc en service
+### Le banc est à la demande, pas permanent
+
+**Supprimé le 19/08/2026 après usage**, sur décision de Samy. Il ne coûte donc
+plus rien, et il n'y a rien à y perdre : les preuves vivent dans ces documents,
+le banc ne portait aucune donnée.
+
+**Le recréer est une seule opération**, et depuis les correctifs d'aujourd'hui
+elle donne un banc **fidèle** — ce qui n'était pas vrai ce matin :
+
+```
+create_branch(project_id: rxdbotnuwfakukcbgeqo, name: 'banc-cartiz')
+```
+
+⚠️ **Toujours créer, jamais réinitialiser.** `reset_branch` rejoue depuis
+l'instantané pris à la création et **ne relit pas le registre du parent** —
+mesuré deux fois, à une heure d'intervalle, sur deux branches différentes. Un
+correctif de registre qu'on croit inopérant est peut-être simplement invisible
+à un `reset`.
 
 | | |
 |---|---|
-| Branche | `banc-cartiz` |
-| Coût | 0,01344 $/h — ~0,32 $/jour |
+| Coût | 0,01344 $/h — ~0,32 $/jour tant qu'il vit |
 | Contenu | schéma complet, **aucune donnée** |
+| Temps de construction | ~2 minutes pour 92 migrations |
 
 ⚠️ `pg_cron` n'y est pas. Les tâches planifiées ne s'y éprouvent pas — c'est la
 même limite que `fusion-tests-2` côté Fideliz, et le harnais des tâches le
