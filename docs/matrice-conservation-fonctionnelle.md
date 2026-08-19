@@ -243,17 +243,49 @@ Trois options chiffrées et une recommandation motivée dans le document.
   l'est pas**.
 - Il ne juge pas la cible Cartiz : le schéma d'accueil, le gating de
   fonctionnalités et la marque relèvent du lot 6.
-- Il n'a exercé **aucun** parcours HTTP aujourd'hui. Le témoin existant n'a pas
-  été lancé sur la production — voir la note ci-dessous.
+- Il n'avait exercé **aucun** parcours HTTP le jour de sa rédaction. C'est
+  corrigé — voir la note ci-dessous.
 
-## Pourquoi le témoin n'a pas été lancé aujourd'hui
+## Le témoin a été lancé — GO, 189/189
 
-Une boucle de 44 requêtes sur `app.fideliz-app.fr`, plus tôt dans la journée, a
-déclenché le pare-feu comportemental de Vercel (« Security Checkpoint ») sur mon
-adresse. Les journaux d'exécution ont confirmé que **les vrais visiteurs n'étaient
-pas touchés** — 79 réponses 200 en 6 minutes, aucun 403 n'atteignant
-l'application — mais relancer 171 requêtes dans la foulée aurait rallongé le
-blocage sans rien apprendre de neuf.
+**19/08/2026, code de sortie 0.** Les cinq parcours imprimés sont conformes à
+leur état de référence, en 21,3 s, 26 requêtes.
 
-Le témoin doit être lancé, et c'est la première chose à faire à la reprise. Le
-noter ici vaut mieux que de laisser croire qu'il a tourné.
+C'est aussi la vérification en production du correctif `check-replay` : le RPC
+`get_replay_status` avait été modifié le matin même, et les trois pages de jeu
+répondent 200, la roue s'affiche, les lots et les stocks sont inchangés.
+
+### Deux contrôles ne pouvaient pas passer, et ce n'était pas un aléa
+
+Le premier passage a rendu GO avec **2 contrôles non exécutés**, tous deux sur
+la classe « ticket valide ». En cherchant pourquoi, j'ai trouvé un trou dans
+l'outillage, pas dans le produit :
+
+`regenerer-tickets.mjs` ne couvrait que `la-ruche` et `best-pizza`. Soukara
+était entrée au périmètre sans que l'outil suive — sa fixture contrôlait bien
+une classe « valide », mais aucun échantillon n'existait pour la satisfaire.
+Le contrôle n'était donc pas « en attente » : il était **impossible**.
+
+Corrigé côté Cartiz (`906306e`). Le témoin passe à **189 coches, zéro non
+exécuté**.
+
+Les empreintes `utilise` et `expire` régénérées sont identiques aux
+versionnées sur les trois parcours : aucune dérive d'identité à arbitrer.
+
+### Une propriété de Soukara à connaître
+
+`validity_days = 1` : son échantillon « valide » meurt en vingt-quatre heures.
+Le témoin le reclassera « non exécuté » dès le lendemain d'une régénération.
+C'est le comportement attendu — on ne fige pas un ticket qui, par
+construction, ne vit qu'un jour.
+
+### Pourquoi il n'avait pas été lancé le 18/08
+
+Une boucle de 44 requêtes sur `app.fideliz-app.fr` avait déclenché le pare-feu
+comportemental de Vercel sur mon adresse. Les journaux d'exécution ont
+confirmé que **les vrais visiteurs n'étaient pas touchés** — 79 réponses 200
+en 6 minutes, aucun 403 n'atteignant l'application.
+
+Mesuré depuis : le témoin émet **26 requêtes séquentielles** sur 21 s, dont 12
+vers Fideliz. Sans commune mesure avec la rafale qui avait déclenché le
+pare-feu. Ce n'est pas lui qu'il fallait craindre.
