@@ -89,8 +89,8 @@ témoin. Les quatre libellés de ticket (`DÉJÀ UTILISÉ`, `DÉLAI DÉPASSÉ`,
 | Minimum affiché au comptoir | « Aucun » et « illisible » ne s'écrivent plus pareil | **PROUVÉ** | lot 3, 58 tests de parité écran ↔ base |
 | Créer un jeu | design, jeu, lots dans une seule transaction | **PROUVÉ** (banc) | `harnais-creation-jeu.sql` 13/13 — **la RPC n'est pas en production** |
 | Modifier un jeu | pas d'état partiel, interrupteur du minimum honoré | **PROUVÉ** | `update-game.test.ts` 50 tests ; correctif de l'interrupteur déployé le 19/08 |
-| Voir ses avis Google | 1 513 avis, 2 restaurants sur 4 | ⚠️ **RIEN** | voir trou n°3 |
-| Réponse automatique aux avis | cron `sync-reviews` / `auto-reply` | ⚠️ **RIEN** | voir trou n°4 |
+| Voir ses avis Google | 1 513 avis, 2 restaurants sur 4 | **PROUVÉ** | `avis-lecture.test.ts` — 17 tests, 5 rouges si la borne de tenant saute |
+| Réponse automatique aux avis | le chemin cron exige le secret, jamais l'absence de session | **PROUVÉ** | `avis-lecture.test.ts`, cinq tentatives refusées |
 
 ### 3. Ce que Samy touche
 
@@ -108,9 +108,9 @@ témoin. Les quatre libellés de ticket (`DÉJÀ UTILISÉ`, `DÉLAI DÉPASSÉ`,
 | Isolation multi-tenant | A ne lit ni n'écrit rien de B | **PROUVÉ** | matrice RLS 16 tables, matrice A/B, sessions Auth réelles |
 | Isolation lot/jeu | un lot d'un autre restaurant est refusé | **PROUVÉ** | hotfix du 19/08, appliqué en production, attaque mesurée avant/après |
 | `service_role` sous garde | aucune action ouverte sans autorisation | **PROUVÉ** partiellement | `inventaire-destructif.md` — 4 fichiers dormants durcis ailleurs |
-| Archivage des tickets | `archive_redeemed_winners(90, 5000)` | ⚠️ **RIEN** | voir trou n°4 |
-| Anonymisation | `anonymize_expired_data()` | ⚠️ **RIEN** | voir trou n°4 |
-| Tables de sauvegarde | 4 tables, 133 lignes | ⚠️ **DÉCISION** | voir trou n°5 |
+| Archivage des tickets | `archive_redeemed_winners(90, 5000)` | **PROUVÉ** | `harnais-taches-planifiees.sql` — 25/25, bords à 89 et 91 jours |
+| Anonymisation | `anonymize_expired_data()` | **PROUVÉ** | idem — les deux fenêtres, 24 et 36 mois, distinguées |
+| Tables de sauvegarde | 4 tables, 133 lignes | ⚠️ **DÉCISION** | instruite : `decision-tables-de-sauvegarde.md` |
 
 ---
 
@@ -156,39 +156,74 @@ exactement. C'est écrit dans le fichier, parce que c'est instructif — **le no
 de gains porte la preuve, pas l'état final du compteur**. Un invariant de fin peut
 être satisfait par un chemin faux.
 
-### Trou n°3 — les 1 513 avis n'ont aucun témoin
+### ~~Trou n°3~~ — comblé le 19/08 : la lecture des avis est prouvée
 
-`avis` porte RLS **sans aucune policy** : personne n'y accède hors `service_role`.
-C'est correct, et c'est aussi pourquoi rien ne vérifie que la lecture par
-l'application continue de fonctionner. 2 restaurants sur 4 en ont.
+`avis-lecture.test.ts` exerce `getStoredReviews` **de bout en bout** — vraie
+garde, vraie résolution de tenant, vraie requête — avec une fausse base qui
+**enregistre les filtres appliqués**. Compter les avis rendus ne prouverait
+rien : un jeu de données à un seul restaurant donnerait le même compte sans
+aucune borne.
 
-**Ce qu'il faut :** un contrôle de lecture applicative, pas une lecture directe.
+17 tests : A ne lit que A, A demandant B est refusé **avant toute lecture**,
+root passe, un compte sans rattachement non, et le chemin cron exige le secret
+— un gérant connecté ne peut pas l'emprunter.
 
-### Trou n°4 — les tâches planifiées, et leur dette
+**Il mord** : la borne de tenant retirée, **5 tests virent au rouge**, dont
+celui qui inspecte le filtre. Restauration vérifiée par empreinte.
 
-`pg_cron` est **présente en production** et absente du banc synthétique : les
-5 tâches ne peuvent pas y être répétées telles quelles.
+### ~~Trou n°4~~ — comblé le 19/08 : l'effet est prouvé, la dette reste à trancher
 
-Et l'état actuel est fautif :
+`harnais-taches-planifiees.sql` : **25/25** sur le banc. Il ne teste pas
+`pg_cron` — absente du banc — mais **l'effet**, en appelant les deux fonctions
+exactement comme le cron les appelle. Tester la cadence reviendrait à tester
+PostgreSQL.
 
-| jobid | Cadence | Commande |
-|---|---|---|
-| 3, 4, 6 | `0 3 * * *` | `archive_redeemed_winners(90, 5000)` — **trois fois, à la même minute** |
-| 2 | `10 3 * * *` | la même, une quatrième fois |
-| 7 | `0 3 * * *` | `anonymize_expired_data()` |
+| Bloc | Ce qui est prouvé |
+|---|---|
+| archivage | seuls les éligibles partent ; les bords à **89 et 91 jours** tiennent ; un `available` très vieux reste ; idempotent |
+| taille du lot | un lot de 2 en prend 2, puis 1, puis 0 |
+| anonymisation | les **deux** fenêtres distinguées — 24 mois sans consentement, 36 avec ; idempotente |
+| trou mesuré | un ticket archivé n'est **plus jamais** anonymisé |
+| contraintes | `consumed` est refusé par la table |
 
-Ce qui doit être conservé, c'est **l'effet** — l'archivage et l'anonymisation — pas
-la quadruple exécution. Une fusion qui recopierait fidèlement les 5 tâches
-transporterait la dette.
+**Fidélité du banc vérifiée, pas supposée.** L'empreinte brute de
+`archive_redeemed_winners` diverge entre banc et production ; après
+normalisation des espaces, les deux coïncident — l'écart est typographique.
+Le harnais revérifie cette égalité et refuse si elle tombe.
 
-**Ce qu'il faut :** une décision de Samy sur la déduplication, puis un témoin de
-l'effet (compteurs avant/après sur le banc), jamais un test du planificateur.
+#### Deux découvertes, à trancher par Samy
 
-### Trou n°5 — les tables de sauvegarde, décision attendue
+**Un ticket archivé échappe à l'anonymisation, définitivement.**
+`anonymize_expired_data` ne regarde que `winners` et `contacts` ; l'archivage
+sort les tickets consommés à 90 jours, bien avant les 24 mois. Relevé en
+production : **37 tickets archivés, les 37 portent encore prénom et e-mail**,
+le plus ancien a 11 mois. Aucune infraction aujourd'hui — une certitude dans
+13 mois.
 
-4 tables `*_backup_20260606` / `auth_*_backup`, 133 lignes cumulées, RLS active
-sans policy. Migrer ou non relève d'une décision, pas d'une règle technique :
-elles contiennent des données de clients réels datées de juin.
+**Deux contraintes contradictoires sur `winners.status`.**
+`check_winner_status` autorise `consumed`, `winners_status_check` non ; la plus
+stricte gagne, et la branche `consumed` de la fonction d'archivage est morte.
+Inoffensif tant que personne ne « range » en supprimant la stricte, qu'il
+croira redondante.
+
+**La dette des tâches reste entière**, et c'est une décision, pas un correctif :
+trois tâches d'archivage identiques à `0 3 * * *`, une quatrième à `10 3 * * *`.
+Ce qu'il faut conserver est l'effet, pas la quadruple exécution — mais
+dédupliquer touche la production.
+
+### Trou n°5 — instruit le 19/08, décision toujours attendue
+
+`docs/decision-tables-de-sauvegarde.md`. Je ne tranche pas : c'est une règle de
+rétention de données personnelles.
+
+Le fait qui change le cadrage : **aucune** des lignes sauvegardées n'existe
+encore dans les tables vives — 0 sur 52 contacts, 0 sur 64 tickets. Ce ne sont
+pas des copies redondantes mais les **seuls exemplaires** des données de
+116 personnes, toutes avec e-mail. Les supprimer détruit ce qui n'existe nulle
+part ailleurs ; les garder, c'est conserver des données personnelles qu'aucune
+règle n'anonymise.
+
+Trois options chiffrées et une recommandation motivée dans le document.
 
 ---
 
