@@ -52,12 +52,28 @@
 
 with attendu(version, nom, effet_present, marqueur) as (
   values
+  /*
+   * DEUX fonctions, pas trois.
+   *
+   * Cette ligne a d'abord exige `maintenance_actif` en plus des deux autres —
+   * chiffre repris du §6 du dossier de qualification, une section que le
+   * dossier lui-meme signale comme perimee (« audit initial du 18/08, avant
+   * §0bis/§7 »). Le fencing de §7 a fusionne le verrou et la lecture DANS
+   * `refuser_pendant_maintenance`, et `maintenance_actif` a disparu du design.
+   *
+   * Consequence si on ne l'avait pas vu : la sonde aurait declare le gel
+   * ABSENT juste apres l'avoir pose correctement. Une sonde qui se trompe sur
+   * ce qu'elle attend est pire qu'une absence de sonde.
+   */
   ('20260818160000', 'gel_source_fideliz',
      (to_regclass('public.maintenance') is not null)
      and (select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
           where n.nspname='public'
-            and p.proname in ('en_maintenance','maintenance_actif','refuser_pendant_maintenance')) = 3,
-     'table maintenance + 3 fonctions'),
+            and p.proname in ('en_maintenance','refuser_pendant_maintenance')) = 2
+     and (select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid
+          join pg_namespace n on n.oid=c.relnamespace
+          where n.nspname='public' and t.tgname='gel_de_bascule' and not t.tgisinternal) = 10,
+     'table maintenance + 2 fonctions + 10 triggers'),
 
   ('20260819000000', 'heritier_ordre_total',
      exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
