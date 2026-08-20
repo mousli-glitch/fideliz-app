@@ -61,21 +61,19 @@ deux décisions et une répétition.
   083→088 appliquées ──► 7g migrateur ──► lot 9 répétition générale ──┐
        (FERMÉ)             (FERMÉ)              (FERMÉ le 20/08)       │
                                                                        ▼
-       lot 8 · répétition du gel ──► FERMÉ le 20/08 ──┐
-                                                       │
-                              P-9  panier moyen   ──┐  │   3.0 déployer le gel
-                              #68  limite d'IP     ──┼──┴──►  sur Fideliz
-                                   (décisions Samy)  │        (décision Samy)
-                                                     ▼                 │
-                                              READY_FOR_MIGRATION ─────┴──► bascule
+       lot 8 · répétition du gel  ──► FERMÉ    le 20/08 ──┐
+       3.0 · gel posé sur Fideliz ──► FAIT     le 20/08 ──┤
+       P-9 · l'euro, posée        ──► TRANCHÉE le 20/08 ──┼──► READY_FOR_MIGRATION
+       #68 · verrou d'activation  ──► TRANCHÉE le 20/08 ──┤            │
+       R1  · colonnes écartées    ──► à confirmer ────────┘            ▼
+                                                                    bascule
 ```
 
 **Le chemin ne passe plus par du code.** Il passe par :
 
-1. **Une décision produit** — `#68`, la limite d'IP sur `check-replay`.
-   `P-9` est tranchée (l'euro) et posée. `#68` est **inerte** aujourd'hui :
-   la divulgation qu'elle borne n'existe que si un restaurateur active la
-   rejouabilité, et c'est 0 sur 9.
+1. ~~**Les décisions produit**~~ — **toutes tranchées le 20/08.** `P-9` :
+   l'euro, posée. `#68` : un verrou d'activation plutôt qu'une limite
+   prématurée — la rejouabilité ne peut plus être activée sans sa limite.
 2. ~~**Déployer le gel sur Fideliz**~~ — **FAIT le 20/08.** Posé inactif sur
    la production Fideliz, 10 triggers conformes, les deux corps de fonction
    à l'empreinte exacte du banc. La production écrit toujours : 10 contrôles
@@ -96,7 +94,7 @@ prouvent pas par du code : ils attendent une décision de Samy.
 | # | Critère | Comment il se prouve |
 |---|---|---|
 | **R1** | Schéma d'accueil complet | **PRESQUE.** 087, 088 et 089 : les 5 tables et le panier moyen sont posés, le migrateur écrit sans manque — mesuré : 3 jeux, 12 lots, 489 gagnants, 752 avis, 488 contacts. Restent écartées délibérément `games.min_spend` (texte, doublon de `min_spend_cents`) et les 3 jetons OAuth Google — aucune n'est réclamée par un écran |
-| **R2** | Aucune décision produit ouverte sur le chemin | **UNE SEULE reste.** **P-9 tranchée le 20/08 — l'euro**, posée en production (089) avec une contrainte qui refuse les centimes, éprouvée dans les deux sens. Reste **#68** (limite d'IP sur `check-replay`), inerte tant qu'aucun jeu n'active la rejouabilité — 0 sur 9 |
+| **R2** | Aucune décision produit ouverte sur le chemin | **ACQUIS le 20/08.** **P-9** tranchée — l'euro, posée avec une contrainte qui refuse les centimes. **#68** tranchée — ni la limite maintenant, ni rien : un **verrou d'activation** posé des deux côtés, qui refuse `replay_enabled = true` tant que la limite n'existe pas. 7 contrôles verts sur la production, rien laissé |
 | **R3** | Annuaire des comptes arbitré nominativement | **ACQUIS** — `mapping-comptes.json`, 9 lignes pour 9 comptes, chacune avec son action et sa justification |
 | **R4** | Migrateur rejouable et idempotent | **ACQUIS le 19/08, reconfirmé le 20/08** | Sur banc neuf : deux exécutions consécutives donnent des empreintes de contenu **identiques** ; un arrêt au milieu se reprend sans doublon. **⚠ Un banc fraîchement créé est EN RETARD sur son parent** — mesuré le 19/08 : il n'a rejoué que les migrations de version ≤ 20260819190000, laissant 081→085 de côté. Le protocole doit les réappliquer avant toute mesure, sans quoi on éprouve un schéma qui n'est pas celui de la production |
 | **R5** | Témoin de conservation au vert **après versement** | **ACQUIS le 19/08, RENFORCÉ le 20/08** — 189 vertes / 0 rouge, deux fois, contre un banc ayant traversé la répétition ENTIÈRE : ensemencement, versement, rejeu, retour arrière, reversement. Le discriminant tient (`/m/chez-samy` → 404, les deux menus réels → 200). Recette au runbook §2.8 |

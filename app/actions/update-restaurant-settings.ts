@@ -58,7 +58,34 @@ export async function updateRestaurantSettings(id: string, updates: RestaurantSe
     if (k in updates) gameConfig[k] = (updates as any)[k]
   }
   if (Object.keys(gameConfig).length > 0) {
-    await supabaseAdmin.from("games").update(gameConfig).eq("restaurant_id", id)
+    /*
+     * L'ERREUR DE LA PROPAGATION EST LUE (20/08/2026).
+     *
+     * Elle ne l'était pas : `await` sans lire `error`. L'action rendait donc
+     * `success: true` alors que les jeux n'avaient pas bougé — le
+     * restaurateur voyait son réglage enregistré, et il ne l'était qu'à
+     * moitié. C'est le même défaut que celui corrigé dans `update-game.ts`.
+     *
+     * Il devient visible avec le verrou #68 : refuser d'activer la
+     * rejouabilité ne sert à rien si le refus n'arrive jamais à l'écran.
+     *
+     * ⚠ CE QUI RESTE : les deux écritures ne sont pas atomiques. Pour la
+     * rejouabilité ce n'est pas un problème — le verrou porte AUSSI sur
+     * `restaurants`, donc la première écriture échoue et rien n'est entamé.
+     * Pour les autres clés (`identify_first`, le délai, la séquence, la
+     * limite par appareil), un échec ici laisse le restaurant à jour et les
+     * jeux en retard. On le SIGNALE désormais au lieu de le taire ; le
+     * rendre atomique demanderait une RPC, et c'est un autre chantier.
+     */
+    const { error: eJeux } = await supabaseAdmin
+      .from("games")
+      .update(gameConfig)
+      .eq("restaurant_id", id)
+
+    if (eJeux) {
+      console.error("Erreur updateRestaurantSettings (propagation aux jeux):", eJeux.message)
+      return { success: false, error: eJeux.message }
+    }
   }
 
   revalidatePath("/admin", "layout")

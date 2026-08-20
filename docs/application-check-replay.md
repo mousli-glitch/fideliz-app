@@ -129,4 +129,78 @@ qu'aucun jeu n'active la rejouabilité** — 0 sur 9 au 19/08/2026.
 avant qu'un restaurateur active la rejouabilité, pas avant. Créer une table en
 production dépasse ce qui avait été décrit, donc rien n'a été fait.
 
-**Décision en attente de Samy.**
+---
+
+## 4. TRANCHÉ le 20/08/2026 — ni A maintenant, ni C : un verrou d'activation
+
+**Samy tranche : on ne pose pas la limite aujourd'hui, on rend impossible de
+l'activer sans elle.**
+
+Un « penser à le faire plus tard » s'oublie. Un verrou se rappelle tout seul,
+au seul moment où ça compte — celui où quelqu'un tourne le bouton.
+
+### Ce qui est posé
+
+Un trigger `verrou_rejouabilite` refuse le passage de `replay_enabled` à
+`true` tant que `public.limites_par_ip` (colonnes `ip_hash`, `vu_le`)
+n'existe pas. Il lève `P0330`, avec un message qui dit quoi faire.
+
+| | |
+|---|---|
+| **Fideliz** | `20260820000000_verrou_rejouabilite.sql` — sur `games` **et** `restaurants` |
+| **Cartiz** | `090_verrou_rejouabilite.sql` — sur `games` seulement ; 088 a retiré `restaurants.replay_enabled` |
+
+**Les deux tables côté Fideliz, et c'est nécessaire.** L'écran de réglages
+écrit `restaurants.replay_enabled`, puis `updateRestaurantSettings` répercute
+sur tous les jeux — en deux requêtes **non atomiques**. Ne verrouiller que
+`games` laisserait le drapeau du restaurant passer à `true` pendant que celui
+des jeux resterait à `false` : un état incohérent, inerte mais
+incompréhensible.
+
+### Il ne bloque que la transition
+
+Éteindre reste possible. Modifier un jeu déjà rejouable reste possible. Seul
+le passage éteint → allumé est refusé. Mesuré avant de poser : **0 jeu sur 9**
+et **0 restaurant sur 4** — le verrou ne peut casser aucune modification
+existante.
+
+### Éprouvé sur la production, 7 contrôles, rien laissé
+
+| # | Contrôle | Résultat |
+|---|---|---|
+| 1 | allumer un jeu | refusé `P0330`, hint `limite_ip_absente` |
+| 2 | allumer un restaurant | refusé `P0330` |
+| 3 | éteindre | accepté — le verrou n'enferme pas |
+| 4 | modifier autre chose | accepté |
+| 5 | `INSERT` d'un jeu déjà rejouable | refusé `P0330` |
+| 6 | poser `limites_par_ip` complète | **débloque** |
+| 7 | poser une table **incomplète** | ne débloque pas |
+
+### Un défaut trouvé en l'éprouvant
+
+Première écriture : `'public.limites_par_ip'::regclass` **lève 42P01** quand
+la table n'existe pas, au lieu de rendre `null`. Le verrou bloquait bien, mais
+annonçait « relation does not exist » — un message de plateforme, sur lequel
+un restaurateur ne peut rien faire. Or ce verrou n'a qu'un but : **dire
+pourquoi**. Corrigé : `to_regclass` d'abord, puis l'oid, qui ne se caste pas.
+
+### Et le maillon applicatif
+
+`updateRestaurantSettings` faisait `await …from("games").update(…)` **sans
+lire `error`** : l'action rendait `success: true` alors que la propagation
+avait échoué. Le refus du verrou s'y serait perdu en silence. Corrigé, avec
+une garde statique de 7 tests — dont la contre-épreuve sur worktree jetable
+fait rougir 6 des 7.
+
+**Ce qui reste**, et qui n'est pas corrigé : les deux écritures ne sont
+toujours pas atomiques. Sans conséquence pour la rejouabilité — le verrou
+porte aussi sur `restaurants`, donc la première échoue — mais pour les autres
+clés, un échec laisse le restaurant à jour et les jeux en retard. On le
+**signale** désormais au lieu de le taire ; le rendre atomique demanderait une
+RPC, et c'est un autre chantier.
+
+### Ce que ce verrou n'est pas
+
+**Pas une frontière de sécurité.** Qui possède les droits DDL peut créer la
+table et passer outre. Sa valeur est ailleurs : pour le contourner, il faut le
+faire délibérément — c'est-à-dire au moment précis où l'on lit son message.
