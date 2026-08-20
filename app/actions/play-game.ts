@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { headers } from 'next/headers'
 import { createHash } from 'crypto'
 import { validateEmail, validatePhone } from '@/utils/contact-validation'
+import { estGelDeBascule, messageMaintenance, ERREUR_MAINTENANCE } from "@/lib/securite/maintenance"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -68,6 +69,18 @@ export async function playGameAction(data: any) {
     })
 
     if (error) {
+      /*
+       * Le gel de bascule d'abord, et distinctement.
+       *
+       * Rendu comme n'importe quelle autre erreur, il tombait dans la branche
+       * générique du client — « Une erreur est survenue. Merci de réessayer »
+       * — pendant TOUTE la fenêtre de bascule. Mesuré sur banc le 20/08/2026.
+       * Un code à lui permet à l'interface de dire la vérité : le service
+       * revient dans quelques minutes, inutile d'insister.
+       */
+      if (estGelDeBascule(error)) {
+        return { success: false, error: ERREUR_MAINTENANCE, message: messageMaintenance(error) }
+      }
       console.error("❌ Erreur RPC play_game:", error.message)
       return { success: false, error: error.message }
     }

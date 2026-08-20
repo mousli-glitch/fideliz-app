@@ -20,14 +20,32 @@
 /**
  * L'état public se lit par la RPC `en_maintenance()`, jamais par la table.
  *
- * `public.maintenance` porte l'empreinte du jeton migrateur : elle est fermée
- * à `anon` comme à `authenticated`, RLS activée sans aucune policy de
- * lecture. La RPC ne rend qu'un booléen et un message.
+ * `public.maintenance` est fermée à TOUS les rôles applicatifs — `anon`,
+ * `authenticated` et `service_role` — depuis la correction du 19/08/2026 :
+ * la clé de service pouvait sinon lever le gel elle-même. RLS activée, aucune
+ * policy de lecture. La RPC ne rend qu'un booléen et un message.
+ *
+ * (Ce commentaire mentionnait « l'empreinte du jeton migrateur ». Ce jeton a
+ * été retiré le 19/08 — ce dépôt ne gouverne que la SOURCE, où le migrateur
+ * n'écrit jamais, donc où aucun laissez-passer n'a de raison d'exister.)
  */
 export const RPC_ETAT = "en_maintenance";
 
 /** Code SQLSTATE levé par `refuser_pendant_maintenance()`. */
 export const CODE_MAINTENANCE = "P0100";
+
+/**
+ * Le code que les Server Actions rendent à l'interface.
+ *
+ * Les branches d'erreur du client comparent des chaînes (`already_played`,
+ * `stock_empty`, …) et retombent sur un cas générique quand rien ne
+ * correspond. Sans une valeur À ELLES dans ce vocabulaire, le gel tombait
+ * dans ce générique — mesuré sur banc le 20/08/2026 : la roue disait
+ * « réessayez » pendant toute la fenêtre de bascule, et l'inscription rendait
+ * un écran TICKET portant le code « ERREUR-CONTACT-STAFF ». Un faux ticket,
+ * que l'employé n'aurait rien pu scanner.
+ */
+export const ERREUR_MAINTENANCE = "maintenance";
 
 export type ErreurPossible = { code?: string; message?: string; hint?: string } | null | undefined;
 

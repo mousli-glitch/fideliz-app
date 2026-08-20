@@ -5,7 +5,7 @@
 > intuition déguisée en mesure. Ici : ce qui est fermé, ce qui reste, ce qui
 > bloque quoi, et à quelles conditions exactes on peut basculer.
 >
-> Dernière mise à jour : 20/08/2026, après la répétition générale.
+> Dernière mise à jour : 20/08/2026, après la répétition générale et celle du gel.
 
 ---
 
@@ -46,7 +46,7 @@ abonnement expiré.
 
 | Lot | Objet | État |
 |---|---|---|
-| **8** | Répétition du gel, séquence complète chronométrée | **reste** — le gel est écrit et installé inactif ; il n'a jamais été activé puis levé en séquence |
+| **8** | Répétition du gel, séquence complète chronométrée | **FERMÉE le 20/08** — activation 18 ms, matrice 46 ms, levée 3 ms, tout reprend derrière. Elle a trouvé un défaut client réel (voir `qualification-lot-8-repetition-du-gel.md`) **et** que le gel n'est pas en production |
 | **9** | Répétition générale de bout en bout sur banc, versement compris | **FERMÉE le 20/08** — 10 étapes en 14,9 s, puis R8, R6 et R5 sur le banc chargé |
 | **10** | Dossier `READY_FOR_MIGRATION` constitué et signé | **reste** — il manque R1 et R2, tous deux à la main de Samy |
 
@@ -61,20 +61,24 @@ deux décisions et une répétition.
   083→088 appliquées ──► 7g migrateur ──► lot 9 répétition générale ──┐
        (FERMÉ)             (FERMÉ)              (FERMÉ le 20/08)       │
                                                                        ▼
-                              P-9  panier moyen   ──┐            lot 8  GEL
-                              #68  limite d'IP     ──┼──────────►  (reste)
-                                   (décisions Samy)  │                 │
-                                                     ▼                 ▼
-                                              READY_FOR_MIGRATION ──► bascule
+       lot 8 · répétition du gel ──► FERMÉ le 20/08 ──┐
+                                                       │
+                              P-9  panier moyen   ──┐  │   3.0 déployer le gel
+                              #68  limite d'IP     ──┼──┴──►  sur Fideliz
+                                   (décisions Samy)  │        (décision Samy)
+                                                     ▼                 │
+                                              READY_FOR_MIGRATION ─────┴──► bascule
 ```
 
 **Le chemin ne passe plus par du code.** Il passe par :
 
 1. **Deux décisions produit** — `P-9` (unité du panier moyen) et `#68`
    (limite d'IP sur `check-replay`). Elles seules tiennent `R2`.
-2. **Le lot 8, le gel** — écrit et installé inactif, jamais activé puis levé
-   en séquence. C'est le dernier chantier technique, et il ne peut se
-   répéter que sur un banc.
+2. **Déployer le gel sur Fideliz** — le lot 8 est fermé, mais il a découvert
+   que **le gel n'est pas en production** : l'étape 3.1 est impossible en
+   l'état. C'est un changement de schéma sur une base vivante, donc une
+   décision de Samy. Elle voyage avec les 7 autres migrations écrites et
+   jamais appliquées, et avec le code qui les utilise.
 
 Les huit autres critères sont acquis et rejouables en une commande.
 

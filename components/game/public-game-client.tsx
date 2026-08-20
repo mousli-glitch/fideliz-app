@@ -11,6 +11,7 @@ import confetti from "canvas-confetti"
 import { motion, AnimatePresence, Variants, useAnimation } from "framer-motion"
 import QRCode from "react-qr-code"
 import { toPng } from 'html-to-image'
+import { ERREUR_MAINTENANCE } from "@/lib/securite/maintenance"
 
 // --- CONFIGURATION ---
 const BACKGROUNDS = [
@@ -477,6 +478,16 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
       if (res?.error === 'invalid_email' || res?.error === 'invalid_phone' || res?.error === 'rate_limited') {
         alert(res.message || "Participation impossible. Vérifiez vos informations."); setStep('IDENTIFY'); return
       }
+      /*
+       * Le gel de bascule. Il tombait auparavant dans le générique ci-dessous,
+       * qui invite à réessayer — pendant une fenêtre où chaque tentative
+       * échouera. Le message vient de la base : l'opérateur peut le changer
+       * en cours de bascule, sans redéployer, si la fenêtre se prolonge.
+       */
+      if (res?.error === ERREUR_MAINTENANCE) {
+        alert(res.message || "Service momentanément suspendu. Merci de réessayer dans quelques minutes.")
+        return
+      }
       alert("Une erreur est survenue. Merci de réessayer.")
       return
     }
@@ -569,6 +580,17 @@ export function PublicGameClient({ game, prizes, restaurant }: Props) {
         }
         if (result.error === 'rate_limited') {
           alert((result as any).message || "Trop de participations depuis cet appareil. Merci de réessayer plus tard.")
+          setIsSubmitting(false)
+          return
+        }
+        /*
+         * Le gel de bascule ne passe PAS par le `throw` : celui-ci est
+         * rattrapé plus bas, et le rattrapage affiche un écran TICKET portant
+         * « ERREUR-CONTACT-STAFF ». Pendant une bascule, le joueur repartirait
+         * avec un faux ticket et l'employé n'aurait rien à scanner.
+         */
+        if (result.error === ERREUR_MAINTENANCE) {
+          alert(result.message || "Service momentanément suspendu. Merci de réessayer dans quelques minutes.")
           setIsSubmitting(false)
           return
         }

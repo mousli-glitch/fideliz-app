@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { headers } from 'next/headers'
 import { createHash } from 'crypto'
 import { validateEmail, validatePhone } from '@/utils/contact-validation'
+import { estGelDeBascule, messageMaintenance, ERREUR_MAINTENANCE } from "@/lib/securite/maintenance"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,6 +83,15 @@ export async function registerWinnerAction(data: any) {
     })
 
     if (error) {
+      /*
+       * Le gel de bascule d'abord. Sans cette branche, l'erreur remontait au
+       * client qui la relançait, la rattrapait, et affichait un écran TICKET
+       * portant « ERREUR-CONTACT-STAFF » — un faux ticket, que l'employé
+       * n'aurait rien pu scanner. Mesuré sur banc le 20/08/2026.
+       */
+      if (estGelDeBascule(error)) {
+        return { success: false, error: ERREUR_MAINTENANCE, message: messageMaintenance(error) }
+      }
       console.error("❌ Erreur RPC register_win:", error.message)
       return { success: false, error: error.message }
     }

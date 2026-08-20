@@ -133,7 +133,8 @@ explicite de Samy au moment de la jouer.**
 
 | # | Geste | Vérification |
 |---|---|---|
-| 3.1 | Activer le gel de bascule côté Fideliz | les écritures Fideliz sont refusées |
+| **3.0** | **Déployer le gel sur Fideliz** — `20260818160000_gel_source_fideliz.sql` | ⚠ **Découvert le 20/08 : le gel N'EST PAS en production.** Ni table `maintenance`, ni fonctions, ni triggers. Il n'a jamais été installé que sur le banc. 3.1 est donc **impossible** tant que 3.0 n'est pas faite. C'est un changement de schéma sur une base vivante : décision de Samy. Vérification : `supabase/verifications/inventaire-reel-production.sql` doit passer `gel_source_fideliz` de ABSENTE à présente |
+| 3.1 | Activer le gel de bascule côté Fideliz | `activer-gel-source-fideliz.sql`, sous le rôle propriétaire, **jamais la clé de service**. Mesuré sur banc le 20/08 : **18 ms**, 10 triggers vérifiés au catalogue. Les écritures Fideliz sont refusées en `P0100`, les lectures restent ouvertes |
 | 3.2 | Refaire une sauvegarde du Storage et de la base | vérifiée |
 | 3.3 | `FUSION_JE_CONFIRME=oui migrer.ts --appliquer` | « VERSEMENT CONFORME » |
 | 3.4 | `FUSION_JE_CONFIRME=oui comptes.ts --appliquer` | 3 opérations, fichier de mots de passe en 600. **S'il échoue au milieu, RELANCER la même commande** : depuis le 20/08 il se reprend, ne recrée rien et **ne réémet aucun mot de passe déjà transmis**. Une reprise n'écrit aucun fichier et le dit |
@@ -142,6 +143,7 @@ explicite de Samy au moment de la jouer.**
 | 3.7 | `npm run qr:verifier` + les 5 menus | **inchangés** |
 | 3.8 | Publier `soukara` (`publie = true`) | son menu répond |
 | 3.9 | Transmettre les mots de passe, **puis supprimer le fichier** | fichier absent |
+| 3.10 | Lever le gel — **seulement après le GO** | `lever-gel-source-fideliz.sql`, même rôle propriétaire. Mesuré sur banc : **3 ms**. ⚠ en cas de retour arrière, revenir à l'ancienne application AVANT de lever |
 
 > ### ⚠ Avant 3.3 — vérifier qu'aucun relevé de répétition ne traîne
 >
@@ -166,6 +168,23 @@ explicite de Samy au moment de la jouer.**
 **Le versement laisse `soukara` en `publie = false`.** Un restaurant versé
 n'apparaît pas au public avant qu'on l'ait regardé — 3.8 est un geste
 délibéré, pas un effet de bord.
+
+### Ce que le joueur voit pendant le gel — mesuré le 20/08
+
+Le gel refuse les écritures en base ; c'est l'application qui décide de ce que
+le client en lit. Éprouvé gel actif sur banc, et **corrigé** :
+
+| Parcours | Avant le 20/08 | Depuis |
+|---|---|---|
+| La roue | « Une erreur est survenue. Merci de réessayer » — une invitation à insister pendant toute la fenêtre | le message de la base, qui dit que le service revient |
+| L'inscription | un écran **TICKET portant `ERREUR-CONTACT-STAFF`** — un faux ticket que l'employé n'aurait rien pu scanner | le message de la base, aucun ticket délivré |
+
+**Le message se change en cours de bascule sans redéployer** :
+
+    update public.maintenance set message = 'Retour vers 7 h 30.' where id;
+
+C'est sa raison d'être. Si la fenêtre se prolonge, c'est le seul levier qui
+reste vers les clients.
 
 ---
 
