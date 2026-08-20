@@ -53,3 +53,7 @@ sauvegardes/
 
 # Etat de liaison du CLI Supabase : contient des URL de connexion.
 supabase/.temp/
+
+# Artefacts de fusion — jamais dans le depot, meme si un script est lance d'ici.
+mots-de-passe-fusion-*.txt
+etat-avant-restaurants-*.json
