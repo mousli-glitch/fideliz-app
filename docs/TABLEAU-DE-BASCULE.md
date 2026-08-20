@@ -5,7 +5,38 @@
 > intuition déguisée en mesure. Ici : ce qui est fermé, ce qui reste, ce qui
 > bloque quoi, et à quelles conditions exactes on peut basculer.
 >
-> Dernière mise à jour : 20/08/2026 — répétition générale, répétition du gel, P-9 tranchée, gel posé en production.
+> Dernière mise à jour : 20/08/2026 — **LA BASCULE EST JOUÉE.** 67 secondes de gel, 1 745 lignes versées, tous les contrôles verts.
+
+---
+
+## 0. LA BASCULE EST JOUÉE — 20/08/2026, 00:34–00:36 UTC
+
+**1 745 lignes de Fideliz vivent désormais dans Cartiz.** 67 secondes de gel,
+aucune écriture perdue, tous les contrôles verts.
+
+| | Fideliz (source) | Cartiz (destination) |
+|---|---|---|
+| Jeux | 9 dont 3 versés (`test78` exclu) | **3** |
+| Lots | 36 dont 12 versés | **12** |
+| Tickets | 501 | **489** |
+| Avis | 1 513 dont 752 versés | **752** |
+| Contacts | 503 | **489** |
+| Restaurants | 4 | 5 → **6** (`soukara` créé) |
+| Comptes | inchangés | **3 opérations** |
+
+**Ce qui reste vrai après la bascule :** Fideliz continue de tourner et de
+prendre des tickets. La copie de Cartiz commence donc à diverger dès
+maintenant — c'est attendu. Le vrai basculement des clients est le changement
+de domaine, qui n'a **pas** été fait et reste une décision à part.
+
+**Ce qui reste à faire, et qui est à Samy :**
+
+1. **Transmettre les mots de passe provisoires**, puis supprimer le fichier
+   (`mots-de-passe-fusion-*.txt`, en 600, dans le dépôt Cartiz — ignoré par
+   git). Trois comptes : la-ruche, soukara, le commercial.
+2. **Importer une carte pour Soukara**, puis le publier (étape 3.8, laissée
+   volontairement non jouée : il n'a aucune page de carte).
+3. **Le changement de domaine**, quand il le décidera.
 
 ---
 

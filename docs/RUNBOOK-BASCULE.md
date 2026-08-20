@@ -128,8 +128,42 @@ après coup : `/m/chez-samy` → 404, les deux menus réels → 200. À noter,
 
 ## Phase 3 · La bascule
 
-**Rien de cette phase n'a jamais été joué. Chaque étape demande l'accord
-explicite de Samy au moment de la jouer.**
+> ## ✅ JOUÉE LE 20/08/2026, 00:34–00:36 UTC
+>
+> **Fenêtre gelée : 67 secondes.** Fideliz n'a perdu aucune écriture — 501
+> tickets avant, 501 après : aucun joueur ne s'est présenté pendant la fenêtre.
+>
+> | Étape | Résultat |
+> |---|---|
+> | 3.0 gel déployé | fait plus tôt dans la nuit, inactif |
+> | 3.1 gel activé | 00:34:11, 10 triggers vérifiés au catalogue |
+> | 3.2 point de référence | 3 064 lignes, 20 ensembles, relus et vérifiés |
+> | 3.3 versement | **CONFORME** — 3 jeux, 12 lots, 489 tickets, 752 avis, 489 contacts, chacun revérifié après écriture |
+> | 3.5 sonde R8 | verte sur la production chargée |
+> | 3.10 gel levé | 00:35:18, écriture reprise immédiatement |
+> | 3.4 comptes | 3 opérations, fichier en 600 |
+> | 3.6 témoin | **187 vertes, 0 rouge — GO** (2 assertions sautées : un échantillon de ticket naturellement expiré) |
+> | 3.7 les 5 menus | tous **200**, QR imprimés intacts |
+> | R6 isolation | verte sur données réelles, 5 gérants |
+> | 3.8 publier soukara | **NON FAIT — délibérément**, voir ci-dessous |
+>
+> **L'ordre a été modifié**, et c'est délibéré : les comptes (3.4) et les
+> contrôles longs (3.6, 3.7) ont été joués APRÈS la levée. Ils n'ont pas
+> besoin du gel, et chaque seconde de gel est une seconde où un joueur reçoit
+> une erreur. Seuls le point de référence, le versement et la sonde R8 sont
+> restés dans la fenêtre.
+>
+> **3.8 n'a pas été jouée, et ce n'est pas un oubli.** Soukara porte son jeu
+> et ses 131 tickets, mais **0 catégorie, 0 plat, 0 page de carte** : le
+> publier exposerait `/m/soukara` comme un menu vide, à une URL vers laquelle
+> aucun QR ne pointe. Le runbook justifie lui-même 3.8 comme un geste
+> délibéré, « après qu'on l'ait regardé ». On l'a regardé : il n'y a rien à
+> publier tant que Samy n'a pas importé une carte.
+>
+> **Le retour arrière est armé** : `etat-avant-restaurants-rxdbotnuwfakukcbgeqo-2026-08-20.json`,
+> signé de la base, relu — 1 745 lignes retrouvées, 0 modifiée depuis.
+
+**Chaque étape demande l'accord explicite de Samy au moment de la jouer.**
 
 | # | Geste | Vérification |
 |---|---|---|
